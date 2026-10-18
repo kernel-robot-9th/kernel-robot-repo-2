@@ -1,0 +1,21 @@
+#!/bin/sh
+# udev helper: print "right" or "left" for a wrist camera, based on which OMX follower
+# board (by serial) is plugged into the same USB hub as the camera.
+# Usage (from udev): PROGRAM="/usr/local/bin/omx-cam-side %p"
+RIGHT_SERIAL=9C4E6E4850323952582E3120FF070E0B
+LEFT_SERIAL=E7B2203F50323952582E3120FF071D0D
+
+dir="/sys$1"
+# Walk up from the video node to the camera's USB device (the one with idVendor).
+while [ "$dir" != "/sys" ] && [ ! -f "$dir/idVendor" ]; do dir=$(dirname "$dir"); done
+[ -f "$dir/idVendor" ] || exit 1
+hub=$(dirname "$dir")
+
+for dev in "$hub"/*; do
+    [ -f "$dev/serial" ] || continue
+    case "$(cat "$dev/serial")" in
+        "$RIGHT_SERIAL") echo right; exit 0 ;;
+        "$LEFT_SERIAL") echo left; exit 0 ;;
+    esac
+done
+exit 1

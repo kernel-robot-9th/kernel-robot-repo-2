@@ -1,0 +1,22 @@
+# OMX-AI fixed device names (course PDF 04). Install:
+#   sudo install -m 755 omx-cam-side /usr/local/bin/ && sudo cp 99-omx.rules /etc/udev/rules.d/ \
+#     && sudo udevadm control --reload-rules && sudo udevadm trigger
+
+# --- Arms: OpenRB-150 boards, matched by USB serial number ---
+# Right pair (default names used in the course commands)
+SUBSYSTEM=="tty", ATTRS{idVendor}=="2f5d", ATTRS{serial}=="9C4E6E4850323952582E3120FF070E0B", SYMLINK+="omx_follower", GROUP="dialout", MODE="0666"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="2f5d", ATTRS{serial}=="A49B33BC50323952582E3120FF06172A", SYMLINK+="omx_leader", GROUP="dialout", MODE="0666"
+# Left pair
+SUBSYSTEM=="tty", ATTRS{idVendor}=="2f5d", ATTRS{serial}=="E7B2203F50323952582E3120FF071D0D", SYMLINK+="omx_follower_left", GROUP="dialout", MODE="0666"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="2f5d", ATTRS{serial}=="0DE4DEF850323952582E3120FF071A2D", SYMLINK+="omx_leader_left", GROUP="dialout", MODE="0666"
+
+# --- Cameras: only the capture node (index 0) of each camera ---
+# Top-view camera (SNAP U2), unique USB id
+SUBSYSTEM=="video4linux", ATTR{index}=="0", ENV{ID_SERIAL}=="HFSD-231214-J_SNAP_U2", SYMLINK+="cam_top"
+# Wrist cameras: both Innomaker units report the same serial (SN0001), so each one is
+# matched to the follower plugged into the SAME USB hub (helper: /usr/local/bin/omx-cam-side).
+# Any hub/port works as long as a wrist camera shares a hub with its follower board.
+SUBSYSTEM=="video4linux", ATTR{index}=="0", ENV{ID_VENDOR_ID}=="0c45", ENV{ID_MODEL_ID}=="6367", PROGRAM="/usr/local/bin/omx-cam-side %p", RESULT=="right", SYMLINK+="cam_wrist"
+SUBSYSTEM=="video4linux", ATTR{index}=="0", ENV{ID_VENDOR_ID}=="0c45", ENV{ID_MODEL_ID}=="6367", PROGRAM="/usr/local/bin/omx-cam-side %p", RESULT=="left", SYMLINK+="cam_wrist_left"
+# If a follower board shows up after its camera (e.g. at boot), re-check the cameras.
+ACTION=="add", SUBSYSTEM=="tty", ATTRS{idVendor}=="2f5d", RUN+="/usr/bin/udevadm trigger --subsystem-match=video4linux --action=change"
