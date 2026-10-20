@@ -1,0 +1,35 @@
+Copyright (c) 2026 커널아카데미 로보틱스 심화 캠프 9기 2팀
+(Kernel Academy Robotics Advanced Camp, 9th cohort, Team 2)
+All rights reserved.
+
+이 저장소의 코드·문서·자료는 위 팀에 저작권이 있으며, 오픈소스 라이선스로 공개하지 않습니다.
+저작권자의 서면 허락 없이 복제·수정·배포·상업적 이용을 할 수 없습니다.
+(GitHub에 공개되어 있어도 GitHub 이용약관이 허용하는 보기·포크 외의 권리는 주지 않습니다.)
+
+The code, documents and materials in this repository are the property of the team above
+and are not licensed under any open-source license. No permission is granted to copy,
+modify, distribute or use them commercially without written permission from the copyright holder.
+
+-------------------------------------------------------------------------------
+제3자 구성 요소 (Third-party components)
+-------------------------------------------------------------------------------
+
+1) 외부 ROS 2 패키지 — 이 저장소에 포함하지 않고 README 부록의 방법으로 내려받는다.
+   각 패키지는 자기 저장소의 라이선스(Apache License 2.0)를 따른다.
+
+   - pinky_pro                     https://github.com/pinklab-art/pinky_pro                        Apache-2.0
+   - open_manipulator              https://github.com/ROBOTIS-GIT/open_manipulator                 Apache-2.0
+   - dynamixel_hardware_interface  https://github.com/ROBOTIS-GIT/dynamixel_hardware_interface     Apache-2.0
+   - robotis_interfaces            https://github.com/ROBOTIS-GIT/robotis_interfaces               Apache-2.0
+
+2) 이 저장소에 포함된 Apache-2.0 파일 — 위 저작권 고지의 대상이 아니며 Apache License 2.0을 따른다.
+   ROBOTIS open_manipulator (open_manipulator_moveit_config/config)에서 그대로 가져왔다.
+   Copyright ROBOTIS CO., LTD. — Licensed under the Apache License, Version 2.0
+   (http://www.apache.org/licenses/LICENSE-2.0)
+
+   - robot/src/vla_planner_robot/vla_dual_moveit_config/config/ompl_planning.yaml
+   - robot/src/vla_planner_robot/vla_dual_moveit_config/config/chomp_planning.yaml
+   - robot/src/vla_planner_robot/vla_dual_moveit_config/config/pilz_cartesian_limits.yaml
+
+3) npm·pip 의존 라이브러리(emr/frontend/package.json, emr/backend/requirements.txt)는
+   설치할 때 내려받으며 각자의 라이선스를 따른다.

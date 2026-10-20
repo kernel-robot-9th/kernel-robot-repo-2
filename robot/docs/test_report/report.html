@@ -1,0 +1,71 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>2팔 시험 보고서</title>
+<style>
+@page { size: A4; margin: 14mm 13mm 15mm; }
+body { font-family: "Noto Sans CJK KR", sans-serif; color: #1d2433; font-size: 9.6pt; line-height: 1.5; margin: 0; }
+h1 { font-size: 20pt; margin: 0 0 4px; } h2 { font-size: 13pt; margin: 18px 0 8px; padding-bottom: 4px; border-bottom: 2px solid #1d2433; page-break-after: avoid; }
+.sub { color: #5b6475; } .small { font-size: 8.4pt; }
+.band { background: linear-gradient(120deg,#1d2433,#2f4a7a); color: #fff; border-radius: 12px; padding: 18px 22px; margin-bottom: 14px; }
+.band .sub { color: #c9d3e6; }
+.kpis { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; margin: 10px 0 6px; }
+.kpi { background: #f6f7fa; border: 1px solid #e3e6ec; border-radius: 10px; padding: 10px; }
+.kpi .v { font-size: 18pt; font-weight: 700; line-height: 1.15; } .kpi .l { font-size: 8.3pt; color: #5b6475; }
+table { border-collapse: collapse; width: 100%; font-size: 8.8pt; margin: 6px 0 10px; page-break-inside: avoid; }
+th, td { border-bottom: 1px solid #e3e6ec; padding: 4px 5px; text-align: left; vertical-align: top; } th { background: #f3f5f9; }
+.res td:nth-child(5) { white-space: nowrap; }
+.ok { color: #1f9d63; font-weight: 700; } .ng { color: #d64545; font-weight: 700; }
+.callout { background: #fff8e6; border: 1px solid #f3d995; border-radius: 10px; padding: 9px 12px; margin: 8px 0; }
+.callout.blue { background: #eef4ff; border-color: #c9dafc; }
+.gallery { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+figure { margin: 0; page-break-inside: avoid; } .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; }
+.pair img { width: 100%; border-radius: 4px; border: 1px solid #e3e6ec; aspect-ratio: 4 / 3; object-fit: cover; object-position: center 62%; }
+figcaption { font-size: 8pt; color: #5b6475; margin-top: 2px; }
+.pb { page-break-before: always; }
+</style></head><body>
+<div class="band"><div class="sub small">시험 보고서 · 2026-10-16 · Gazebo 시뮬레이션 · ROS_DOMAIN_ID 77</div>
+<h1>2팔(left/right) 자연어 Pick &amp; Place 시험</h1>
+<div class="sub">OMX-F 2대 · 7.5 cm 보드 위, 바닥 작업면 · 탑뷰 카메라 + ArUco 4개 · Ollama gemma4:e2b · 동작 5가지 × 2회 = 10회</div></div>
+
+<div class="kpis">
+<div class="kpi"><div class="v">8 / 10</div><div class="l">최종 시험 성공<br>(실패 2건 모두 카메라 검증이 감지)</div></div>
+<div class="kpi"><div class="v">9.7 mm</div><div class="l">성공 시 평균 위치 오차<br>(중앙값 8.5 mm)</div></div>
+<div class="kpi"><div class="v">3.4 s</div><div class="l">LLM 명령 해석 평균<br>(1.8–6.5 s)</div></div>
+<div class="kpi"><div class="v">19–50 s</div><div class="l">명령 1개 처리 시간<br>(전달·협동 운반은 약 40–50 s)</div></div>
+</div>
+<p><b>결론</b>: 다섯 동작 모두 실제로 수행됩니다. 1차 시험에서 협동 운반이 2/2 실패해 원인 2가지를 고쳤고, 수정 후 운반은 4/4(재시험 2 + 최종 2) 성공했습니다.
+최종 시험의 실패 2건(#3, #7)은 시뮬 집게에서 블록이 미끄러지거나 튕겨 나간 경우이고, 둘 다 카메라 검증이 잡아 실패로 보고했습니다(거짓 성공 0건).</p>
+
+<h2>1. 시험 설계</h2>
+<table><tr><th>동작</th><th>내용</th><th>명령 (2회)</th></tr><tr><td>① 자동 배정 이동</td><td>닿는 팔 중 가까운 팔이 자동으로 수행</td><td>빨간 블록을 왼쪽 뒤 구석으로 옮겨<br>초록 블록을 오른쪽 앞으로 옮겨</td></tr><tr><td>② 팔 지정 이동</td><td>&quot;왼팔로/오른팔로&quot; 지정한 팔이 수행</td><td>왼팔로 노란 블록을 왼쪽으로 옮겨<br>오른팔로 파란 블록을 오른쪽 뒤 구석으로 옮겨</td></tr><tr><td>③ 쌓기</td><td>블록을 다른 블록 위에 올림</td><td>빨간 블록을 노란 블록 위에 쌓아<br>파란 블록을 초록 블록 위에 쌓아</td></tr><tr><td>④ 팔 간 전달</td><td>한 팔로 안 되는 이동을 공유 지점을 거쳐 2단계로</td><td>빨간 블록을 오른쪽으로 옮겨<br>파란 블록을 왼쪽으로 옮겨</td></tr><tr><td>⑤ 양팔 협동 운반</td><td>그릇(트레이) 양끝 손잡이를 두 팔이 함께 들어 옮김</td><td>그릇을 두 팔로 들어서 뒤로 옮겨<br>쟁반을 양손으로 들어서 가운데로 옮겨</td></tr></table>
+<p class="small sub">매 회차 시작 전에 블록·트레이를 초기 위치로 되돌림(④는 트레이를 작업 영역 밖으로, ⑤-2는 트레이를 뒤쪽 x = 0.10에서 시작).
+판정: 플래너 결과(손목 카메라 집기 확인 + 탑뷰 카메라로 목표 30 mm 이내 확인)와 Gazebo 실제 위치. 쌓기는 위 블록 높이 0.0375 m로 확인.</p>
+
+<h2>2. 최종 결과 (10회)</h2>
+<table class="res"><colgroup><col style="width:4%"><col style="width:12%"><col style="width:24%"><col style="width:9%"><col style="width:6%"><col style="width:6%"><col style="width:7%"><col style="width:5%"><col style="width:5%"><col style="width:22%"></colgroup>
+<tr><th>#</th><th>동작</th><th>명령</th><th>팔</th><th>결과</th><th>오차<br>[mm]</th><th>최대<br>기울기 [°]</th><th>LLM<br>[s]</th><th>전체<br>[s]</th><th>실패 원인</th></tr><tr><td>#1</td><td>① 자동 배정 이동</td><td>빨간 블록을 왼쪽 뒤 구석으로 옮겨</td><td>왼팔</td><td class='ok'>성공</td><td>8.5</td><td></td><td>2.3</td><td>18.6</td><td class='small'></td></tr><tr><td>#2</td><td>① 자동 배정 이동</td><td>초록 블록을 오른쪽 앞으로 옮겨</td><td>오른팔</td><td class='ok'>성공</td><td>21.7</td><td></td><td>3.0</td><td>18.6</td><td class='small'></td></tr><tr><td>#3</td><td>② 팔 지정 이동</td><td>왼팔로 노란 블록을 왼쪽으로 옮겨</td><td>왼팔</td><td class='ng'>실패</td><td>41.4</td><td></td><td>2.1</td><td>19.6</td><td class='small'>카메라 검증 실패: 놓는 중 미끄러짐</td></tr><tr><td>#4</td><td>② 팔 지정 이동</td><td>오른팔로 파란 블록을 오른쪽 뒤 구석으로 옮겨</td><td>오른팔</td><td class='ok'>성공</td><td>8.5</td><td></td><td>5.5</td><td>22.8</td><td class='small'></td></tr><tr><td>#5</td><td>③ 쌓기</td><td>빨간 블록을 노란 블록 위에 쌓아</td><td>왼팔</td><td class='ok'>성공</td><td>6.4</td><td></td><td>3.3</td><td>21.5</td><td class='small'></td></tr><tr><td>#6</td><td>③ 쌓기</td><td>파란 블록을 초록 블록 위에 쌓아</td><td>오른팔</td><td class='ok'>성공</td><td>8.8</td><td></td><td>2.5</td><td>19.6</td><td class='small'></td></tr><tr><td>#7</td><td>④ 팔 간 전달</td><td>빨간 블록을 오른쪽으로 옮겨</td><td>왼팔 → 오른팔</td><td class='ng'>실패</td><td>275.0</td><td></td><td>6.5</td><td>42.7</td><td class='small'>카메라 검증 실패: 블록이 튕겨 나감</td></tr><tr><td>#8</td><td>④ 팔 간 전달</td><td>파란 블록을 왼쪽으로 옮겨</td><td>왼팔 → 오른팔</td><td class='ok'>성공</td><td>6.9</td><td></td><td>1.8</td><td>39.2</td><td class='small'></td></tr><tr><td>#9</td><td>⑤ 양팔 협동 운반</td><td>그릇을 두 팔로 들어서 뒤로 옮겨</td><td>양팔</td><td class='ok'>성공</td><td>7.7</td><td>2.4</td><td>2.6</td><td>50.1</td><td class='small'></td></tr><tr><td>#10</td><td>⑤ 양팔 협동 운반</td><td>쟁반을 양손으로 들어서 가운데로 옮겨</td><td>양팔</td><td class='ok'>성공</td><td>9.0</td><td>4.7</td><td>4.2</td><td>48.0</td><td class='small'></td></tr></table>
+<svg viewBox="0 0 760 250" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="Noto Sans CJK KR" font-size="11"><line x1="56" x2="740" y1="200.0" y2="200.0" stroke="#e3e6ec"/><text x="50" y="204.0" text-anchor="end" fill="#5b6475">0</text><line x1="56" x2="740" y1="157.0" y2="157.0" stroke="#e3e6ec"/><text x="50" y="161.0" text-anchor="end" fill="#5b6475">20</text><line x1="56" x2="740" y1="114.0" y2="114.0" stroke="#e3e6ec"/><text x="50" y="118.0" text-anchor="end" fill="#5b6475">40</text><line x1="56" x2="740" y1="71.0" y2="71.0" stroke="#e3e6ec"/><text x="50" y="75.0" text-anchor="end" fill="#5b6475">60</text><line x1="56" x2="740" y1="28.0" y2="28.0" stroke="#e3e6ec"/><text x="50" y="32.0" text-anchor="end" fill="#5b6475">80</text><line x1="56" x2="740" y1="135.5" y2="135.5" stroke="#d64545" stroke-dasharray="5 4"/><text x="738" y="130.5" text-anchor="end" fill="#d64545">검증 기준 30 mm</text><rect x="68.3" y="181.7" width="43.8" height="18.3" rx="3" fill="#2f6fed"/><text x="90.2" y="177.7" text-anchor="middle" fill="#1d2433">8</text><text x="90.2" y="215" text-anchor="middle" fill="#1d2433">#1</text><rect x="136.7" y="153.3" width="43.8" height="46.7" rx="3" fill="#2f6fed"/><text x="158.6" y="149.3" text-anchor="middle" fill="#1d2433">22</text><text x="158.6" y="215" text-anchor="middle" fill="#1d2433">#2</text><rect x="205.1" y="111.0" width="43.8" height="89.0" rx="3" fill="#9aa1ad"/><text x="227.0" y="107.0" text-anchor="middle" fill="#1d2433">41</text><text x="227.0" y="215" text-anchor="middle" fill="#1d2433">#3</text><text x="227.0" y="229" text-anchor="middle" fill="#d64545" font-weight="700">실패</text><rect x="273.5" y="181.7" width="43.8" height="18.3" rx="3" fill="#7a5af5"/><text x="295.4" y="177.7" text-anchor="middle" fill="#1d2433">8</text><text x="295.4" y="215" text-anchor="middle" fill="#1d2433">#4</text><rect x="341.9" y="186.2" width="43.8" height="13.8" rx="3" fill="#1f9d63"/><text x="363.8" y="182.2" text-anchor="middle" fill="#1d2433">6</text><text x="363.8" y="215" text-anchor="middle" fill="#1d2433">#5</text><rect x="410.3" y="181.1" width="43.8" height="18.9" rx="3" fill="#1f9d63"/><text x="432.2" y="177.1" text-anchor="middle" fill="#1d2433">9</text><text x="432.2" y="215" text-anchor="middle" fill="#1d2433">#6</text><rect x="478.7" y="28.0" width="43.8" height="172.0" rx="3" fill="#9aa1ad"/><text x="500.6" y="24.0" text-anchor="middle" fill="#1d2433">275+</text><text x="500.6" y="215" text-anchor="middle" fill="#1d2433">#7</text><text x="500.6" y="229" text-anchor="middle" fill="#d64545" font-weight="700">실패</text><rect x="547.1" y="185.2" width="43.8" height="14.8" rx="3" fill="#e0a106"/><text x="569.0" y="181.2" text-anchor="middle" fill="#1d2433">7</text><text x="569.0" y="215" text-anchor="middle" fill="#1d2433">#8</text><rect x="615.5" y="183.4" width="43.8" height="16.6" rx="3" fill="#c2410c"/><text x="637.4" y="179.4" text-anchor="middle" fill="#1d2433">8</text><text x="637.4" y="215" text-anchor="middle" fill="#1d2433">#9</text><rect x="683.9" y="180.7" width="43.8" height="19.3" rx="3" fill="#c2410c"/><text x="705.8" y="176.7" text-anchor="middle" fill="#1d2433">9</text><text x="705.8" y="215" text-anchor="middle" fill="#1d2433">#10</text><text x="56" y="16" fill="#5b6475">목표와의 거리 [mm] (Gazebo 실제 위치, 80 mm 이상은 잘라서 표시)</text></svg>
+
+<h2 class="pb">3. 시험 경과와 수정</h2>
+<table><tr><th>동작</th><th>1차 시험</th><th>수정 후 ⑤ 재시험</th><th>최종 시험</th></tr><tr><td>① 자동 배정 이동</td><td>2/2</td><td>–</td><td>2/2</td></tr><tr><td>② 팔 지정 이동</td><td>2/2</td><td>–</td><td>1/2</td></tr><tr><td>③ 쌓기</td><td>2/2</td><td>–</td><td>2/2</td></tr><tr><td>④ 팔 간 전달</td><td>2/2</td><td>–</td><td>1/2</td></tr><tr><td>⑤ 양팔 협동 운반</td><td>0/2</td><td>2/2</td><td>2/2</td></tr><tr><td><b>합계</b></td><td><b>8/10</b></td><td><b>2/2</b></td><td><b>8/10</b></td></tr></table>
+<div class="callout"><b>1차 시험의 협동 운반 실패 2건과 수정</b><br>
+• #10(트레이가 x = 0.10): 인식 영역이 마커 중심을 이은 사각형(x ≥ 0.10)이라 트레이 절반이 잘려, 폭 0.029 m(실제 0.06)·중심 17.8 mm 오차로 인식 → 손잡이를 잘못 잡음(손목 카메라 19 %).
+→ <b>인식 영역을 바깥으로 넓힘</b>(<code>roi_margin 0.12</code>): 같은 위치에서 2.6 mm, 폭 0.059 m. 보드가 블록으로 잘못 잡히지 않음을 확인.<br>
+• #9(트레이를 뒤로): 놓은 뒤 물러날 때 반만 열린 집게(0.35 rad)에 손잡이가 걸려 트레이가 들림(높이 0.096 m, 기울기 21.7°).
+→ <b>협동 운반에서는 놓을 때 집게를 끝까지 염</b>(<code>carry_release 1.0</code>). 블록 쌓기용 부분 열림은 그대로.</div>
+<div class="callout blue"><b>최종 시험의 실패 2건</b><br>
+• #3 왼팔 지정 이동: 노란 블록이 목표에서 41 mm 떨어진 빨간 블록 옆에 놓임(놓는 중 미끄러짐).<br>
+• #7 팔 간 전달: 오른팔이 이어받아 옮기는 도중 빨간 블록이 마커 영역 밖 (0.425, −0.157)으로 튕겨 나감.<br>
+둘 다 시뮬 물리(집게가 블록을 깊게 조이는 접촉)에서 가끔 생기는 현상으로, 같은 명령이 1차 시험에서는 성공했습니다(#3 6.0 mm, #7 18.6 mm).</div>
+
+<h2>4. 시험 전후 화면 (최종 시험, 탑뷰 카메라 + 인식 결과)</h2>
+<div class="gallery"><figure><div class='pair'><img src='trial01_before_final.png'><img src='trial01_after_final.png'></div><figcaption>#1 ① 자동 배정 이동 — 빨간 블록을 왼쪽 뒤 구석으로 옮겨 → <b class='ok'>성공</b> (8 mm)</figcaption></figure><figure><div class='pair'><img src='trial02_before_final.png'><img src='trial02_after_final.png'></div><figcaption>#2 ① 자동 배정 이동 — 초록 블록을 오른쪽 앞으로 옮겨 → <b class='ok'>성공</b> (22 mm)</figcaption></figure><figure><div class='pair'><img src='trial03_before_final.png'><img src='trial03_after_final.png'></div><figcaption>#3 ② 팔 지정 이동 — 왼팔로 노란 블록을 왼쪽으로 옮겨 → <b class='ng'>실패</b> (41 mm)</figcaption></figure><figure><div class='pair'><img src='trial04_before_final.png'><img src='trial04_after_final.png'></div><figcaption>#4 ② 팔 지정 이동 — 오른팔로 파란 블록을 오른쪽 뒤 구석으로 옮겨 → <b class='ok'>성공</b> (8 mm)</figcaption></figure><figure><div class='pair'><img src='trial05_before_final.png'><img src='trial05_after_final.png'></div><figcaption>#5 ③ 쌓기 — 빨간 블록을 노란 블록 위에 쌓아 → <b class='ok'>성공</b> (6 mm)</figcaption></figure><figure><div class='pair'><img src='trial06_before_final.png'><img src='trial06_after_final.png'></div><figcaption>#6 ③ 쌓기 — 파란 블록을 초록 블록 위에 쌓아 → <b class='ok'>성공</b> (9 mm)</figcaption></figure><figure><div class='pair'><img src='trial07_before_final.png'><img src='trial07_after_final.png'></div><figcaption>#7 ④ 팔 간 전달 — 빨간 블록을 오른쪽으로 옮겨 → <b class='ng'>실패</b> (275 mm)</figcaption></figure><figure><div class='pair'><img src='trial08_before_final.png'><img src='trial08_after_final.png'></div><figcaption>#8 ④ 팔 간 전달 — 파란 블록을 왼쪽으로 옮겨 → <b class='ok'>성공</b> (7 mm)</figcaption></figure><figure><div class='pair'><img src='trial09_before_final.png'><img src='trial09_after_final.png'></div><figcaption>#9 ⑤ 양팔 협동 운반 — 그릇을 두 팔로 들어서 뒤로 옮겨 → <b class='ok'>성공</b> (8 mm)</figcaption></figure><figure><div class='pair'><img src='trial10_before_final.png'><img src='trial10_after_final.png'></div><figcaption>#10 ⑤ 양팔 협동 운반 — 쟁반을 양손으로 들어서 가운데로 옮겨 → <b class='ok'>성공</b> (9 mm)</figcaption></figure></div>
+
+<h2>5. 판단과 다음 단계</h2>
+<table><tr><th>항목</th><th>판단</th></tr>
+<tr><td>명령 해석 (LLM)</td><td>계획이 저장된 성공 18건 모두 의도대로 해석(팔 지정·쌓기·전달 분할·트레이 운반 포함). 실패 4건도 기록된 팔 배정·단계 수가 의도와 같아, 실패는 해석이 아닌 동작 단계에서 발생. 평균 3.4 s</td></tr>
+<tr><td>안전·검증</td><td>실패 4건(1차 2, 최종 2) 모두 손목/탑뷰 카메라 검증이 감지. 거짓 성공 없음</td></tr>
+<tr><td>위치 정확도</td><td>성공 시 대부분 4–9 mm, 전달·최종 단계는 최대 22 mm(누적)</td></tr>
+<tr><td>주요 위험</td><td>시뮬 집게의 미끄러짐/튕김(최종 10회 중 2회). 실물에서는 그리퍼 전류 제한으로 다시 측정 필요</td></tr>
+</table>
+<p class="small">다음 단계: ① 실패 시 자동 재시도(카메라로 블록을 다시 찾아 1회 재집기) ② 시험 횟수를 늘려(동작당 10회) 통계 확보 ③ 실물 두 팔에서 같은 시험 세트 실행.<br>
+재현: <code>python3 docs/tests/run_dual_suite.py docs/test_report all final</code> → <code>python3 docs/tests/make_report.py docs/test_report</code></p>
+</body></html>

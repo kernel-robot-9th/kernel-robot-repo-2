@@ -1,0 +1,59 @@
+# teleop 실행 출력 (2026-10-20, 오른팔). 세션 폴더: ~/.cache/vla_teleop/<시각>-tap|pick
+
+==== 09:35 tap 초록 (z -0.04)
+09:35:34 right tap at x +0.190 y -0.081 z -0.040 (hover +0.010), speed 15 deg/s
+09:35:43 hover done (error_code 0)  tool (+0.184, -0.077, +0.004) tilt +2.5
+09:35:49 touch done (error_code 0)  tool (+0.186, -0.078, -0.042) tilt +1.9
+09:36:00 lift  done (error_code 0)  tool (+0.181, -0.076, -0.006) tilt +4.4
+09:36:06 home  done (error_code 0)  tool (+0.057, +0.005, +0.023) tilt -7.1
+
+==== 09:39 tap 초록 --record
+09:39:12 hover done (error_code 0)  tool (+0.184, -0.077, +0.003) tilt +2.7
+09:39:18 touch done (error_code 0)  tool (+0.186, -0.078, -0.042) tilt +1.8
+09:39:25 lift  done (error_code 0)  tool (+0.180, -0.076, -0.007) tilt +4.7
+09:39:32 home  done (error_code 0)  tool (+0.048, +0.004, +0.011) tilt -3.3
+
+==== 09:43 tap 파랑 --record (x 0.227 y -0.015, 보정 전 좌표)
+09:43:54 hover done (error_code 0)  tool (+0.219, -0.013, +0.000) tilt +3.3
+09:44:00 touch done (error_code 0)  tool (+0.219, -0.013, -0.042) tilt +2.9
+09:44:07 lift  done (error_code 0)  tool (+0.215, -0.013, -0.009) tilt +5.1
+09:44:14 home  done (error_code 0)  tool (+0.049, +0.005, +0.012) tilt -3.7
+
+==== 10:02-10:04 teleop here (보정점)
+10:02:07 marker47: tool x +0.2761 y +0.1023 z -0.0278 m  tilt -11.0 deg
+10:03:05 marker48: tool x +0.2003 y +0.1008 z -0.0394 m  tilt -7.7 deg
+10:04:44 blue_eraser_top: tool x +0.2465 y +0.0016 z -0.0339 m  tilt -0.0 deg
+fit: extra rotation +5.2 deg, translation (+0.2308, +0.1948) m, residuals 3.5 / 4.3 / 3.6 mm
+
+==== 10:09 pick 파랑 -> 48 --record
+10:09:52 right pick at (+0.244, +0.004, -0.038) -> place at (+0.200, +0.097, -0.028)
+10:09:58 open         done (error_code 0)  tool (+0.074, +0.011, +0.022) tilt -22.9  gripper +0.683
+10:10:07 above pick   done (error_code 0)  tool (+0.236, +0.004, +0.003) tilt +3.1  gripper +0.683
+10:10:13 down         done (error_code 0)  tool (+0.237, +0.004, -0.044) tilt +2.4  gripper +0.678
+10:10:15 close        done (error_code 0)  tool (+0.234, +0.005, -0.049) tilt +3.7  gripper +0.066
+10:10:21 up           done (error_code 0)  tool (+0.232, +0.004, -0.015) tilt +6.2  gripper +0.031
+10:10:24 above place  done (error_code 0)  tool (+0.196, +0.091, +0.004) tilt +4.5  gripper +0.025
+10:10:30 down         done (error_code 0)  tool (+0.199, +0.094, -0.031) tilt +1.1  gripper +0.034
+10:10:32 release      done (error_code 0)  tool (+0.194, +0.096, -0.037) tilt +2.4  gripper +0.640
+10:10:38 up           done (error_code 0)  tool (+0.194, +0.094, +0.007) tilt +3.6  gripper +0.667
+10:10:47 home         done (error_code 0)  tool (+0.074, +0.011, +0.021) tilt -22.5  gripper -0.095
+
+==== 10:13 pick 파랑 -> 48 --yaw 75 --record
+10:13:28 right pick at (+0.245, +0.003, -0.036) -> place at (+0.200, +0.097, -0.028)
+10:13:48 down         done (error_code 0)  tool (+0.242, +0.003, -0.040) tilt +1.3  gripper +0.667
+10:13:50 close        done (error_code 0)  tool (+0.240, +0.003, -0.045) tilt +2.3  gripper +0.041
+10:13:56 up           done (error_code 0)  tool (+0.233, +0.003, -0.012) tilt +6.0  gripper +0.034
+10:14:06 down         done (error_code 0)  tool (+0.199, +0.094, -0.031) tilt +1.0  gripper +0.038
+10:14:08 release      done (error_code 0)  tool (+0.195, +0.094, -0.036) tilt +2.5  gripper +0.658
+10:14:22 home         done (error_code 0)  tool (+0.074, +0.012, +0.022) tilt -22.6  gripper -0.100
+result: blue on marker 48, 1.0 cm from its centre
+
+==== 10:19 pick 연두 -> 파랑 위 (쌓기) --yaw -27 --place-yaw 90 --record  [실패: 빈 손]
+10:19:22 right pick at (+0.212, -0.066, -0.036) -> place at (+0.196, +0.087, -0.015)
+10:19:42 down         done (error_code 0)  tool (+0.208, -0.062, -0.040) tilt +1.7  gripper +0.667
+10:19:44 close        done (error_code 0)  tool (+0.208, -0.063, -0.041) tilt +1.7  gripper -0.087
+10:19:50 up           done (error_code 0)  tool (+0.202, -0.061, -0.005) tilt +4.9  gripper -0.101
+10:20:03 down         done (error_code 0)  tool (+0.194, +0.084, -0.018) tilt +1.1  gripper -0.103
+10:20:05 release      done (error_code 0)  tool (+0.193, +0.084, -0.022) tilt +2.0  gripper +0.657
+10:20:19 home         done (error_code 0)  tool (+0.074, +0.012, +0.022) tilt -22.9  gripper -0.097
+result: gripper closed to -0.09 (empty); wrist video shows green ~2 cm beside the fingers

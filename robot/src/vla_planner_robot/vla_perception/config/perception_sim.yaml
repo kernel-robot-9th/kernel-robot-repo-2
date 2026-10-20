@@ -1,0 +1,11 @@
+vla_perception:
+  ros__parameters:
+    use_sim_time: true
+    image_topic: /camera/image_raw
+    camera_info_topic: /camera/camera_info
+    aruco_dictionary: DICT_5X5_100
+    marker_ids: [0, 1, 2, 3]
+    # marker centers in robot base frame (link0), [x0, y0, x1, y1, ...] metres
+    marker_positions: [0.05, 0.20, 0.33, 0.20, 0.33, -0.20, 0.05, -0.20]
+    block_height: 0.025
+    roi_margin: 0.0

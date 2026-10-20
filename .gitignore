@@ -218,3 +218,56 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# =============================================================================
+# kernel-robot-repo-2 추가 규칙 (2026-10-20)
+# 저장소 구성: emr/ (EMR 웹, docker) · robot/ (ROS 2 colcon 워크스페이스) · ollama_ws/ · docs/
+# 이 파일은 저장소 맨 위에 `.gitignore`라는 이름으로 있어야 동작한다
+# =============================================================================
+
+# ---- 비밀값: 절대 올리지 않는다 ----
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+**/.claude/settings.local.json
+# EMR DB 백업 (간호사 계정·비밀번호 해시가 들어 있다)
+emr_backup_*.sql
+*.dump
+
+# ---- ROS 2 colcon 산출물 ----
+# robot/log·robot/build에는 colcon이 셸 환경변수 전체(전역 export한 API 키 포함)를 평문으로 남긴다
+robot/build/
+robot/install/
+robot/log/
+
+# ---- EMR 프론트 (Node·Vite) ----
+node_modules/
+*.tsbuildinfo
+.vite/
+*.local
+
+# ---- 실험 기록 영상 ----
+# 한 파일 25~50 MB, robot/docs/real_tests 전체 약 530 MB. GitHub는 50 MB 넘으면 경고, 100 MB 넘으면 거부한다.
+# 영상은 드라이브에 두고 문서에는 링크·대표 사진(jpg)만 남긴다. 꼭 올려야 하면 Git LFS를 쓴다
+robot/docs/real_tests/**/*.mp4
+
+# ---- Claude Code 작업 파일: 저장소에 올리지 않는다 (2026-10-20 결정) ----
+# CLAUDE.md(루트·emr·robot)는 Claude Code가 읽는 작업 규칙·결정 기록, .claude/는 Claude Code 설정(다른 PC 경로가 든 허용 규칙 포함)
+CLAUDE.md
+.claude/
+
+# ---- 편집기·OS ----
+.DS_Store
+*.swp
+*.swo
+*~
+.idea/
+
+# ---- 외부 ROS 2 패키지: 올리지 않고 내려받는다 (2026-10-20 결정) ----
+# 받는 방법은 README 부록 A — git clone 후 고정 커밋으로 checkout
+robot/src/pinky_pro/
+robot/src/open_manipulator/
+robot/src/dynamixel_hardware_interface/
+robot/src/robotis_interfaces/

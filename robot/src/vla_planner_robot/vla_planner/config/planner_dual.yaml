@@ -1,0 +1,21 @@
+vla_planner:
+  ros__parameters:
+    use_sim_time: true
+    ollama_host: http://localhost:11434
+    model: gemma4:e2b
+    llm_timeout: 90.0
+    block_height: 0.025
+    relative_offset: 0.05
+    min_clearance: 0.035
+    min_reach: 0.09
+    max_reach: 0.25
+    verify_tolerance: 0.03
+    dry_run: false
+    arm_names: [left, right]
+    tray_handle: 0.025
+    # named floor areas in the world frame (arm bases at y = +-0.165, facing +x)
+    region_names: [center, left, right, front, back, front_left, front_right, back_left, back_right]
+    region_x:     [0.13,   0.16, 0.16,  0.17,  0.10, 0.22,       0.22,        0.10,      0.10]
+    region_y:     [0.0,    0.22, -0.22, 0.0,   0.0,  0.14,       -0.14,       0.26,      -0.26]
+    handoff_x_min: 0.10
+    handoff_clearance: 0.05

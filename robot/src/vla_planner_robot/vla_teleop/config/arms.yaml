@@ -1,0 +1,29 @@
+# Real OMX arms for vla_teleop. Serial numbers are the OpenRB-150 USB serials
+# (ls /dev/serial/by-id/); cameras use /dev/v4l paths so they survive re-plugging.
+# The two wrist cameras have the same USB serial, so they are told apart by USB port (by-path). A glob on the
+# hub-port suffix keeps working when the hub is plugged into another PC port.
+
+ros_domain_id: 77                   # teleop runs isolated from the user's sim domain (56)
+top_camera: /dev/v4l/by-id/usb-HFSD-231214-J_SNAP_U2-video-index0
+camera_settings: ~/dev_ws/robot/calib/camera_settings.yaml   # fixed exposure / white balance (teleop camera --tune)
+
+align_duration_s: 10.0              # follower moves to the leader pose this slowly before teleop starts
+align_skip_deg: 3.0                 # no alignment if every joint is already this close
+tap_speed_deg_s: 15.0               # teleop tap: joint speed (slowest joint sets the time; min 3 s, touch/lift 6 s)
+gripper:                            # gripper_joint_1 (rad) on the real follower, read on 2026-10-20
+  open: 0.68                        # fingers out of the wrist image
+  close: -0.15                      # fingers touching; on an object the motor stops at its current limit (600)
+safe_z_min_m: -0.04                 # tool height limit agreed on 2026-10-19 (arm base frame)
+folded:                             # "folded" for a safe stop (tool point, arm base frame)
+  max_x_m: 0.15
+  max_z_m: 0.12
+
+arms:
+  right:                            # image right in the top view
+    follower_serial: 9C4E6E48
+    leader_serial: 0DE4DEF8
+    wrist_camera: /dev/v4l/by-path/*-usb-0:*.1.4:1.0-video-index0   # hub port 1.4; the hub itself moved 10 -> 4 on 2026-10-20
+  left:
+    follower_serial: E7B2203F
+    leader_serial: A49B33BC
+    wrist_camera: /dev/v4l/by-path/*-usb-0:*.4.2:1.0-video-index0

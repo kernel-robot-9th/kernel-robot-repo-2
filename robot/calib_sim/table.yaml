@@ -1,0 +1,4 @@
+vla_perception:
+  ros__parameters:
+    marker_ids: [0, 1, 2, 3]
+    marker_positions: [0.0589, 0.2002, 0.3389, 0.2, 0.3386, -0.2, 0.0586, -0.1999]

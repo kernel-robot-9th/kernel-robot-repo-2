@@ -1,0 +1,8 @@
+# Natural-language command -> LLM plan -> PickPlace
+string command
+---
+bool success
+string message
+string plan_json
+---
+string stage

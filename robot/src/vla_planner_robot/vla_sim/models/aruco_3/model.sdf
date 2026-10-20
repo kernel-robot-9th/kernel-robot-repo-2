@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<sdf version="1.10">
+  <model name="aruco_3">
+    <static>true</static>
+    <link name="link">
+      <visual name="visual">
+        <pose>0 0 0.0005 0 0 0</pose>
+        <geometry>
+          <plane><normal>0 0 1</normal><size>0.0700 0.0700</size></plane>
+        </geometry>
+        <material>
+          <diffuse>1 1 1 1</diffuse>
+          <pbr><metal>
+            <albedo_map>model://aruco_3/materials/textures/marker_3.png</albedo_map>
+            <roughness>1.0</roughness><metalness>0.0</metalness>
+          </metal></pbr>
+        </material>
+      </visual>
+    </link>
+  </model>
+</sdf>

@@ -1,0 +1,4 @@
+vla_executor:
+  ros__parameters:
+    wrist_roi: [0.43, 0.348, 0.636, 0.648]
+    wrist_min_fill: 0.503

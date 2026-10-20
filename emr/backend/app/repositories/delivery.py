@@ -1,0 +1,116 @@
+# =============================================================================
+# 파일   : app/repositories/delivery.py
+# 역할   : 배송 예약 조회·품목 교체
+# 작성일 : 2026-10-14
+# 구성   :
+#   - DeliveryRepository  get_with_items, list_by_nurse, replace_items
+#                         배정·진행 (2026-10-20): get_active_for_robot, lock_next_claimable, arrived_receipt_marker_ids
+# =============================================================================
+from __future__ import annotations
+
+from datetime import datetime
+
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
+
+from app.models.delivery import Delivery, DeliveryItem
+from app.models.enums import DeliveryStatus
+from app.models.location import Location
+from app.repositories.base import BaseRepository
+
+ACTIVE_STATUSES = (DeliveryStatus.DISPATCHED, DeliveryStatus.ARRIVED)
+
+
+def _with_details():
+    """배송 응답에 쓰는 관계를 함께 로드하는 옵션 (품목·품목의 비품·목적지·맡은 로봇).
+    [입력] 없음
+    [출력] list: select().options(...)에 넘길 로더
+    """
+    return [
+        selectinload(Delivery.items).selectinload(DeliveryItem.supply),
+        selectinload(Delivery.destination_location),
+        selectinload(Delivery.assigned_robot),
+    ]
+
+
+class DeliveryRepository(BaseRepository[Delivery]):
+    """deliveries·delivery_items 접근."""
+
+    model = Delivery
+
+    def get_with_items(self, delivery_id: int, lock: bool = False) -> Delivery | None:
+        """품목·배송 위치를 함께 로드해 한 건 조회.
+        [입력] delivery_id / lock: True면 SELECT ... FOR UPDATE (디스패처 전송과 동시에 변경·취소되지 않게)
+        [출력] Delivery | None
+        """
+        statement = select(Delivery).options(*_with_details()).where(Delivery.id == delivery_id)
+        if lock:
+            statement = statement.with_for_update(of=Delivery).execution_options(populate_existing=True)
+        return self.db.scalar(statement)
+
+    def list_by_nurse(
+        self, nurse_id: int, status: str | None = None, limit: int = 100, offset: int = 0,
+    ) -> list[Delivery]:
+        """간호사의 예약 목록, 배송 예정 시각이 빠른 순.
+        [입력] nurse_id / status: 있으면 그 상태만 / limit / offset
+        [출력] list[Delivery]
+        """
+        statement = select(Delivery).options(*_with_details()).where(Delivery.nurse_id == nurse_id)
+        if status:
+            statement = statement.where(Delivery.status == status)
+        statement = statement.order_by(Delivery.scheduled_at, Delivery.id).limit(limit).offset(offset)
+        return list(self.db.scalars(statement))
+
+    def get_active_for_robot(self, robot_id: int) -> Delivery | None:
+        """로봇이 지금 맡고 있는(dispatched·arrived) 배송. 부분 유일 인덱스로 많아야 하나.
+        [입력] robot_id
+        [출력] Delivery | None
+        """
+        statement = (
+            select(Delivery).options(*_with_details())
+            .where(Delivery.assigned_robot_id == robot_id, Delivery.status.in_(ACTIVE_STATUSES))
+        )
+        return self.db.scalar(statement)
+
+    def lock_next_claimable(self, now: datetime, map_id: int) -> Delivery | None:
+        """로봇이 가져갈 다음 배송을 잠가서 가져온다: reserved이고 예약 시각이 지났고, 목적지에 그 맵의 좌표가 있는 것 중
+        예약 시각이 가장 이른(같으면 id 작은) 한 건. 다른 로봇이 잠근 행은 건너뛴다(SKIP LOCKED).
+        [입력] now: 지금 시각(파이썬 — 테스트 트랜잭션에서는 DB now()가 고정이라) / map_id: 로봇 복귀 장소의 맵
+        [출력] Delivery | None
+        """
+        statement = (
+            select(Delivery)
+            .join(Location, Delivery.destination_location_id == Location.id)
+            .options(*_with_details())
+            .where(
+                Delivery.status == DeliveryStatus.RESERVED,
+                Delivery.scheduled_at <= now,
+                Location.map_id == map_id,
+                Location.map_x_m.is_not(None),
+            )
+            .order_by(Delivery.scheduled_at, Delivery.id)
+            .limit(1)
+            # of=Delivery: 장소 행까지 잠그면 장소를 수정 중일 때 배송이 조용히 건너뛰어진다
+            .with_for_update(skip_locked=True, of=Delivery)
+        )
+        return self.db.scalar(statement)
+
+    def arrived_receipt_marker_ids(self) -> set[int]:
+        """지금 도착(arrived)해 있는 배송들이 쓰는 일회용 마커 번호.
+        [입력] 없음
+        [출력] set[int]
+        """
+        statement = select(Delivery.receipt_marker_id).where(
+            Delivery.status == DeliveryStatus.ARRIVED, Delivery.receipt_marker_id.is_not(None),
+        )
+        return set(self.db.scalars(statement))
+
+    def replace_items(self, delivery: Delivery, items: list[DeliveryItem]) -> None:
+        """품목 전체 교체. 기존 행을 먼저 지우고 flush해야 (delivery_id, supply_id) UNIQUE에 안 걸린다.
+        [입력] delivery / items: 새 품목
+        [출력] 없음
+        """
+        delivery.items.clear()
+        self.db.flush()
+        delivery.items.extend(items)
+        self.db.flush()

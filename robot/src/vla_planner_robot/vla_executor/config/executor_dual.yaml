@@ -1,0 +1,44 @@
+vla_executor:
+  ros__parameters:
+    use_sim_time: true
+    arm_names: [left, right]
+    input_frame: world            # table frame on the floor; z = 0 is the work surface
+    arms:
+      left:
+        joint_prefix: left_
+        group: left_arm
+        gripper_action: /left_gripper_controller/gripper_cmd
+        base_frame: left_link0
+        wrist_topic: /left/wrist_camera/image_raw
+      right:
+        joint_prefix: right_
+        group: right_arm
+        gripper_action: /right_gripper_controller/gripper_cmd
+        base_frame: right_link0
+        wrist_topic: /right/wrist_camera/image_raw
+    grasp_z: 0.014
+    place_z: 0.014
+    stack_clearance: 0.004
+    approach_height: 0.06
+    block_height: 0.025
+    gripper_open: 1.0
+    gripper_closed: 0.05
+    gripper_release: 0.35
+    gripper_effort: 5.0
+    velocity_scaling: 0.3
+    acceleration_scaling: 0.3
+    min_reach: 0.09
+    max_reach: 0.25
+    wrist_check: true
+    wrist_required: true
+    wrist_roi: [0.40, 0.40, 0.65, 0.58]
+    wrist_min_fill: 0.6
+    wrist_timeout: 2.0
+    tray_handle: 0.025
+    tray_grasp_z: 0.022
+    tray_color: purple
+    carry_lift: 0.04
+    carry_step: 0.01
+    carry_speed: 0.03
+    carry_joint_speed: 0.5
+    carry_release: 1.0

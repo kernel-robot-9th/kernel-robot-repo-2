@@ -1,0 +1,157 @@
+<?xml version="1.0"?>
+<!-- Two-arm floor setup. World frame = table frame on the FLOOR (z = 0 = work surface).
+     The arms (spawned from vla_dual_description) stand on a 7.5 cm board, link0 at (0, +-0.165, 0.075), facing +x.
+     ArUco DICT_5X5_100 ids 0-3, 5 cm, centers at {0: (0.1, 0.4), 1: (0.4, 0.4), 2: (0.4, -0.4), 3: (0.1, -0.4)} (m).
+     Purple tray 0.24 x 0.06 m with 0.025 m handles at y = +-0.1075 (tray frame), for the two-arm carry. -->
+<sdf version="1.10">
+  <world name="vla_floor">
+    <physics name="2ms" type="ignored">
+      <max_step_size>0.002</max_step_size>
+      <real_time_factor>1</real_time_factor>
+    </physics>
+    <plugin name="gz::sim::systems::Physics" filename="gz-sim-physics-system"/>
+    <plugin name="gz::sim::systems::UserCommands" filename="gz-sim-user-commands-system"/>
+    <plugin name="gz::sim::systems::SceneBroadcaster" filename="gz-sim-scene-broadcaster-system"/>
+    <plugin name="gz::sim::systems::Contact" filename="gz-sim-contact-system"/>
+    <plugin name="gz::sim::systems::Sensors" filename="gz-sim-sensors-system">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+    <gravity>0 0 -9.8</gravity>
+    <scene>
+      <ambient>0.6 0.6 0.6 1</ambient>
+      <background>0.7 0.7 0.7 1</background>
+      <shadows>false</shadows>
+    </scene>
+    <light name="sun" type="directional">
+      <pose>0 0 10 0 0 0</pose>
+      <cast_shadows>false</cast_shadows>
+      <diffuse>0.9 0.9 0.9 1</diffuse>
+      <specular>0.1 0.1 0.1 1</specular>
+      <direction>-0.2 0.1 -0.9</direction>
+    </light>
+
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry><plane><normal>0 0 1</normal><size>100 100</size></plane></geometry>
+          <surface><friction><ode><mu>1.0</mu><mu2>1.0</mu2></ode></friction></surface>
+        </collision>
+        <visual name="visual">
+          <geometry><plane><normal>0 0 1</normal><size>100 100</size></plane></geometry>
+          <material><ambient>0.62 0.62 0.64 1</ambient><diffuse>0.62 0.62 0.64 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="top_camera">
+      <static>true</static>
+      <pose>0.25 0 1.0 0 1.5707963 0</pose>
+      <link name="link">
+        <sensor name="top_camera" type="camera">
+          <always_on>true</always_on>
+          <update_rate>15</update_rate>
+          <topic>camera/image_raw</topic>
+          <gz_frame_id>top_camera_optical</gz_frame_id>
+          <camera>
+            <camera_info_topic>camera/camera_info</camera_info_topic>
+            <horizontal_fov>0.9</horizontal_fov>
+            <image><width>1280</width><height>960</height><format>R8G8B8</format></image>
+            <clip><near>0.05</near><far>5</far></clip>
+          </camera>
+        </sensor>
+      </link>
+    </model>
+
+    <include><uri>model://aruco_0</uri><name>aruco_0</name><pose>0.1 0.4 0 0 0 0</pose></include>
+    <include><uri>model://aruco_1</uri><name>aruco_1</name><pose>0.4 0.4 0 0 0 0</pose></include>
+    <include><uri>model://aruco_2</uri><name>aruco_2</name><pose>0.4 -0.4 0 0 0 0</pose></include>
+    <include><uri>model://aruco_3</uri><name>aruco_3</name><pose>0.1 -0.4 0 0 0 0</pose></include>
+
+    <model name="block_red">
+      <pose>0.17 0.27 0.0125 0 0 0.0</pose>
+      <link name="link">
+        <inertial><mass>0.02</mass>
+          <inertia><ixx>2.083e-06</ixx><iyy>2.083e-06</iyy><izz>2.083e-06</izz><ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry><box><size>0.025 0.025 0.025</size></box></geometry>
+          <surface><friction><ode><mu>2.0</mu><mu2>2.0</mu2></ode></friction></surface>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.025 0.025 0.025</size></box></geometry>
+          <material><ambient>1 0 0 1</ambient><diffuse>1 0 0 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+    <model name="block_blue">
+      <pose>0.17 -0.27 0.0125 0 0 0.0</pose>
+      <link name="link">
+        <inertial><mass>0.02</mass>
+          <inertia><ixx>2.083e-06</ixx><iyy>2.083e-06</iyy><izz>2.083e-06</izz><ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry><box><size>0.025 0.025 0.025</size></box></geometry>
+          <surface><friction><ode><mu>2.0</mu><mu2>2.0</mu2></ode></friction></surface>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.025 0.025 0.025</size></box></geometry>
+          <material><ambient>0 0 1 1</ambient><diffuse>0 0 1 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+    <model name="block_yellow">
+      <pose>0.21 0.1 0.0125 0 0 0.3</pose>
+      <link name="link">
+        <inertial><mass>0.02</mass>
+          <inertia><ixx>2.083e-06</ixx><iyy>2.083e-06</iyy><izz>2.083e-06</izz><ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry><box><size>0.025 0.025 0.025</size></box></geometry>
+          <surface><friction><ode><mu>2.0</mu><mu2>2.0</mu2></ode></friction></surface>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.025 0.025 0.025</size></box></geometry>
+          <material><ambient>1 1 0 1</ambient><diffuse>1 1 0 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+    <model name="block_green">
+      <pose>0.21 -0.1 0.0125 0 0 0.0</pose>
+      <link name="link">
+        <inertial><mass>0.02</mass>
+          <inertia><ixx>2.083e-06</ixx><iyy>2.083e-06</iyy><izz>2.083e-06</izz><ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry><box><size>0.025 0.025 0.025</size></box></geometry>
+          <surface><friction><ode><mu>2.0</mu><mu2>2.0</mu2></ode></friction></surface>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.025 0.025 0.025</size></box></geometry>
+          <material><ambient>0 0.8 0 1</ambient><diffuse>0 0.8 0 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="tray">
+      <pose>0.13 0.0 0 0 0 0.0</pose>
+      <link name="link">
+        <inertial><mass>0.30</mass><pose>0 0 0.01 0 0 0</pose>
+          <inertia><ixx>3.0e-3</ixx><iyy>2.0e-4</iyy><izz>3.0e-3</izz><ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
+        </inertial>
+        <collision name="plate_c"><pose>0 0 0.004 0 0 0</pose><geometry><box><size>0.06 0.24 0.008</size></box></geometry>
+          <surface><friction><ode><mu>1.0</mu><mu2>1.0</mu2></ode></friction></surface></collision>
+        <visual name="plate_v"><pose>0 0 0.004 0 0 0</pose><geometry><box><size>0.06 0.24 0.008</size></box></geometry>
+          <material><ambient>0.55 0.1 0.8 1</ambient><diffuse>0.55 0.1 0.8 1</diffuse></material></visual>
+        <collision name="handle_l_c"><pose>0 0.1075 0.0205 0 0 0</pose><geometry><box><size>0.025 0.025 0.025</size></box></geometry>
+          <surface><friction><ode><mu>2.0</mu><mu2>2.0</mu2></ode></friction></surface></collision>
+        <visual name="handle_l_v"><pose>0 0.1075 0.0205 0 0 0</pose><geometry><box><size>0.025 0.025 0.025</size></box></geometry>
+          <material><ambient>0.55 0.1 0.8 1</ambient><diffuse>0.55 0.1 0.8 1</diffuse></material></visual>
+        <collision name="handle_r_c"><pose>0 -0.1075 0.0205 0 0 0</pose><geometry><box><size>0.025 0.025 0.025</size></box></geometry>
+          <surface><friction><ode><mu>2.0</mu><mu2>2.0</mu2></ode></friction></surface></collision>
+        <visual name="handle_r_v"><pose>0 -0.1075 0.0205 0 0 0</pose><geometry><box><size>0.025 0.025 0.025</size></box></geometry>
+          <material><ambient>0.55 0.1 0.8 1</ambient><diffuse>0.55 0.1 0.8 1</diffuse></material></visual>
+      </link>
+    </model>
+  </world>
+</sdf>

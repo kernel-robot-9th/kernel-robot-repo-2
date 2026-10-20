@@ -1,0 +1,1545 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <meta name="dcterms.date" content="2026-10-15" />
+  <title>OMX-F 언어 지시 Pick &amp; Place — 기술 문서</title>
+  <style>
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    /* CSS for syntax highlighting */
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="tech.css" />
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">OMX-F 언어 지시 Pick &amp; Place — 기술 문서</h1>
+<p class="subtitle">ROS 2 Jazzy · MoveIt 2 · Ollama · 탑뷰 RGB + ArUco
+호모그래피 (시뮬레이션 단계)</p>
+<p class="date">2026-10-15</p>
+</header>
+<h1 id="개요">1. 개요</h1>
+<h2 id="목표">1.1 목표</h2>
+<p>자연어 명령(한국어/영어)을 받아 탑뷰 RGB 카메라로 테이블 위 색 블록을
+인식하고, LLM이 작업을 결정하면 ROBOTIS OMX-F가 MoveIt 2로 top-down pick
+&amp; place를 수행한다. Depth 센서는 없고, 테이블 네 꼭짓점의 ArUco
+마커로 이미지 평면과 테이블 평면 사이의 호모그래피를 구한다.</p>
+<h2 id="접근-방식-모듈형-vla">1.2 접근 방식: 모듈형 VLA</h2>
+<p>End-to-end 학습 정책 대신 <strong>VLM/LLM 플래너 + 고전 인식 + 모션
+플래닝</strong> 구조를 택했다.</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>구성</th>
+<th>담당</th>
+<th>학습 데이터</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Vision</td>
+<td>OpenCV: ArUco, 호모그래피, HSV 색 분할</td>
+<td>불필요</td>
+</tr>
+<tr class="even">
+<td>Language</td>
+<td>Ollama <code>gemma4:e2b</code>: 명령 → 심볼릭 계획(JSON)</td>
+<td>불필요 (zero-shot)</td>
+</tr>
+<tr class="odd">
+<td>Action</td>
+<td>닫힌형 top-down IK + MoveIt 2 (Pilz PTP)</td>
+<td>불필요</td>
+</tr>
+</tbody>
+</table>
+<p>핵심 원칙: <strong>LLM은 좌표를 생성하지 않는다.</strong> 검출된 블록
+ID와 허용된 장소 토큰 중에서만 고르고, 미터 단위 좌표는 결정적인 코드가
+계산·검증한다. 2B급 소형 모델의 수치 환각을 구조적으로 막는다.</p>
+<h2 id="현재-상태-요약">1.3 현재 상태 요약</h2>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>항목</th>
+<th>결과</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>블록 위치 추정 (Gazebo GT 대비)</td>
+<td>최대 2.1 mm, yaw 오차 0°</td>
+</tr>
+<tr class="even">
+<td>카메라 위치 역산</td>
+<td>(0.19, 0.00, 0.75) m (설정값과 일치)</td>
+</tr>
+<tr class="odd">
+<td>관절 추종 오차 (게인 수정 후)</td>
+<td>&lt; 0.001 rad</td>
+</tr>
+<tr class="even">
+<td>좌표 지정 이동, 3회 반복</td>
+<td>3/3, 4.3–5.4 mm</td>
+</tr>
+<tr class="odd">
+<td>23° 회전 블록 집기, 3회 반복</td>
+<td>3/3</td>
+</tr>
+<tr class="even">
+<td>쌓기, 반복</td>
+<td>8/9 (회전 블록 포함, 놓기 개선 후)</td>
+</tr>
+<tr class="odd">
+<td>손목 카메라 집기 확인</td>
+<td>정상 85–99% 통과 / 놓침 4종 시나리오 0%로 실패 판정</td>
+</tr>
+<tr class="even">
+<td>LLM 명령 해석 (10개)</td>
+<td>10/10, 평균 3.1 s (cold start ≈15 s 포함)</td>
+</tr>
+<tr class="odd">
+<td>최종 end-to-end (5개)</td>
+<td>5/5 (실행 4, 올바른 거부 1), 오차 3.5–12.6 mm</td>
+</tr>
+<tr class="even">
+<td>캘리브레이션 도구 (시뮬 검증)</td>
+<td>intrinsics fx +0.03 % · colors 재현율 98–100 % · table 2° 회전 오차
+복원(−2.04°), 잔차 3.1 mm · wrist 여유 89 %</td>
+</tr>
+<tr class="odd">
+<td>단위 테스트</td>
+<td>41 passed (planner 24, perception 4, executor 5, calibration 8)</td>
+</tr>
+</tbody>
+</table>
+<h1 id="시스템-구성">2. 시스템 구성</h1>
+<h2 id="데이터-흐름">2.1 데이터 흐름</h2>
+<pre><code> Gazebo top camera / usb_cam
+        │ /camera/image_raw, /camera/camera_info
+        ▼
+ vla_perception ──/vla/blocks (BlockArray, link0 frame)──┐
+        │ /vla/debug_image                                │
+                                                          ▼
+ user ──/execute_command (action) or /vla/command──▶ vla_planner ──HTTP──▶ Ollama
+                                                          │  plan JSON → resolve_plan() → 검증
+                                                          ▼
+                                             /pick_place (action) ──▶ vla_executor
+                                                                          │ top_down_ik()
+                                                                          ├─ /move_action (MoveGroup, Pilz PTP)
+                                                                          └─ /gripper_controller/gripper_cmd
+                                                                                     ▼
+                                                                      ros2_control (gz / Dynamixel)</code></pre>
+<h2 id="패키지">2.2 패키지</h2>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>패키지</th>
+<th>빌드</th>
+<th>주요 파일</th>
+<th>역할</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>open_manipulator</code> (ROBOTIS, jazzy)</td>
+<td>ament</td>
+<td><code>omx_f.urdf.xacro</code>,
+<code>omx_f_moveit.launch.py</code></td>
+<td>URDF, ros2_control, MoveIt config</td>
+</tr>
+<tr class="even">
+<td><code>dynamixel_hardware_interface</code>,
+<code>robotis_interfaces</code></td>
+<td>ament</td>
+<td>–</td>
+<td>실물 하드웨어 의존성</td>
+</tr>
+<tr class="odd">
+<td><code>vla_sim</code></td>
+<td>ament_cmake</td>
+<td><code>worlds/vla_table.sdf</code>,
+<code>launch/sim.launch.py</code>,
+<code>config/omx_f_sim_controllers.yaml</code>,
+<code>scripts/gen_markers.py</code></td>
+<td>시뮬 월드, 마커 모델, 컨트롤러 게인</td>
+</tr>
+<tr class="even">
+<td><code>vla_interfaces</code></td>
+<td>rosidl</td>
+<td><code>Block.msg</code>, <code>BlockArray.msg</code>,
+<code>PickPlace.action</code>, <code>ExecuteCommand.action</code></td>
+<td>인터페이스</td>
+</tr>
+<tr class="odd">
+<td><code>vla_perception</code></td>
+<td>ament_python</td>
+<td><code>table_geometry.py</code>, <code>perception_node.py</code></td>
+<td>마커 → 호모그래피 → 블록</td>
+</tr>
+<tr class="even">
+<td><code>vla_executor</code></td>
+<td>ament_python</td>
+<td><code>omx_ik.py</code>, <code>executor_node.py</code></td>
+<td>IK + MoveIt + 그리퍼</td>
+</tr>
+<tr class="odd">
+<td><code>vla_planner</code></td>
+<td>ament_python</td>
+<td><code>llm_plan.py</code>, <code>planner_node.py</code>,
+<code>cli.py</code></td>
+<td>LLM, 계획 해석·검증, CLI</td>
+</tr>
+<tr class="even">
+<td><code>vla_calibration</code></td>
+<td>ament_python</td>
+<td><code>intrinsics.py</code>, <code>colors.py</code>,
+<code>table.py</code>, <code>wrist.py</code>,
+<code>common.py</code></td>
+<td>캘리브레이션 도구 4종</td>
+</tr>
+<tr class="odd">
+<td><code>vla_bringup</code></td>
+<td>ament_cmake</td>
+<td><code>launch/sim_vla.launch.py</code></td>
+<td>전체 실행, <code>calib_dir</code>로 캘리브레이션 결과 적용</td>
+</tr>
+</tbody>
+</table>
+<h2 id="인터페이스">2.3 인터페이스</h2>
+<p><strong><code>vla_interfaces/msg/Block</code></strong>:
+<code>id</code>(예 <code>red_0</code>), <code>color</code>,
+<code>x</code>, <code>y</code> [m, link0], <code>yaw</code> ∈ [−π/4,
+π/4), <code>u</code>, <code>v</code> (픽셀), <code>area_px</code></p>
+<p><strong><code>vla_interfaces/msg/BlockArray</code></strong>:
+<code>header</code>, <code>table_calibrated</code>,
+<code>blocks[]</code></p>
+<p><strong><code>vla_interfaces/action/PickPlace</code></strong></p>
+<ul>
+<li>Goal: <code>pick_x</code>, <code>pick_y</code>,
+<code>pick_yaw</code>, <code>pick_z_offset</code>, <code>place_x</code>,
+<code>place_y</code>, <code>place_yaw</code>,
+<code>place_z_offset</code></li>
+<li>Result: <code>success</code>, <code>message</code></li>
+<li>Feedback: <code>stage</code></li>
+</ul>
+<p><strong><code>vla_interfaces/action/ExecuteCommand</code></strong></p>
+<ul>
+<li>Goal: <code>command</code></li>
+<li>Result: <code>success</code>, <code>message</code>,
+<code>plan_json</code></li>
+<li>Feedback: <code>stage</code></li>
+</ul>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>토픽/액션</th>
+<th>타입</th>
+<th>발행/서버</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>/vla/blocks</code></td>
+<td>BlockArray</td>
+<td>perception</td>
+</tr>
+<tr class="even">
+<td><code>/vla/debug_image</code></td>
+<td>sensor_msgs/Image</td>
+<td>perception (구독자가 있을 때만)</td>
+</tr>
+<tr class="odd">
+<td><code>/vla/command</code></td>
+<td>std_msgs/String</td>
+<td>planner 구독</td>
+</tr>
+<tr class="even">
+<td><code>/vla/status</code></td>
+<td>std_msgs/String</td>
+<td>planner</td>
+</tr>
+<tr class="odd">
+<td><code>/execute_command</code></td>
+<td>ExecuteCommand</td>
+<td>planner</td>
+</tr>
+<tr class="even">
+<td><code>/pick_place</code></td>
+<td>PickPlace</td>
+<td>executor</td>
+</tr>
+</tbody>
+</table>
+<h2 id="좌표계">2.4 좌표계</h2>
+<ul>
+<li>기준: <code>link0</code> (OMX-F 베이스), +x 로봇 전방(먼 쪽), +y
+로봇 왼쪽, 테이블 z = 0.</li>
+<li>시뮬에서는 world = link0 (로봇을 원점에 spawn).</li>
+<li>마커 중심 (ID: x, y): 0: (0.05, 0.20), 1: (0.33, 0.20), 2: (0.33,
+−0.20), 3: (0.05, −0.20). ArUco <code>DICT_5X5_100</code>, 한 변 5 cm
+(perception <code>aruco_dictionary</code> 파라미터, 시뮬 마커는
+<code>gen_markers.py</code>의 <code>DICT_NAME</code>).</li>
+<li>탑 카메라: (0.19, 0, 0.75), 아래를 향함, 1280×960, HFOV 0.9
+rad.</li>
+<li>블록: 25 mm 정육면체, 20 g, μ = 2.0.</li>
+</ul>
+<h1 id="인식-vla_perception">3. 인식 (<code>vla_perception</code>)</h1>
+<h2 id="호모그래피">3.1 호모그래피</h2>
+<p>마커 4개가 모두 보이면 각 마커 코너 4점의 평균(중심) 픽셀
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>p</mi><mi>i</mi></msub><annotation encoding="application/x-tex">p_i</annotation></semantics></math>와
+테이블 좌표
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>P</mi><mi>i</mi></msub><annotation encoding="application/x-tex">P_i</annotation></semantics></math>로
+<code>cv2.findHomography</code>를 호출해
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>H</mi><annotation encoding="application/x-tex">H</annotation></semantics></math>(pixel
+→ table)를 구한다. 팔이 마커를 가리는 동안에는 마지막으로 유효했던
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>H</mi><annotation encoding="application/x-tex">H</annotation></semantics></math>를
+유지한다. 카메라 왜곡 계수
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>D</mi><annotation encoding="application/x-tex">D</annotation></semantics></math>가
+있으면 <code>cv2.undistortPoints(P=K)</code>로 점을 이상 핀홀 좌표로
+바꾼 뒤 사용한다(실물 대비).</p>
+<h2 id="카메라-중심-역산">3.2 카메라 중심 역산</h2>
+<p>평면 → 이미지 호모그래피
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>H</mi><mrow><mo>−</mo><mn>1</mn></mrow></msup><mo>=</mo><mi>K</mi><mspace width="0.167em"></mspace><mrow><mo stretchy="true" form="prefix">[</mo><msub><mi>r</mi><mn>1</mn></msub><mspace width="0.222em"></mspace><msub><mi>r</mi><mn>2</mn></msub><mspace width="0.222em"></mspace><mi>t</mi><mo stretchy="true" form="postfix">]</mo></mrow></mrow><annotation encoding="application/x-tex">H^{-1} = K\,[r_1\ r_2\ t]</annotation></semantics></math>
+관계에서:</p>
+<ol type="1">
+<li><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>M</mi><mo>=</mo><msup><mi>K</mi><mrow><mo>−</mo><mn>1</mn></mrow></msup><msup><mi>H</mi><mrow><mo>−</mo><mn>1</mn></mrow></msup></mrow><annotation encoding="application/x-tex">M = K^{-1} H^{-1}</annotation></semantics></math>,
+스케일
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>s</mi><mo>=</mo><mn>2</mn><mi>/</mi><mrow><mo stretchy="true" form="prefix">(</mo><mo stretchy="false" form="prefix">∥</mo><msub><mi>m</mi><mn>1</mn></msub><mo stretchy="false" form="postfix">∥</mo><mo>+</mo><mo stretchy="false" form="prefix">∥</mo><msub><mi>m</mi><mn>2</mn></msub><mo stretchy="false" form="postfix">∥</mo><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">s = 2/(\lVert m_1\rVert + \lVert m_2\rVert)</annotation></semantics></math>로
+정규화.
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>M</mi><mn>33</mn></msub><mo>&lt;</mo><mn>0</mn></mrow><annotation encoding="application/x-tex">M_{33} &lt; 0</annotation></semantics></math>이면
+부호 반전.</li>
+<li><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>R</mi><mo>=</mo><mrow><mo stretchy="true" form="prefix">[</mo><msub><mi>r</mi><mn>1</mn></msub><mspace width="0.222em"></mspace><msub><mi>r</mi><mn>2</mn></msub><mspace width="0.222em"></mspace><msub><mi>r</mi><mn>1</mn></msub><mo>×</mo><msub><mi>r</mi><mn>2</mn></msub><mo stretchy="true" form="postfix">]</mo></mrow></mrow><annotation encoding="application/x-tex">R = [r_1\ r_2\ r_1\times r_2]</annotation></semantics></math>,
+SVD로 직교화
+(<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>R</mi><mo>←</mo><mi>U</mi><msup><mi>V</mi><mi>⊤</mi></msup></mrow><annotation encoding="application/x-tex">R \leftarrow UV^\top</annotation></semantics></math>).</li>
+<li>카메라 중심
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>C</mi><mo>=</mo><mo>−</mo><msup><mi>R</mi><mi>⊤</mi></msup><mi>t</mi></mrow><annotation encoding="application/x-tex">C = -R^\top t</annotation></semantics></math>.</li>
+</ol>
+<p>시뮬 결과는
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>C</mi><annotation encoding="application/x-tex">C</annotation></semantics></math>
+= (0.190, −0.000, 0.750)으로 정확히 일치했다.</p>
+<h2 id="높이-시차-보정">3.3 높이 시차 보정</h2>
+<p>호모그래피는 z = 0 평면 기준이므로, 높이
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>h</mi><annotation encoding="application/x-tex">h</annotation></semantics></math>인
+블록 윗면은 카메라에서 바깥쪽으로 밀려 보인다. 광선을 따라 보정한다.</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>𝐱</mi><mi>h</mi></msub><mo>=</mo><msub><mi>C</mi><mrow><mi>x</mi><mi>y</mi></mrow></msub><mo>+</mo><mrow><mo stretchy="true" form="prefix">(</mo><msub><mi>𝐱</mi><mn>0</mn></msub><mo>−</mo><msub><mi>C</mi><mrow><mi>x</mi><mi>y</mi></mrow></msub><mo stretchy="true" form="postfix">)</mo></mrow><mspace width="0.167em"></mspace><mfrac><mrow><msub><mi>C</mi><mi>z</mi></msub><mo>−</mo><mi>h</mi></mrow><msub><mi>C</mi><mi>z</mi></msub></mfrac></mrow><annotation encoding="application/x-tex"> \mathbf{x}_h = C_{xy} + (\mathbf{x}_0 - C_{xy})\,\frac{C_z - h}{C_z} </annotation></semantics></math></p>
+<p><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>h</mi><annotation encoding="application/x-tex">h</annotation></semantics></math>
+= 25 mm,
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>C</mi><mi>z</mi></msub><annotation encoding="application/x-tex">C_z</annotation></semantics></math>
+= 0.75 m에서 중심으로부터 0.2 m 떨어진 블록의 보정량은 약 7 mm다.</p>
+<h2 id="블록-검출">3.4 블록 검출</h2>
+<ol type="1">
+<li>마커 중심 다각형(ROI, <code>roi_margin</code>으로 확장 가능)을
+이미지로 역투영해 마스크를 만든다.</li>
+<li>HSV 범위별 <code>inRange</code>, open/close 모폴로지(5×5), 외곽
+윤곽선, 면적 필터(150–20000 px).</li>
+<li>윤곽선의 모든 점을 언디스토트 → 호모그래피 → 높이 보정한 뒤,
+<strong>테이블 좌표계에서</strong> <code>minAreaRect</code>로 중심과
+yaw를 구한다. yaw는 정사각형 대칭이므로
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mrow><mspace width="0.222em"></mspace><mo>mod</mo><mspace width="0.222em"></mspace><mspace width="0.222em"></mspace></mrow><mi>π</mi><mi>/</mi><mn>2</mn></mrow><annotation encoding="application/x-tex">\bmod\ \pi/2</annotation></semantics></math>.</li>
+<li>ID 부여: 색별로 베이스에서 가까운 순 <code>color_k</code>.</li>
+</ol>
+<table>
+<thead>
+<tr class="header">
+<th>색</th>
+<th>HSV 범위 (H: 0–179)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>red</td>
+<td>[0,120,70]–[8,255,255] ∪ [170,120,70]–[179,255,255]</td>
+</tr>
+<tr class="even">
+<td>green</td>
+<td>[40,100,60]–[85,255,255]</td>
+</tr>
+<tr class="odd">
+<td>blue</td>
+<td>[100,120,60]–[130,255,255]</td>
+</tr>
+<tr class="even">
+<td>yellow</td>
+<td>[20,100,100]–[35,255,255]</td>
+</tr>
+</tbody>
+</table>
+<h2 id="구현-메모">3.5 구현 메모</h2>
+<ul>
+<li><code>cv_bridge</code>를 쓰지 않고 <code>sensor_msgs/Image</code>를
+numpy로 직접 변환한다(<code>rgb8</code>, <code>bgr8</code>,
+<code>mono8</code>, <code>yuyv</code>). 시스템에 pip OpenCV 5.0 / numpy
+2.5가 설치되어 있어 numpy 1.x로 빌드된 바인딩과 ABI가 충돌하기
+때문이다.</li>
+<li>시뮬 결과(GT 대비): blue 2.1 mm, red 1.6 mm, green 0.9 mm, yellow
+0.5 mm, yaw 오차 0°(초록 0.4 rad 회전 포함).</li>
+</ul>
+<h1 id="동작-vla_executor">4. 동작 (<code>vla_executor</code>)</h1>
+<h2 id="omx-f-기구학-urdf-기준">4.1 OMX-F 기구학 (URDF 기준)</h2>
+<table>
+<thead>
+<tr class="header">
+<th>관절</th>
+<th>축</th>
+<th>부모 기준 원점</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>joint1</td>
+<td>z (yaw)</td>
+<td>(−0.01125, 0, 0.034)</td>
+</tr>
+<tr class="even">
+<td>joint2</td>
+<td>y (pitch)</td>
+<td>(0, 0, 0.0635)</td>
+</tr>
+<tr class="odd">
+<td>joint3</td>
+<td>y</td>
+<td>(0.0415, 0, 0.11315)</td>
+</tr>
+<tr class="even">
+<td>joint4</td>
+<td>y</td>
+<td>(0.162, 0, 0)</td>
+</tr>
+<tr class="odd">
+<td>joint5</td>
+<td>x (roll)</td>
+<td>(0.0287, 0, 0)</td>
+</tr>
+<tr class="even">
+<td>end_effector_link</td>
+<td>fixed</td>
+<td>(0.09193, −0.0016, 0)</td>
+</tr>
+<tr class="odd">
+<td>gripper_joint_1/2</td>
+<td>z, mimic −1</td>
+<td>(0.0295, ±…, 0)</td>
+</tr>
+</tbody>
+</table>
+<p>MoveIt config는 <code>position_only_ik: True</code> (KDL)라서
+그리퍼가 아래를 향한다는 보장이 없다. 그래서 <strong>top-down 전용
+닫힌형 IK</strong>를 직접 구현했다.</p>
+<h2 id="top-down-ik-omx_ik.top_down_ik">4.2 Top-down IK
+(<code>omx_ik.top_down_ik</code>)</h2>
+<p>목표
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="true" form="prefix">(</mo><mi>x</mi><mo>,</mo><mi>y</mi><mo>,</mo><mi>z</mi><mo stretchy="true" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">(x, y, z)</annotation></semantics></math>,
+공구축이 −z를 향하도록:</p>
+<ol type="1">
+<li><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>q</mi><mn>1</mn></msub><mo>=</mo><mo>atan2</mo><mrow><mo stretchy="true" form="prefix">(</mo><mi>y</mi><mo>,</mo><mspace width="0.222em"></mspace><mi>x</mi><mo>−</mo><msub><mi>x</mi><mrow><mi>j</mi><mn>1</mn></mrow></msub><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">q_1 = \operatorname{atan2}(y,\ x - x_{j1})</annotation></semantics></math>,
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>r</mi><mo>=</mo><mo stretchy="false" form="prefix">∥</mo><mrow><mo stretchy="true" form="prefix">(</mo><mi>x</mi><mo>−</mo><msub><mi>x</mi><mrow><mi>j</mi><mn>1</mn></mrow></msub><mo>,</mo><mi>y</mi><mo stretchy="true" form="postfix">)</mo></mrow><mo stretchy="false" form="postfix">∥</mo></mrow><annotation encoding="application/x-tex">r = \lVert(x - x_{j1}, y)\rVert</annotation></semantics></math></li>
+<li>손목점(joint4) = 공구 끝 바로 위:
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>u</mi><mo>=</mo><mi>r</mi></mrow><annotation encoding="application/x-tex">u = r</annotation></semantics></math>,
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>v</mi><mo>=</mo><mi>z</mi><mo>+</mo><msub><mi>L</mi><mrow><mi>t</mi><mi>o</mi><mi>o</mi><mi>l</mi></mrow></msub><mo>−</mo><msub><mi>z</mi><mrow><mi>s</mi><mi>h</mi></mrow></msub></mrow><annotation encoding="application/x-tex">v = z + L_{tool} - z_{sh}</annotation></semantics></math>
+(<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>L</mi><mrow><mi>t</mi><mi>o</mi><mi>o</mi><mi>l</mi></mrow></msub><annotation encoding="application/x-tex">L_{tool}</annotation></semantics></math>
+= 0.12063,
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>z</mi><mrow><mi>s</mi><mi>h</mi></mrow></msub><annotation encoding="application/x-tex">z_{sh}</annotation></semantics></math>
+= 0.0975)</li>
+<li>2-링크(<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>L</mi><mn>1</mn></msub><annotation encoding="application/x-tex">L_1</annotation></semantics></math>
+= 0.1205,
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>β</mi><annotation encoding="application/x-tex">\beta</annotation></semantics></math>
+= atan2(0.11315, 0.0415),
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>L</mi><mn>2</mn></msub><annotation encoding="application/x-tex">L_2</annotation></semantics></math>
+= 0.162) 엘보업 해:
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>cos</mo><mi>γ</mi><mo>=</mo><mrow><mo stretchy="true" form="prefix">(</mo><msup><mi>u</mi><mn>2</mn></msup><mo>+</mo><msup><mi>v</mi><mn>2</mn></msup><mo>−</mo><msubsup><mi>L</mi><mn>1</mn><mn>2</mn></msubsup><mo>−</mo><msubsup><mi>L</mi><mn>2</mn><mn>2</mn></msubsup><mo stretchy="true" form="postfix">)</mo></mrow><mi>/</mi><mrow><mo stretchy="true" form="prefix">(</mo><mn>2</mn><msub><mi>L</mi><mn>1</mn></msub><msub><mi>L</mi><mn>2</mn></msub><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">\cos\gamma = (u^2+v^2-L_1^2-L_2^2)/(2L_1L_2)</annotation></semantics></math>,
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>γ</mi><mo>=</mo><mo>−</mo><mo>arccos</mo><mrow><mo stretchy="true" form="prefix">(</mo><mo>⋅</mo><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">\gamma = -\arccos(\cdot)</annotation></semantics></math>,
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>θ</mi><mi>a</mi></msub><mo>=</mo><mo>atan2</mo><mrow><mo stretchy="true" form="prefix">(</mo><mi>v</mi><mo>,</mo><mi>u</mi><mo stretchy="true" form="postfix">)</mo></mrow><mo>−</mo><mo>atan2</mo><mrow><mo stretchy="true" form="prefix">(</mo><msub><mi>L</mi><mn>2</mn></msub><mo>sin</mo><mi>γ</mi><mo>,</mo><mspace width="0.222em"></mspace><msub><mi>L</mi><mn>1</mn></msub><mo>+</mo><msub><mi>L</mi><mn>2</mn></msub><mo>cos</mo><mi>γ</mi><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">\theta_a = \operatorname{atan2}(v,u) - \operatorname{atan2}(L_2\sin\gamma,\ L_1 + L_2\cos\gamma)</annotation></semantics></math></li>
+<li><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>q</mi><mn>2</mn></msub><mo>=</mo><mi>β</mi><mo>−</mo><msub><mi>θ</mi><mi>a</mi></msub></mrow><annotation encoding="application/x-tex">q_2 = \beta - \theta_a</annotation></semantics></math>,
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>q</mi><mn>3</mn></msub><mo>=</mo><mo>−</mo><mrow><mo stretchy="true" form="prefix">(</mo><msub><mi>θ</mi><mi>a</mi></msub><mo>+</mo><mi>γ</mi><mo stretchy="true" form="postfix">)</mo></mrow><mo>−</mo><msub><mi>q</mi><mn>2</mn></msub></mrow><annotation encoding="application/x-tex">q_3 = -(\theta_a+\gamma) - q_2</annotation></semantics></math>,
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>q</mi><mn>4</mn></msub><mo>=</mo><mi>π</mi><mi>/</mi><mn>2</mn><mo>−</mo><msub><mi>q</mi><mn>2</mn></msub><mo>−</mo><msub><mi>q</mi><mn>3</mn></msub></mrow><annotation encoding="application/x-tex">q_4 = \pi/2 - q_2 - q_3</annotation></semantics></math></li>
+<li>손목 roll:
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>q</mi><mn>5</mn></msub><mo>=</mo><mo>wrap</mo><mrow><mo stretchy="true" form="prefix">(</mo><msub><mi>q</mi><mn>1</mn></msub><mo>+</mo><mi>π</mi><mi>/</mi><mn>2</mn><mo>−</mo><mi>ψ</mi><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">q_5 = \operatorname{wrap}(q_1 + \pi/2 - \psi)</annotation></semantics></math>,
+정사각형 대칭으로
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false" form="prefix">[</mo><mo>−</mo><mi>π</mi><mi>/</mi><mn>4</mn><mo>,</mo><mi>π</mi><mi>/</mi><mn>4</mn><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">[-\pi/4, \pi/4)</annotation></semantics></math>로
+접는다
+(<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>ψ</mi><annotation encoding="application/x-tex">\psi</annotation></semantics></math>
+= 블록 yaw).</li>
+</ol>
+<p>검증: TF와 FK가 0.1 mm 이내로 일치. 테이블 높이 기준 최대 도달 반경은
+약 0.25 m.</p>
+<h2 id="pick-place-시퀀스">4.3 Pick &amp; place 시퀀스</h2>
+<ol type="1">
+<li>입력 검증: 모든 IK 해를 움직이기 전에 계산. 반경
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="true" form="prefix">[</mo><mn>0.09</mn><mo>,</mo><mn>0.25</mn><mo stretchy="true" form="postfix">]</mo></mrow><annotation encoding="application/x-tex">[0.09, 0.25]</annotation></semantics></math>
+m 밖이거나 해가 없으면 즉시 abort.</li>
+<li>gripper open → pre-grasp (z + 0.06) → grasp (<code>grasp_z</code> +
+pick_z_offset) → gripper close → lift → <strong>verify grasp (손목
+카메라, §4.5)</strong> → pre-place → place (<code>place_z</code> +
+place_z_offset, 쌓기면 + <code>stack_clearance</code>) → release
+(<code>gripper_release</code>까지만 열기) → retreat → observe</li>
+<li>각 팔 동작은 <code>/move_action</code>(MoveGroup)에 <strong>joint
+constraint 목표</strong>로 보내고, 파이프라인은
+<code>pilz_industrial_motion_planner</code> / <code>PTP</code>(결정적
+관절공간 보간)를 쓴다. 충돌 검사와 궤적 실행은 MoveIt이 담당한다.</li>
+<li>동작마다 <strong>settle 대기</strong>: <code>/joint_states</code>
+속도가 0.02 rad/s 미만으로 0.2 s 유지될 때까지(최대 3 s).</li>
+<li>observe 자세 (0, −1.57, 1.57, 1.57, 0): 팔을 접어 카메라 시야를
+비운다. 노드 시작 시에도 1회
+실행한다(<code>observe_on_start</code>).</li>
+</ol>
+<h2 id="주요-파라미터-configexecutor.yaml">4.4 주요 파라미터
+(<code>config/executor.yaml</code>)</h2>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>파라미터</th>
+<th>값</th>
+<th>비고</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>grasp_z</code></td>
+<td>0.014</td>
+<td>집을 때 end_effector_link 높이</td>
+</tr>
+<tr class="even">
+<td><code>place_z</code></td>
+<td>0.014</td>
+<td>놓을 때 높이 (+ 쌓기 오프셋 0.025 × 층)</td>
+</tr>
+<tr class="odd">
+<td><code>approach_height</code></td>
+<td>0.06</td>
+<td>접근·후퇴 높이</td>
+</tr>
+<tr class="even">
+<td><code>gripper_open</code> / <code>gripper_closed</code></td>
+<td>1.0 / 0.05 rad</td>
+<td>25 mm 블록 접촉각 ≈ 0.18</td>
+</tr>
+<tr class="odd">
+<td><code>gripper_release</code></td>
+<td>0.35 rad</td>
+<td>놓을 때는 이 각도까지만 열기</td>
+</tr>
+<tr class="even">
+<td><code>stack_clearance</code></td>
+<td>0.004 m</td>
+<td>쌓을 때 추가 놓기 높이</td>
+</tr>
+<tr class="odd">
+<td><code>wrist_roi</code> / <code>wrist_min_fill</code></td>
+<td>[0.40, 0.40, 0.65, 0.58] / 0.6</td>
+<td>손목 카메라 집기 확인</td>
+</tr>
+<tr class="even">
+<td><code>velocity_scaling</code> /
+<code>acceleration_scaling</code></td>
+<td>0.3 / 0.3</td>
+<td></td>
+</tr>
+<tr class="odd">
+<td><code>min_reach</code> / <code>max_reach</code></td>
+<td>0.09 / 0.25 m</td>
+<td></td>
+</tr>
+<tr class="even">
+<td><code>settle_velocity</code> / <code>settle_timeout</code></td>
+<td>0.02 rad/s / 3 s</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="손목-카메라-집기-확인">4.5 손목 카메라 집기 확인</h2>
+<p><strong>목적</strong>: lift 직후 블록이 실제로 집게 안에 있는지
+확인한다. 시뮬에서는 그리퍼 관절각이나 stall 플래그로는 블록 유무를
+구분할 수 없었다(§8 #10).</p>
+<p><strong>카메라 (시뮬)</strong>: <code>sim.launch.py</code>가 URDF
+문자열에 <code>wrist_camera_link</code>를 추가한다. 부모는
+<code>link5</code>, 위치 (0.02, 0, −0.035), 피치 −0.46 rad로 손가락 판
+옆 뒤쪽에서 손끝을 내려다본다. 320×240, HFOV 1.2, 10 Hz. 토픽은
+<code>/wrist_camera/image_raw</code>,
+<code>/wrist_camera/camera_info</code>. URDF의
+<code>end_effector_link</code> 빨간 표시 박스(1 cm)가 손가락 사이에 보여
+빨간 블록 오탐을 일으키므로, 시뮬 URDF에서 해당 visual을 제거한다.</p>
+<p><strong>판정 (<code>grasp_check.grasp_fill</code>)</strong>:</p>
+<ol type="1">
+<li>lift 후 settle이 끝난 뒤 들어온 새 프레임을 기다린다
+(<code>wrist_timeout</code> 2 s).</li>
+<li>ROI = 이미지 비율 [0.40, 0.40, 0.65, 0.58]. 손끝 바로 아래, 들린
+블록이 차지하는 영역이다.</li>
+<li>ROI 안에서 <code>pick_color</code>의 HSV 마스크 비율(fill)을 구한다.
+색이 비어 있으면 모든 색 중 최대값. HSV 표는 perception과
+공유한다(<code>vla_perception.table_geometry.DEFAULT_HSV</code>).</li>
+<li>fill ≥ <code>wrist_min_fill</code>(0.6)이면 통과, 아니면
+<code>GraspError</code>: 집게를 열고 observe 자세로 간 뒤 abort하고,
+메시지에 측정 비율을 담는다.</li>
+<li><code>/vla/wrist_debug</code>에 ROI와 판정을 그린 이미지를
+발행한다.</li>
+</ol>
+<p>판정 근거: 들린 블록은 카메라에서 3–4 cm 거리라 ROI를 거의 채운다.
+놓친 블록은 테이블에 남아 6 cm 이상 아래에 작게 보이고, 닫힌 손가락에
+가려 ROI 밖에 있다.</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>시나리오</th>
+<th>fill</th>
+<th>판정</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>정상 집기 (빨강·초록 회전·노랑, 반복 8회)</td>
+<td>85–99%</td>
+<td>통과</td>
+</tr>
+<tr class="even">
+<td>3.5 cm 어긋난 위치에서 집기 (블록이 끌려 들어옴)</td>
+<td>85%</td>
+<td>통과 (실제로 잡힘)</td>
+</tr>
+<tr class="odd">
+<td>빈 자리 집기</td>
+<td>0%</td>
+<td>실패</td>
+</tr>
+<tr class="even">
+<td>블록 위 1.5 cm / 3 cm에서 헛잡음</td>
+<td>0% / 0%</td>
+<td>실패</td>
+</tr>
+<tr class="odd">
+<td>다른 색 블록을 집음 (노랑을 집고 초록으로 지정)</td>
+<td>0%</td>
+<td>실패</td>
+</tr>
+</tbody>
+</table>
+<p><strong>실물 적용</strong>: 손목 카메라가 장착되면
+<code>wrist_image_topic</code>, <code>wrist_roi</code>,
+<code>wrist_min_fill</code>을 실측 영상으로 다시 맞춘다. 카메라가 없으면
+<code>wrist_check: false</code>. 이미지가 안 들어올 때의 동작은
+<code>wrist_required</code>로 정한다(true면 실패, false면 경고 후
+진행).</p>
+<h1 id="언어-계획-vla_planner">5. 언어 계획
+(<code>vla_planner</code>)</h1>
+<h2 id="스키마-제약-디코딩">5.1 스키마 제약 디코딩</h2>
+<p>요청마다 <strong>현재 검출된 블록 ID로 JSON 스키마를 동적으로
+생성</strong>해 Ollama <code>format</code>으로 전달한다. Ollama는 이
+스키마를 문법(grammar)으로 바꿔 디코딩을 제한한다.</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span> <span class="dt">&quot;feasible&quot;</span><span class="fu">:</span> <span class="er">bool</span><span class="fu">,</span> <span class="dt">&quot;reason&quot;</span><span class="fu">:</span> <span class="er">str</span><span class="fu">,</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;steps&quot;</span><span class="fu">:</span> <span class="ot">[</span> <span class="fu">{</span> <span class="dt">&quot;pick&quot;</span><span class="fu">:</span>  <span class="er">enum</span><span class="ot">[</span><span class="er">&lt;detected</span> <span class="er">ids&gt;</span><span class="ot">]</span><span class="fu">,</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>               <span class="dt">&quot;place&quot;</span><span class="fu">:</span> <span class="er">enum</span><span class="ot">[</span> <span class="er">center</span> <span class="er">|</span> <span class="er">left</span> <span class="er">|</span> <span class="er">right</span> <span class="er">|</span> <span class="er">front</span> <span class="er">|</span> <span class="er">back</span> <span class="er">|</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>                              <span class="er">front_left</span> <span class="er">|</span> <span class="er">front_right</span> <span class="er">|</span> <span class="er">back_left</span> <span class="er">|</span> <span class="er">back_right</span> <span class="er">|</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>                              <span class="er">on_top:&lt;id&gt;</span> <span class="er">|</span> <span class="er">left_of:&lt;id&gt;</span> <span class="er">|</span> <span class="er">right_of:&lt;id&gt;</span> <span class="er">|</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>                              <span class="er">front_of:&lt;id&gt;</span> <span class="er">|</span> <span class="er">back_of:&lt;id&gt;</span> <span class="ot">]</span> <span class="fu">}</span> <span class="ot">]</span>  <span class="er">(max</span> <span class="dv">4</span><span class="er">)</span> <span class="fu">}</span></span></code></pre></div>
+<p><code>place</code> 문자열은 <code>parse_place()</code>가
+<code>place_mode</code> / <code>region</code> / <code>target</code> /
+<code>direction</code>으로 분해한다. 시스템 프롬프트에는 방향 규약(로봇
+시점), 한국어 어휘 매핑(앞/뒤/왼쪽/오른쪽/위에/옆, 색 이름), few-shot
+예시 4개, 불가능한 요청을 거부하는 규칙이 들어 있다.
+<code>temperature</code> = 0.</p>
+<h2 id="계획-해석검증-resolve_plan">5.2 계획 해석·검증
+(<code>resolve_plan</code>)</h2>
+<ul>
+<li>영역 좌표: center (0.18, 0), left/right (0.17, ±0.12), front (0.23,
+0), back (0.12, 0), 대각 (0.21, ±0.10) / (0.12, ±0.10)</li>
+<li>relative: 대상 블록 + 방향 × 0.05 m</li>
+<li>on_top: 대상 xy·yaw, 층 = 대상 층 + 1, <code>place_z_offset</code> =
+층 × 0.025</li>
+<li>단계 간 <strong>가상 월드 상태</strong>를 갱신해 다단계 명령(쌓은
+블록 위에 또 쌓기 등)을 처리한다.</li>
+<li>거부 조건: 미검출 ID, 반경 밖, 다른 블록과 3.5 cm 이내, 위에 블록이
+있는 블록 집기, 자기 자신 위에 쌓기, <code>feasible = false</code></li>
+<li>층 기억: 카메라로는 높이를 알 수 없으므로, 플래너가 직접 쌓은 블록의
+(색, xy, 층)을 기억해 다음 명령의 pick 높이에 반영한다.</li>
+</ul>
+<h2 id="실행-후-검증">5.3 실행 후 검증</h2>
+<p>각 단계 후 새 <code>/vla/blocks</code> 프레임에서:</p>
+<ul>
+<li>옮긴 색의 블록이 목표 3 cm 이내에 있는지 확인
+(<code>verify_tolerance</code>)</li>
+<li>쌓기일 경우, 아래 블록이 1.5 cm 넘게 떨어진 곳에서 보이면 무너진
+것으로 판단</li>
+</ul>
+<h2 id="llm-평가-명령-10개-gemma4e2b">5.4 LLM 평가 (명령 10개,
+gemma4:e2b)</h2>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>버전</th>
+<th>정답</th>
+<th>평균 지연</th>
+<th>실패 사례</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>v1 (자유 문자열 + enum region)</td>
+<td>8/10</td>
+<td>5.3 s</td>
+<td>region 누락 + 단계 4회 중복, “오른쪽으로 치워”를 relative로
+해석</td>
+</tr>
+<tr class="even">
+<td>v2 (동적 enum 스키마 + few-shot)</td>
+<td><strong>10/10</strong></td>
+<td><strong>3.1 s</strong></td>
+<td>–</td>
+</tr>
+</tbody>
+</table>
+<p>이 외에 end-to-end 중 v1이 <code>"pick": "id"</code>(플레이스홀더
+문자열)를 출력한 사례도 있었으며, v2에서 구조적으로 불가능해졌다.</p>
+<h1 id="시뮬레이션-vla_sim">6. 시뮬레이션 (<code>vla_sim</code>)</h1>
+<ul>
+<li>Gazebo Harmonic (gz-sim 8.15), 물리 2 ms, Sensors 시스템(ogre2)</li>
+<li><code>gen_markers.py</code>: ArUco PNG(흰 여백 포함)와 plane visual
+모델 생성. <strong>텍스처 파일명은 마커마다 달라야 한다</strong>(같은
+<code>marker.png</code> 이름을 쓰면 gz 텍스처 캐시가 재사용해 모든
+마커가 ID 0으로 보인다).</li>
+<li><code>sim.launch.py</code>: ROBOTIS
+<code>omx_f_gazebo.launch.py</code>를 바탕으로 월드, 리소스 경로, 카메라
+브리지를 교체. URDF의 컨트롤러 파라미터 경로를
+<code>vla_sim/config/omx_f_sim_controllers.yaml</code>로 치환한다.</li>
+<li><strong><code>gz_ros_control.position_proportional_gain: 1.0</code></strong>
+(기본 0.1): gz_ros2_control은 position 명령을 이 P 게인의 velocity
+명령으로 바꾼다. 기본값에서는 중력 때문에 최대 0.038 rad의 정상상태
+오차가 생겨, 그리퍼가 블록 위에 걸리고 MoveIt 시작상태 검증에
+실패했다.</li>
+</ul>
+<h1 id="테스트-결과-상세">7. 테스트 결과 상세</h1>
+<h2 id="인식-정확도">7.1 인식 정확도</h2>
+<p>§3.5 참고. 최대 2.1 mm.</p>
+<h2 id="관절-추종">7.2 관절 추종</h2>
+<table>
+<thead>
+<tr class="header">
+<th>게인</th>
+<th>명령 z 0.060 / 0.030 / 0.015 → 실측 z</th>
+<th>최대 관절 오차</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>0.1</td>
+<td>0.0624 / 0.0322 / 0.0163 (그리퍼 닫힘)</td>
+<td>0.038 rad</td>
+</tr>
+<tr class="even">
+<td>1.0</td>
+<td>0.0600 / 0.0300 / 0.0150</td>
+<td>&lt; 0.001 rad</td>
+</tr>
+</tbody>
+</table>
+<h2 id="반복-시험-3회-pick_place-직접-호출">7.3 반복 시험 (3회,
+<code>/pick_place</code> 직접 호출)</h2>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>시험</th>
+<th>결과</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>red (0.18, 0.08) → (0.15, −0.03)</td>
+<td>3/3, 4.7 / 4.3 / 5.4 mm (일관된 −x, −y 편향)</td>
+</tr>
+<tr class="even">
+<td>green (yaw 0.4) → red 위</td>
+<td>3/3 집기 성공, 쌓기 2/3</td>
+</tr>
+</tbody>
+</table>
+<h2 id="손목-확인놓기-개선-후-반복-시험">7.3.1 손목 확인·놓기 개선 후
+반복 시험</h2>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>시험</th>
+<th>결과</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>yellow → 회전된 green (yaw 0.4) 위, 3회</td>
+<td>3/3</td>
+</tr>
+<tr class="even">
+<td>blue → red (0.18, 0.08) 위, 3회</td>
+<td>2/3 (<code>gripper_release</code> 적용 전 1/3)</td>
+</tr>
+<tr class="odd">
+<td>red 이동 + green(회전) → red 위, 3회</td>
+<td>이동 3/3 (4.3–5.7 mm), 쌓기 3/3, 아래 블록 밀림 없음</td>
+</tr>
+<tr class="even">
+<td>손목 확인 fill</td>
+<td>통과 6/6 (85–92%)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="최종-end-to-end-execute_command">7.4 최종 end-to-end
+(<code>/execute_command</code>)</h2>
+<table>
+<thead>
+<tr class="header">
+<th>명령</th>
+<th>결과</th>
+<th>오차</th>
+<th>소요</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>빨간 블록을 가운데로 옮겨</td>
+<td>성공</td>
+<td>5.2 mm</td>
+<td>32 s (LLM cold 15 s)</td>
+</tr>
+<tr class="even">
+<td>파란 블록을 빨간 블록 위에 쌓아줘</td>
+<td>성공, z = 0.037</td>
+<td>6.1 mm</td>
+<td>18 s</td>
+</tr>
+<tr class="odd">
+<td>노란 블록을 왼쪽 앞으로 옮겨</td>
+<td>성공</td>
+<td>3.5 mm</td>
+<td>19 s</td>
+</tr>
+<tr class="even">
+<td>초록 블록을 노란 블록 뒤에 놔</td>
+<td>성공</td>
+<td>12.6 mm</td>
+<td>21 s</td>
+</tr>
+<tr class="odd">
+<td>보라색 블록을 가운데로 옮겨</td>
+<td>거부 (feasible = false)</td>
+<td>–</td>
+<td>1 s</td>
+</tr>
+</tbody>
+</table>
+<h2 id="단위-테스트">7.5 단위 테스트</h2>
+<p><code>vla_planner/test/test_resolve_plan.py</code>: 15개 통과 (region
+/ relative / 다단계 쌓기 층 추적 / 묻힌 블록 / 기억된 층 / 거부 4종 /
+infeasible / parse_place 4종 / 스키마 enum).</p>
+<h1 id="문제-해결-기록">8. 문제 해결 기록</h1>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>#</th>
+<th>증상</th>
+<th>원인</th>
+<th>조치</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>1</td>
+<td>colcon 빌드 시 <code>No module named catkin_pkg</code></td>
+<td>활성화된 venv의 python이 CMake에 잡힘</td>
+<td>venv 해제, <code>-DPython3_EXECUTABLE=/usr/bin/python3</code></td>
+</tr>
+<tr class="even">
+<td>2</td>
+<td>빌드 exit 137</td>
+<td>24코어 병렬 컴파일로 15 GB RAM 초과</td>
+<td><code>--parallel-workers 2</code>, <code>MAKEFLAGS=-j4</code></td>
+</tr>
+<tr class="odd">
+<td>3</td>
+<td>마커 4개가 모두 ID 0</td>
+<td>gz 텍스처 캐시가 파일명으로 공유</td>
+<td>마커별 파일명</td>
+</tr>
+<tr class="even">
+<td>4</td>
+<td>카메라 영상이 프레임마다 바뀜</td>
+<td>이전 gz 서버가 같은 gz 토픽에 계속 발행</td>
+<td>프로세스 정리 후 재실행</td>
+</tr>
+<tr class="odd">
+<td>5</td>
+<td>집기 높이가 1 cm 높음, 블록 윗부분만 잡힘</td>
+<td>gz position P 게인 0.1에서 중력 처짐</td>
+<td>게인 1.0</td>
+</tr>
+<tr class="even">
+<td>6</td>
+<td>MoveIt CONTROL_FAILED: start point deviates</td>
+<td>컨트롤러 성공 보고 직후 팔이 아직 움직이는 중</td>
+<td>settle 대기</td>
+</tr>
+<tr class="odd">
+<td>7</td>
+<td>그리퍼 0까지 닫으면 블록이 튀어나감</td>
+<td>(게인이 낮던 시점) 얕게 잡힌 상태에서 과도한 조임</td>
+<td>게인 수정 후 closed = 0.05로 재조정</td>
+</tr>
+<tr class="even">
+<td>8</td>
+<td>쌓을 때 아래 블록이 밀려남</td>
+<td>이동 중 블록이 기울어져 2 cm 어긋남 (그립 약함, closed = 0.12)</td>
+<td>closed = 0.05</td>
+</tr>
+<tr class="odd">
+<td>9</td>
+<td>실패를 성공으로 보고</td>
+<td>결과 검증 없음</td>
+<td>카메라 기반 사후 검증</td>
+</tr>
+<tr class="even">
+<td>10</td>
+<td>그리퍼 stall 기반 miss 감지 오탐</td>
+<td>시뮬에서 블록 유무와 무관하게 각도·플래그가 같음</td>
+<td>제거, 카메라 검증으로 대체</td>
+</tr>
+<tr class="odd">
+<td>11</td>
+<td>LLM이 <code>"id"</code>, region 누락</td>
+<td>스키마 제약 약함</td>
+<td>동적 enum 스키마</td>
+</tr>
+<tr class="even">
+<td>12</td>
+<td>회전 블록 위 쌓기에서 아래 블록이 0.46 m까지 튕겨 나감, 그런데 검증
+통과</td>
+<td>블록끼리 맞닿는 높이에서 놓아 겹침 반발. 아래 블록이 카메라 영역
+밖으로 나가 “가려짐”으로 오인</td>
+<td><code>stack_clearance</code> 4 mm (검증 한계는 §9)</td>
+</tr>
+<tr class="odd">
+<td>13</td>
+<td>놓는 순간 블록과 탑이 함께 날아감</td>
+<td>깊게 조인 상태(0.05)에서 1.0까지 한 번에 열며 겹침이 폭발적으로
+해소</td>
+<td><code>gripper_release</code> 0.35까지만 열기</td>
+</tr>
+<tr class="even">
+<td>14</td>
+<td>손목 카메라에 빨간 박스가 항상 보임</td>
+<td>URDF의 EE 표시 visual</td>
+<td>시뮬 URDF에서 제거</td>
+</tr>
+<tr class="odd">
+<td>15</td>
+<td>캘리브레이션 결과 YAML을 ROS가 못 읽을 수 있음</td>
+<td>PyYAML이 같은 리스트를 <code>&amp;id001</code>/<code>*id001</code>
+별칭으로 저장</td>
+<td>별칭 없는 Dumper</td>
+</tr>
+<tr class="even">
+<td>16</td>
+<td>table 캘리브레이션 맞춤 잔차 88 mm</td>
+<td>놓기 오차가 누적됨(명령 위치에서 다음 블록을 집어서 오차가 이어짐),
+회전된 블록을 yaw 0으로 집다 실패</td>
+<td>관측 yaw로 집기, drift 검사·재시도</td>
+</tr>
+<tr class="odd">
+<td>17</td>
+<td>호모그래피 방식 마커 오차 12 mm</td>
+<td>좁은 작업 반경에서 넓은 마커 범위로 외삽</td>
+<td>2D 강체 변환(자유도 3) + 이상치 제거</td>
+</tr>
+</tbody>
+</table>
+<h1 id="한계와-남은-과제">9. 한계와 남은 과제</h1>
+<p><strong>정확도</strong></p>
+<ul>
+<li>놓는 위치에 일관된 편향(≈ −4 mm x, −3 mm y)이 있다. grasp 시 블록이
+손가락 사이에서 미세하게 미끄러지는 것으로 추정되며, 보정 오프셋
+파라미터로 처리할 수 있다.</li>
+<li>relative 배치(12.6 mm)는 회전된 블록을 놓을 때 yaw 정렬과 가장자리
+접촉 영향으로 보인다.</li>
+</ul>
+<p><strong>쌓기 신뢰성 (8/9)</strong></p>
+<ul>
+<li>남은 실패는 놓는 순간 블록끼리의 접촉에서 생긴다. 내려놓기 속도를
+낮추고 release 전에 짧게 정지하는 것을 검토한다.</li>
+<li>탑 카메라로는 “아래 블록이 가려짐”과 “카메라 영역 밖으로 튕겨
+나감”을 구분할 수 없다. retreat 높이에서 손목 카메라로 위 블록의 겉보기
+크기(쌓였으면 2.5 cm 더 가까움)를 재는 쌓기 확인을 추가할 예정이다.</li>
+</ul>
+<p><strong>그리퍼 피드백</strong></p>
+<ul>
+<li>집기 성공 여부는 손목 카메라로 확인한다(§4.5). 실물에서는 Dynamixel
+Present Current를 보조 신호로 추가할 수 있다.</li>
+</ul>
+<p><strong>인식 한계</strong></p>
+<ul>
+<li>높이를 알 수 없다(Depth 없음). 쌓인 블록의 층은 플래너 기억에만
+의존하며, 사람이 손으로 쌓은 블록은 알지 못한다.</li>
+<li>같은 색 블록이 여러 개이면 ID가 거리 순으로 정해져서, 블록을 옮기면
+ID가 바뀔 수 있다. 현재 시나리오는 색당 1개다.</li>
+<li>HSV 고정 범위라 조명 변화에 취약하다. 실물에서 재튜닝이
+필요하다.</li>
+</ul>
+<p><strong>LLM</strong></p>
+<ul>
+<li>영역 좌표가 고정값이다. 테이블 크기가 달라지면
+<code>DEFAULT_REGION_XY</code>를 수정해야 한다(파라미터화 예정).</li>
+<li>이미지 입력(VLM)은 아직 쓰지 않고, 텍스트 장면 기술만 사용한다.</li>
+</ul>
+<h1 id="캘리브레이션-vla_calibration">10. 캘리브레이션
+(<code>vla_calibration</code>)</h1>
+<h2 id="구성과-순서">10.1 구성과 순서</h2>
+<p>결과는 <code>~/dev_ws/robot/calib/</code>에 ROS 2 params YAML로
+저장된다(노드별 섹션, 측정한 값만 포함).
+<code>sim_vla.launch.py calib_dir:=&lt;dir&gt;</code>이 기본 설정 뒤에
+덮어 적용한다. YAML은 ROS 파서가 읽지 못하는 앵커/별칭을 쓰지 않도록
+저장한다.</p>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>순서</th>
+<th>도구</th>
+<th>입력</th>
+<th>출력 → 적용 대상</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>1</td>
+<td><code>intrinsics</code></td>
+<td>체커보드 영상 (<code>/camera/image_raw</code>)</td>
+<td><code>camera_info.yaml</code> → usb_cam
+<code>camera_info_url</code></td>
+</tr>
+<tr class="even">
+<td>2</td>
+<td><code>colors</code></td>
+<td>색별 블록 1개씩 놓인 탑뷰 영상</td>
+<td><code>colors.yaml</code> → perception·executor <code>colors</code>,
+<code>hsv.*</code></td>
+</tr>
+<tr class="odd">
+<td>3</td>
+<td><code>table</code></td>
+<td>로봇 + 블록 1개 + <code>/vla/blocks</code></td>
+<td><code>table.yaml</code> → perception
+<code>marker_positions</code></td>
+</tr>
+<tr class="even">
+<td>4</td>
+<td><code>wrist</code></td>
+<td>로봇 + 블록 1개 + 손목 카메라</td>
+<td><code>wrist.yaml</code> → executor <code>wrist_roi</code>,
+<code>wrist_min_fill</code></td>
+</tr>
+</tbody>
+</table>
+<p>순서가 중요하다. table은 집기 확인과 블록 검출에 색 범위를 쓰고,
+wrist는 색 범위와 정확한 블록 위치를 쓴다. 로봇을 쓰는 도구(table,
+wrist)는 <code>PickPlaceExecutor(serve=False)</code>를 상속해 executor와
+같은 동작 코드(<code>run_pick_place</code>, <code>move_joints</code>,
+<code>gripper</code>)를 쓰고, <code>--executor-config</code>로 실행 중인
+executor와 같은 파라미터를 읽는다.</p>
+<h2 id="카메라-내부-파라미터-intrinsics">10.2 카메라 내부 파라미터
+(<code>intrinsics</code>)</h2>
+<ul>
+<li><code>findChessboardCorners</code> + <code>cornerSubPix</code>. 보드
+자세 특징(정규화 중심, 크기, 기울기)이 기존 샘플과 0.06 이상 다를 때만
+수집해 비슷한 자세가 몰리지 않게 한다.</li>
+<li><code>cv2.calibrateCamera</code>(plumb_bob) 결과를 ROS camera_info
+YAML로 저장하고, 뷰별 재투영 오차와 전체 RMS를 출력한다.</li>
+<li>시뮬 검증: <code>vla_sim/checkerboard_sweep.py</code>가 9×6 보드(30
+mm)를 무작위 자세로 움직인다. 결과는 fx 1325.28 / fy 1325.38 / cx 640.11
+/ cy 480.65 (Gazebo camera_info: 1324.90 / 1324.90 / 640 / 480,
+<strong>fx +0.03 %</strong>), RMS 0.22 px, 왜곡 계수 ≈ 0 (시뮬 카메라는
+무왜곡).</li>
+</ul>
+<h2 id="블록-색-colors">10.3 블록 색 (<code>colors</code>)</h2>
+<ol type="1">
+<li>마커 4개 중심의 볼록 다각형에서 마커 영역을 뺀 마스크 안에서 S ≥ 80,
+V ≥ 50인 연결 영역(≥ 150 px)을 찾는다.</li>
+<li>영역별 원형 중앙 hue(0/179 경계 처리)를 요청 색의 기준 hue(red 0,
+yellow 28, green 60, blue 115 등)에 매칭한다. 오차가 20을 넘으면
+버린다.</li>
+<li>15프레임의 픽셀을 모아 hue는 중심 기준 1–99 백분위 ± 6, S/V 하한은 2
+백분위 − 40/50(최소 60/40)으로 정한다. 경계를 넘으면 두 구간으로
+나눈다.</li>
+<li>색 간 hue 겹침을 경고하고, 수집 픽셀 재현율을 출력한다.</li>
+</ol>
+<p>시뮬 결과: red [0–6] ∪ [174–179], green [54–66], blue [114–126],
+yellow [24–36], 재현율 98–100 %, 겹침 없음.</p>
+<h2 id="마커-로봇-table">10.4 마커 ↔︎ 로봇 (<code>table</code>)</h2>
+<p><strong>문제</strong>: perception은
+<code>marker_positions</code>(로봇 기준 마커 중심)를 그대로 믿는다.
+실물에서 마커 사이 거리는 자로 정확히 잴 수 있지만, 그 사각형이 로봇
+베이스 기준 어디에 있는지는 재기 어렵다.</p>
+<p><strong>방법</strong>:</p>
+<ol type="1">
+<li>블록 1개를 로봇이 직접 12곳(작업 반경 안 격자)에 놓는다. 각 지점은
+직전 지점에서 집는다(직전에 관측한 yaw 사용).</li>
+<li>놓을 때마다 observe 자세에서 <code>/vla/blocks</code>로 블록
+위치(현재 마커 좌표계 기준)를 6프레임 평균한다.</li>
+<li>명령 위치에서 <code>--max-drift</code>(3 cm) 넘게 벗어나면 미끄러진
+것으로 보고 제외하고, 다음 집기는 관측 위치에서 한다. 집기 확인이
+실패하면 다시 관측해 1회 재시도한다.</li>
+<li>관측점 → 명령점의 2D 강체 변환을 Umeyama(SVD)로
+맞춘다(<code>--fit-scale</code>이면 균일 배율 포함). 잔차가 중앙값의
+2.5배와 5 mm를 넘는 점은 최대 25 %까지 반복 제거한다.</li>
+<li>같은 변환을 현재 <code>marker_positions</code>에 적용해 저장한다.
+출력: 변환(회전, 이동), 맞춤 잔차, leave-one-out 오차, 마커별
+이동량.</li>
+</ol>
+<p><strong>자유도 8 호모그래피를 쓰지 않은 이유</strong>: 처음 구현은
+블록 점 → 픽셀 호모그래피를 맞추고 카메라 중심을 역산해 마커로 외삽했다.
+작업 반경(x 0.13–0.235 m)이 마커 범위(x 0.05–0.33, y ±0.2)보다 좁아 외삽
+오차가 컸다(마커 오차 최대 12 mm, 카메라 위치 오차 7 cm). 마커 간 거리를
+알고 회전·이동(자유도 3)만 맞추면 조건이 훨씬 좋다.</p>
+<p><strong>시뮬 검증</strong>: perception을 일부러 틀어진 마커 배치(2°
+회전 + (+12, −8) mm 이동)로 실행한 뒤 캘리브레이션을 돌렸다.</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>항목</th>
+<th>값</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>사용 점</td>
+<td>9 (10번째 지점 집기 실패 → 9점으로 맞춤)</td>
+</tr>
+<tr class="even">
+<td>오차 (캘리브레이션 전 → 후)</td>
+<td>평균 9.9 mm → 맞춤 잔차 3.1 mm (최대 5.6), leave-one-out 3.8 mm
+(최대 7.2)</td>
+</tr>
+<tr class="odd">
+<td>회전</td>
+<td><strong>−2.04°</strong> (넣은 값 −2.0°)</td>
+</tr>
+<tr class="even">
+<td>마커 y 좌표 (실제 대비)</td>
+<td>0.0–0.2 mm</td>
+</tr>
+<tr class="odd">
+<td>마커 x 좌표 (실제 대비)</td>
+<td>+8.6 ~ +8.9 mm (아래 설명)</td>
+</tr>
+</tbody>
+</table>
+<p>이 캘리브레이션은 카메라 좌표계를 <strong>로봇이 실제로 블록을 놓는
+위치</strong>에 맞춘다. 시뮬의 OMX-F는 블록을 명령 위치보다 x 방향으로
+약 6–9 mm 짧게 놓는 경향이 있고(잡은 블록이 손가락 판 길이 방향으로
+치우침), 이 편향이 변환에 흡수된다. 결과를 적용한 end-to-end 시험(3개
+명령, 쌓기 포함)에서 카메라가 본 위치와 목표의 차이는 0–1 mm, Gazebo
+절대 좌표와의 차이는 9–10 mm였다. 쌓기·옆에 놓기처럼 블록 기준인
+작업에는 일관성이 중요하므로 이 방식을 택했다.</p>
+<h2 id="손목-카메라-집기-확인-wrist">10.5 손목 카메라 집기 확인
+(<code>wrist</code>)</h2>
+<ol type="1">
+<li><code>/vla/blocks</code>에서 지정 색 블록을 찾아 세 상태의 손목
+영상을 각각 5장 찍는다.
+<ul>
+<li>held: 집고 들어 올린 상태</li>
+<li>empty: 블록을 내려놓은 뒤 같은 높이에서 빈 채로 닫은 상태</li>
+<li>miss: 블록 2 cm 위에서 닫고 들어 올린 상태(블록은 테이블에
+남음)</li>
+</ul></li>
+<li>ROI: held 색 마스크 5장의 교집합에서 가장 큰 연결 영역의 bbox를 12 %
+줄인다.</li>
+<li>기준값: (held 최소 + empty·miss 최대) / 2. 둘 사이 여유가 25 %
+미만이면 경고하고 종료 코드 2로 끝낸다.</li>
+<li>ROI와 판정을 그린 <code>wrist_calibration.png</code>를
+저장한다.</li>
+</ol>
+<p>시뮬 결과: ROI [0.43, 0.348, 0.636, 0.648], held 94.9–100 %,
+empty·miss 5.7 %, 기준 50.3 %, 여유 89 %.</p>
+<h1 id="실물-이전-계획">11. 실물 이전 계획</h1>
+<ol type="1">
+<li><strong>하드웨어 bringup</strong>:
+<code>ros2 launch open_manipulator_bringup omx_f.launch.py port_name:=/dev/ttyUSB*</code>,
+이어서 <code>omx_f_moveit.launch.py</code></li>
+<li><strong>카메라</strong>: <code>usb_cam</code>로
+<code>/camera/image_raw</code>를 발행한다.
+<code>vla_calibration intrinsics</code>로
+<code>camera_info.yaml</code>을 만들고 <code>camera_info_url</code>로
+지정한다. 왜곡 보정은 perception에 이미 구현되어 있다.</li>
+<li><strong>마커</strong>: 마커 중심 사이 거리를 자로 재서
+<code>marker_positions</code> 초기값(대략적인 로봇 기준 위치 + 정확한
+상대 배치)을 넣고, <code>colors</code> → <code>table</code> →
+<code>wrist</code> 순으로 캘리브레이션한다(§10).</li>
+<li><strong>파라미터 재조정</strong>: <code>block_height</code>,
+<code>grasp_z</code>/<code>place_z</code>,
+<code>gripper_closed</code>(전류 제한 고려),
+<code>use_sim_time: false</code></li>
+<li><strong>안전</strong>: velocity scaling 0.1부터 시작하고, 작업
+반경과 테이블 충돌 객체를 planning scene에 추가한다.</li>
+<li><strong>launch 분리</strong>:
+<code>vla_bringup/real_vla.launch.py</code> (sim과 같은 노드에 real 설정
+파일)</li>
+</ol>
+<h1 id="두-팔-확장-left-right-2026-10-16">12. 두 팔 확장 (left / right,
+2026-10-16)</h1>
+<h2 id="배경과-구성">12.1 배경과 구성</h2>
+<p>실제 셋업은 OMX-F 2대다. - <strong>배치:</strong> 두 팔이 7.5 cm 높이
+보드 위에 같은 방향(+x)으로 놓이고, 두 베이스 판 사이 간격은 18 cm다. -
+<strong>작업면:</strong> 보드보다 7.5 cm 낮은 바닥이다. -
+<strong>인식:</strong> 탑뷰 카메라 1대와 바닥 마커
+4개(<code>DICT_5X5_100</code>)를 쓴다. - <strong>명칭:</strong>
+<code>left</code>/<code>right</code>를 쓴다. ROBOTIS의 리더 모델 이름
+<code>omx_l</code>과 섞이지 않게 하기 위해서다.</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>구성</th>
+<th>파일</th>
+<th>내용</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>결합 URDF</td>
+<td><code>vla_dual_description/urdf/omx_dual.urdf.xacro</code></td>
+<td><code>world</code>(바닥) → 보드(충돌 박스) →
+<code>left_</code>/<code>right_</code> <code>omx_f</code> 매크로(ROBOTIS
+재사용). 베이스 위치 인자 <code>base_separation</code>(기본 0.33) 또는
+팔별 <code>*_x/_y/_yaw</code>. ros2_control 시스템 2개</td>
+</tr>
+<tr class="even">
+<td>시뮬 컨트롤러</td>
+<td><code>vla_dual_description/config/dual_sim_controllers.yaml</code></td>
+<td><code>left/right_arm_controller</code>(JTC),
+<code>left/right_gripper_controller</code>, gz 위치 게인 1.0</td>
+</tr>
+<tr class="odd">
+<td>MoveIt</td>
+<td><code>vla_dual_moveit_config</code></td>
+<td>그룹 <code>left_arm</code>, <code>right_arm</code>,
+<code>both_arms</code>, <code>left/right_gripper</code>. 팔 간 충돌
+검사. Pilz PTP는 IK 솔버가 있는 단일 팔 그룹에서만 쓰고,
+<code>both_arms</code>는 OMPL을 쓴다</td>
+</tr>
+<tr class="even">
+<td>월드</td>
+<td><code>vla_sim/worlds/vla_floor.sdf</code>,
+<code>launch/dual_sim.launch.py</code></td>
+<td>바닥 마커 (0.10/0.40, ±0.40), 카메라 높이 1.0 m, 블록 4개, 보라색
+트레이(0.24×0.06 m, 양끝 25 mm 손잡이), 손목 카메라 2대</td>
+</tr>
+<tr class="odd">
+<td>전체 실행</td>
+<td><code>vla_bringup/launch/dual_sim_vla.launch.py</code></td>
+<td><code>*_dual.yaml</code> 설정으로 perception·executor·planner
+실행</td>
+</tr>
+</tbody>
+</table>
+<h2 id="좌표계-1">12.2 좌표계</h2>
+<p><code>world</code> = 바닥(마커) 좌표계이고, z = 0이 작업면이다.
+perception은 <code>frame_id: world</code>로 블록을 발행한다. executor의
+<code>Arm</code> 객체는 TF(<code>world → &lt;arm&gt;_link0</code>)로
+베이스 pose (x, y, z = 0.075, yaw)를 한 번 읽어 두고, 목표를 팔 기준
+좌표로 바꾼 뒤 기존 <code>top_down_ik</code>를 그대로 쓴다. 바닥(베이스
+기준 z = −0.061)에서도 도달 거리는 0.28 m로 탁상 위와 같다(손목 높이가
+어깨 기준으로 대칭이기 때문).</p>
+<h2 id="executor">12.3 executor</h2>
+<ul>
+<li><strong>팔 설정:</strong> <code>arm_names</code>와
+<code>arms.&lt;name&gt;.{joint_prefix, group, gripper_action, base_frame, wrist_topic}</code>으로
+정한다. 단일 팔 설정(<code>['']</code>)과 호환된다.</li>
+<li><strong>팔 선택 (<code>choose_arm</code>):</strong>
+<code>PickPlace.arm</code>이 비어 있으면, 집기·놓기 IK가 모두 되는 팔 중
+집기 지점에 가까운 팔을 고른다. 팔을 지정했는데 닿지 않거나 어느 팔도 안
+되면, 움직이기 전에 이유와 함께 실패한다.</li>
+<li><strong>동작 순서:</strong> move_group 액션은 한 번에 한 목표만
+받으므로 팔 동작을 하나씩 실행한다(노드 전체 잠금).</li>
+<li><strong>협동 운반 (<code>/carry_together</code>):</strong>
+<ol type="1">
+<li>손잡이 위치를 계산한다: 중심 ± (L/2 − 0.0125)·(cos ψ, sin ψ).</li>
+<li>두 팔에 손잡이를 배정한다(도달 거리 합이 작은 쪽).</li>
+<li>팔마다 차례로 접근 → 잡기 → 손목 카메라 확인을 한다.</li>
+<li>트레이 경로(들기 4 cm → 이동 → 내리기)를 1 cm 간격으로 나누고, 각
+점에서 두 손잡이 위치로 IK를 풀어 10관절 궤적을 만든다. 손목 roll은 90°
+주기를 고려해 연속으로 맞춘다.</li>
+<li>이 궤적을 <code>/execute_trajectory</code>로 한 번에 실행해 두 팔을
+시간 동기로 움직인다.</li>
+<li>동시에 놓고, 팔마다 수직으로 빠진 뒤 관찰 자세로 간다.</li>
+</ol></li>
+</ul>
+<h2 id="planner">12.4 planner</h2>
+<ul>
+<li><strong>스키마:</strong> 두 팔이면 step에 <code>arm</code>
+enum(<code>auto</code>/<code>left</code>/<code>right</code>)을 추가하고,
+프롬프트에 팔 어휘와 트레이 규칙을 넣는다.</li>
+<li><strong><code>resolve_plan(arms=…)</code>:</strong> 팔별 도달 범위를
+검사한다.
+<ul>
+<li><code>auto</code>: 집기·놓기 모두 닿는 팔 중 가까운 팔을 쓴다.</li>
+<li>그런 팔이 없으면 전달 지점을 찾는다. 조건은 두 팔 모두 닿을 것, x ≥
+0.10(보드에서 떨어질 것), 다른 물체와 5 cm 이상 떨어질 것이다. 도달 거리
+여유를 크게 남기는 지점을 먼저 고르고(0.04 → 0.01 m), 그다음 이동 거리가
+짧은 지점을 고른다. 찾으면 두 단계로 나눈다.</li>
+<li>트레이(kind = tray)는 <code>carry</code> 동작이 된다. 시작·도착 모두
+두 손잡이가 서로 다른 팔에 닿는지, 트레이를 선분으로 보고 다른 물체와
+충돌하지 않는지 검사한다. 트레이 위에 쌓기와 트레이 쌓기는
+금지한다.</li>
+</ul></li>
+<li><strong>planner node:</strong> 팔 베이스는 TF로 읽는다. 영역 좌표는
+<code>region_names/x/y</code> 파라미터로 받는다. 트레이 결과는 카메라로
+kind = tray인 물체를 찾아 확인한다.</li>
+</ul>
+<h2 id="시뮬-결과">12.5 시뮬 결과</h2>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>시험</th>
+<th>결과</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>MoveIt</td>
+<td>팔별·양팔 계획 성공. 두 팔이 같은 점을 향하면
+<code>left_link5</code>–<code>right_link7</code> 충돌로 거부</td>
+</tr>
+<tr class="even">
+<td>인식 (<code>world</code>)</td>
+<td>블록 0.5–3.0 mm, 트레이 중심 2.5 mm, yaw 0°, 크기 0.242×0.058 m</td>
+</tr>
+<tr class="odd">
+<td>팔 선택</td>
+<td>왼팔 전용·오른팔 전용 블록 자동 배정, 잘못 지정한 팔 거부, 어느 팔도
+안 되는 이동 거부</td>
+</tr>
+<tr class="even">
+<td>바닥 pick &amp; place</td>
+<td>오른팔 2.6–6.5 mm. 왼팔은 대부분 4–7 mm이고, 6회 중 2회 18–27
+mm(집게 안 미끄러짐)</td>
+</tr>
+<tr class="odd">
+<td>협동 운반</td>
+<td>5회 중 4회 6.7–9.7 mm, 운반 중 기울기 1.9–6.2°. 1회는 트레이가 보드
+쪽으로 끌려 89 mm(재현 안 됨, executor는 성공으로 보고. 자연어
+경로에서는 카메라 검증이 잡음)</td>
+</tr>
+<tr class="even">
+<td>자연어</td>
+<td>왼팔 지정 6 mm. 오른팔이 닿지 않는 명령 거부. 전달: 전달 지점이
+처음엔 보드 가장자리(x 0.065)로 잡혀 계획 실패 →
+<code>handoff_x_min</code> 추가. 다음엔 도달 한계(0.236 m)에 잡혀 5 cm
+오차 → 여유 우선 탐색 추가 → 성공(최종 11 mm). 그릇 운반 8.6 mm</td>
+</tr>
+<tr class="odd">
+<td>팔 베이스 캘리브레이션</td>
+<td>왼팔 (−0.008, 0.162, +0.9°) vs 실제 (0, 0.165, 0°). 로봇의 놓기
+편향이 반영됨. 6점 사용(1점 이탈, 1회 재집기, 8번째 점에서 블록
+분실)</td>
+</tr>
+<tr class="even">
+<td>손목 ROI (오른팔)</td>
+<td>잡음 97.7–100 % / 빈 집게·헛잡음 0 %, 기준 48.8 %</td>
+</tr>
+<tr class="odd">
+<td>단위 테스트</td>
+<td>41개 통과 (planner 24, perception 4, executor 5, calibration 8)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="한계와-다음-단계">12.6 한계와 다음 단계</h2>
+<ul>
+<li><strong>공유 영역:</strong> 두 팔이 함께 닿는 영역은 y ≈ 0, x
+0.10–0.17 m 정도로 좁다. 트레이가 이 영역에 있으면 전달할 수
+없다(planner가 이유를 말하고 거부).</li>
+<li><strong>시뮬 집게:</strong> 집게 안에서 가끔 미끄러지거나 블록이
+튕긴다. 기울기는 협동 운반 5회 중 2회만 목표(5° 미만)를 넘지 않았다.
+운반 1회 실패는 원인을 찾지 못했다. 실물에서 다시 측정해야 한다.</li>
+<li><strong>실물 2팔:</strong>
+<ul>
+<li>ID 11–16이 겹쳐서 U2D2 2개가 필요하다.</li>
+<li>ROBOTIS 매크로의 하드웨어 서비스 이름이 겹친다.</li>
+<li>베이스 간 거리와 보드 가장자리 위치를 실측해 URDF 인자에 넣어야
+한다.</li>
+</ul></li>
+<li><strong>범위 밖:</strong> 두 팔 동시 독립 동작, 운반 중 MoveIt 충돌
+검사(지금은 시작 상태만 검사).</li>
+</ul>
+<h1 id="부록-a.-실행-명령">부록 A. 실행 명령</h1>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 빌드</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="ex">deactivate</span> <span class="dv">2</span><span class="op">&gt;</span>/dev/null<span class="kw">;</span> <span class="bu">cd</span> ~/dev_ws/robot<span class="kw">;</span> <span class="bu">source</span> /opt/ros/jazzy/setup.bash</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="va">MAKEFLAGS</span><span class="op">=</span>-j4 <span class="ex">colcon</span> build <span class="at">--symlink-install</span> <span class="at">--parallel-workers</span> 2 <span class="dt">\</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">--cmake-args</span> <span class="at">-DPython3_EXECUTABLE</span><span class="op">=</span>/usr/bin/python3</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="co"># 실행 (모든 터미널)</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="bu">source</span> ~/dev_ws/robot/install/setup.bash<span class="kw">;</span> <span class="bu">export</span> <span class="va">ROS_DOMAIN_ID</span><span class="op">=</span>56</span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> launch vla_bringup sim_vla.launch.py   <span class="co"># headless:=true rviz:=false model:=... dry_run:=true</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> run vla_planner cli                     <span class="co"># 한국어 명령 입력</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a><span class="co"># 직접 호출</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> action send_goal <span class="at">--feedback</span> /execute_command vla_interfaces/action/ExecuteCommand <span class="st">&quot;{command: &#39;빨간 블록을 가운데로 옮겨&#39;}&quot;</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> action send_goal /pick_place vla_interfaces/action/PickPlace <span class="st">&quot;{pick_x: 0.18, pick_y: 0.08, place_x: 0.18, place_y: 0.0}&quot;</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> topic echo /vla/blocks</span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a><span class="co"># 캘리브레이션 (순서대로)</span></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> run vla_calibration intrinsics <span class="at">--board</span> 9x6 <span class="at">--square</span> 0.03</span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> run vla_calibration colors <span class="at">--colors</span> red green blue yellow</span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> run vla_calibration table <span class="at">--color</span> red</span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> run vla_calibration wrist <span class="at">--color</span> red</span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> launch vla_bringup sim_vla.launch.py calib_dir:=~/dev_ws/robot/calib</span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a><span class="ex">ros2</span> run vla_sim checkerboard_sweep.py <span class="at">--poses</span> 40    <span class="co"># 시뮬에서 체커보드 움직이기</span></span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a><span class="co"># 테스트 (src/에서)</span></span>
+<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a><span class="kw">(</span><span class="bu">cd</span> vla_planner <span class="kw">&amp;&amp;</span> <span class="ex">python3</span> <span class="at">-m</span> pytest <span class="at">-q</span> test<span class="kw">)</span></span>
+<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a><span class="va">PYTHONPATH</span><span class="op">=</span>vla_executor:vla_perception:<span class="va">$PYTHONPATH</span> <span class="ex">python3</span> <span class="at">-m</span> pytest <span class="at">-q</span> vla_executor/test</span>
+<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a><span class="va">PYTHONPATH</span><span class="op">=</span>vla_calibration:vla_executor:vla_perception:<span class="va">$PYTHONPATH</span> <span class="ex">python3</span> <span class="at">-m</span> pytest <span class="at">-q</span> vla_calibration/test</span></code></pre></div>
+<h1 id="부록-b.-환경">부록 B. 환경</h1>
+<p>Ubuntu 24.04 (Linux 7.0) · ROS 2 Jazzy · MoveIt 2.12.4 · Gazebo
+Harmonic 8.15 · OpenCV 5.0 (pip) / numpy 2.5 · Ollama +
+<code>gemma4:e2b</code> (4.6 GB) · RTX 5080 Laptop 16 GB · RAM 15 GB ·
+24 cores</p>
+</body>
+</html>

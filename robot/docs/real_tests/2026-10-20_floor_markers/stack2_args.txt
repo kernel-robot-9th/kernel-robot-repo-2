@@ -1,0 +1,2 @@
+green_0: floor (+25.8, -4.2) cm, long side -32 deg, size 4.7 x 2.8 cm -> arm (+0.212, -0.066), reach 0.222 m
+--x 0.212 --y -0.066 --z -0.036 --yaw -27 --place-x 0.200 --place-y 0.097 --place-z -0.028

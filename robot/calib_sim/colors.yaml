@@ -1,0 +1,16 @@
+vla_perception:
+  ros__parameters:
+    colors: [red, green, blue, yellow]
+    hsv:
+      red: [0, 215, 97, 6, 255, 255, 174, 215, 97, 179, 255, 255]
+      green: [54, 76, 59, 66, 255, 255]
+      blue: [114, 215, 71, 126, 255, 255]
+      yellow: [24, 215, 71, 36, 255, 255]
+vla_executor:
+  ros__parameters:
+    colors: [red, green, blue, yellow]
+    hsv:
+      red: [0, 215, 97, 6, 255, 255, 174, 215, 97, 179, 255, 255]
+      green: [54, 76, 59, 66, 255, 255]
+      blue: [114, 215, 71, 126, 255, 255]
+      yellow: [24, 215, 71, 36, 255, 255]

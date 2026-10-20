@@ -1,0 +1,342 @@
+[
+  {
+    "trial": 1,
+    "action": "auto",
+    "command": "빨간 블록을 왼쪽 뒤 구석으로 옮겨",
+    "success": true,
+    "message": "done",
+    "plan": "{\"feasible\": true, \"reason\": \"Moving the red block to the back-left corner.\", \"steps\": [{\"pick\": \"red_0\", \"place\": \"back_left\", \"arm\": \"auto\", \"place_mode\": \"region\", \"region\": \"back_left\"}]}",
+    "arms": [
+      "left"
+    ],
+    "handoff": false,
+    "llm_s": 19.1,
+    "duration_s": 37.6,
+    "final": [
+      0.0939,
+      0.2569,
+      0.0125
+    ],
+    "target": [
+      0.1,
+      0.26,
+      0.0125
+    ],
+    "xy_err_mm": 6.8,
+    "z_err_mm": 0.0,
+    "tilt_max_deg": null,
+    "verified": [
+      "step 1 verified: red block 10 mm from target"
+    ],
+    "images": [
+      "trial01_before.png",
+      "trial01_after.png"
+    ]
+  },
+  {
+    "trial": 2,
+    "action": "auto",
+    "command": "초록 블록을 오른쪽 앞으로 옮겨",
+    "success": true,
+    "message": "done",
+    "plan": "{\"feasible\": true, \"reason\": \"Moving the green block to the front right location.\", \"steps\": [{\"pick\": \"green_0\", \"place\": \"front_right\", \"arm\": \"auto\", \"place_mode\": \"region\", \"region\": \"front_right\"}]}",
+    "arms": [
+      "right"
+    ],
+    "handoff": false,
+    "llm_s": 3.8,
+    "duration_s": 20.2,
+    "final": [
+      0.2127,
+      -0.1415,
+      0.0125
+    ],
+    "target": [
+      0.22,
+      -0.14,
+      0.0125
+    ],
+    "xy_err_mm": 7.4,
+    "z_err_mm": 0.0,
+    "tilt_max_deg": null,
+    "verified": [
+      "step 1 verified: green block 7 mm from target"
+    ],
+    "images": [
+      "trial02_before.png",
+      "trial02_after.png"
+    ]
+  },
+  {
+    "trial": 3,
+    "action": "named_arm",
+    "command": "왼팔로 노란 블록을 왼쪽으로 옮겨",
+    "success": true,
+    "message": "done",
+    "plan": "{\"feasible\": true, \"reason\": \"Moving the yellow block to the left area using the left arm.\", \"steps\": [{\"pick\": \"yellow_0\", \"place\": \"left\", \"arm\": \"left\", \"place_mode\": \"region\", \"region\": \"left\"}]}",
+    "arms": [
+      "left"
+    ],
+    "handoff": false,
+    "llm_s": 3.2,
+    "duration_s": 20.9,
+    "final": [
+      0.154,
+      0.2202,
+      0.0125
+    ],
+    "target": [
+      0.16,
+      0.22,
+      0.0125
+    ],
+    "xy_err_mm": 6.0,
+    "z_err_mm": 0.0,
+    "tilt_max_deg": null,
+    "verified": [
+      "step 1 verified: yellow block 5 mm from target"
+    ],
+    "images": [
+      "trial03_before.png",
+      "trial03_after.png"
+    ]
+  },
+  {
+    "trial": 4,
+    "action": "named_arm",
+    "command": "오른팔로 파란 블록을 오른쪽 뒤 구석으로 옮겨",
+    "success": true,
+    "message": "done",
+    "plan": "{\"feasible\": true, \"reason\": \"The command specifies picking the blue block and placing it in the back_right location using the right arm.\", \"steps\": [{\"pick\": \"blue_0\", \"place\": \"back_right\", \"arm\": \"right\", \"place_mode\": \"region\", \"region\": \"back_right\"}]}",
+    "arms": [
+      "right"
+    ],
+    "handoff": false,
+    "llm_s": 8.8,
+    "duration_s": 25.6,
+    "final": [
+      0.0941,
+      -0.2665,
+      0.0125
+    ],
+    "target": [
+      0.1,
+      -0.26,
+      0.0125
+    ],
+    "xy_err_mm": 8.8,
+    "z_err_mm": 0.0,
+    "tilt_max_deg": null,
+    "verified": [
+      "step 1 verified: blue block 8 mm from target"
+    ],
+    "images": [
+      "trial04_before.png",
+      "trial04_after.png"
+    ]
+  },
+  {
+    "trial": 5,
+    "action": "stack",
+    "command": "빨간 블록을 노란 블록 위에 쌓아",
+    "success": true,
+    "message": "done",
+    "plan": "{\"feasible\": true, \"reason\": \"Stacking the red block on top of the yellow block.\", \"steps\": [{\"pick\": \"red_0\", \"place\": \"on_top:yellow_0\", \"arm\": \"auto\", \"place_mode\": \"on_top\", \"target\": \"yellow_0\"}]}",
+    "arms": [
+      "left"
+    ],
+    "handoff": false,
+    "llm_s": 2.3,
+    "duration_s": 20.5,
+    "final": [
+      0.2065,
+      0.0936,
+      0.0375
+    ],
+    "target": [
+      0.2099,
+      0.1,
+      0.0375
+    ],
+    "xy_err_mm": 7.2,
+    "z_err_mm": 0.0,
+    "tilt_max_deg": null,
+    "verified": [
+      "step 1 verified: red block 6 mm from target"
+    ],
+    "images": [
+      "trial05_before.png",
+      "trial05_after.png"
+    ]
+  },
+  {
+    "trial": 6,
+    "action": "stack",
+    "command": "파란 블록을 초록 블록 위에 쌓아",
+    "success": true,
+    "message": "done",
+    "plan": "{\"feasible\": true, \"reason\": \"Stacking the blue block on top of the green block.\", \"steps\": [{\"pick\": \"blue_0\", \"place\": \"on_top:green_0\", \"arm\": \"auto\", \"place_mode\": \"on_top\", \"target\": \"green_0\"}]}",
+    "arms": [
+      "right"
+    ],
+    "handoff": false,
+    "llm_s": 2.7,
+    "duration_s": 20.9,
+    "final": [
+      0.206,
+      -0.1005,
+      0.0375
+    ],
+    "target": [
+      0.2099,
+      -0.1002,
+      0.0375
+    ],
+    "xy_err_mm": 3.9,
+    "z_err_mm": 0.0,
+    "tilt_max_deg": null,
+    "verified": [
+      "step 1 verified: blue block 6 mm from target"
+    ],
+    "images": [
+      "trial06_before.png",
+      "trial06_after.png"
+    ]
+  },
+  {
+    "trial": 7,
+    "action": "handoff",
+    "command": "빨간 블록을 오른쪽으로 옮겨",
+    "success": true,
+    "message": "done",
+    "plan": "{\"feasible\": true, \"reason\": \"Moving the red block to the right side of the table.\", \"steps\": [{\"pick\": \"red_0\", \"place\": \"right\", \"arm\": \"auto\", \"place_mode\": \"region\", \"region\": \"right\"}]}",
+    "arms": [
+      "left",
+      "right"
+    ],
+    "handoff": true,
+    "llm_s": 2.6,
+    "duration_s": 41.0,
+    "final": [
+      0.1623,
+      -0.2385,
+      0.0125
+    ],
+    "target": [
+      0.16,
+      -0.22,
+      0.0125
+    ],
+    "xy_err_mm": 18.6,
+    "z_err_mm": 0.0,
+    "tilt_max_deg": null,
+    "verified": [
+      "step 1 verified: red block 4 mm from target",
+      "step 2 verified: red block 16 mm from target"
+    ],
+    "images": [
+      "trial07_before.png",
+      "trial07_after.png"
+    ]
+  },
+  {
+    "trial": 8,
+    "action": "handoff",
+    "command": "파란 블록을 왼쪽으로 옮겨",
+    "success": true,
+    "message": "done",
+    "plan": "{\"feasible\": true, \"reason\": \"Moving the blue block to the left side.\", \"steps\": [{\"pick\": \"blue_0\", \"place\": \"left\", \"arm\": \"auto\", \"place_mode\": \"region\", \"region\": \"left\"}]}",
+    "arms": [
+      "left",
+      "right"
+    ],
+    "handoff": true,
+    "llm_s": 3.0,
+    "duration_s": 38.9,
+    "final": [
+      0.1579,
+      0.2117,
+      0.0125
+    ],
+    "target": [
+      0.16,
+      0.22,
+      0.0125
+    ],
+    "xy_err_mm": 8.6,
+    "z_err_mm": 0.0,
+    "tilt_max_deg": null,
+    "verified": [
+      "step 1 verified: blue block 4 mm from target",
+      "step 2 verified: blue block 11 mm from target"
+    ],
+    "images": [
+      "trial08_before.png",
+      "trial08_after.png"
+    ]
+  },
+  {
+    "trial": 9,
+    "action": "carry",
+    "command": "그릇을 두 팔로 들어서 뒤로 옮겨",
+    "success": false,
+    "message": "step 1: tray is not seen from the target",
+    "plan": "",
+    "arms": [
+      "both"
+    ],
+    "handoff": false,
+    "llm_s": 3.5,
+    "duration_s": 48.6,
+    "final": [
+      0.0862,
+      -0.0623,
+      0.096
+    ],
+    "target": [
+      0.1,
+      0.0,
+      0.0
+    ],
+    "xy_err_mm": 63.8,
+    "z_err_mm": 96.0,
+    "tilt_max_deg": 21.7,
+    "verified": [],
+    "images": [
+      "trial09_before.png",
+      "trial09_after.png"
+    ]
+  },
+  {
+    "trial": 10,
+    "action": "carry",
+    "command": "쟁반을 양손으로 들어서 가운데로 옮겨",
+    "success": false,
+    "message": "step 1 failed: left grasp check failed: wrist camera sees 19% purple between the fingers (need 60%)",
+    "plan": "",
+    "arms": [
+      "both"
+    ],
+    "handoff": false,
+    "llm_s": 2.3,
+    "duration_s": 24.6,
+    "final": [
+      0.0933,
+      0.0067,
+      -0.0
+    ],
+    "target": [
+      0.13,
+      0.0,
+      0.0
+    ],
+    "xy_err_mm": 37.3,
+    "z_err_mm": -0.0,
+    "tilt_max_deg": 0.2,
+    "verified": [],
+    "images": [
+      "trial10_before.png",
+      "trial10_after.png"
+    ]
+  }
+]

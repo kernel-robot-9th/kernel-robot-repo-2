@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Two OMX-F arms (left_/right_) on a board; see vla_dual_description/urdf/omx_dual.urdf.xacro -->
+<robot name="omx_dual">
+    <group name="left_arm">
+        <joint name="left_joint1"/>
+        <joint name="left_joint2"/>
+        <joint name="left_joint3"/>
+        <joint name="left_joint4"/>
+        <joint name="left_joint5"/>
+        <joint name="left_end_effector_joint"/>
+    </group>
+    <group name="left_gripper">
+        <joint name="left_gripper_joint_1"/>
+        <joint name="left_gripper_joint_2"/>
+    </group>
+    <group name="right_arm">
+        <joint name="right_joint1"/>
+        <joint name="right_joint2"/>
+        <joint name="right_joint3"/>
+        <joint name="right_joint4"/>
+        <joint name="right_joint5"/>
+        <joint name="right_end_effector_joint"/>
+    </group>
+    <group name="right_gripper">
+        <joint name="right_gripper_joint_1"/>
+        <joint name="right_gripper_joint_2"/>
+    </group>
+    <group name="both_arms">
+        <group name="left_arm"/>
+        <group name="right_arm"/>
+    </group>
+    <group_state name="init" group="left_arm">
+        <joint name="left_joint1" value="0"/>
+        <joint name="left_joint2" value="0"/>
+        <joint name="left_joint3" value="0"/>
+        <joint name="left_joint4" value="0"/>
+        <joint name="left_joint5" value="0"/>
+    </group_state>
+    <group_state name="home" group="left_arm">
+        <joint name="left_joint1" value="0"/>
+        <joint name="left_joint2" value="-1.57"/>
+        <joint name="left_joint3" value="1.57"/>
+        <joint name="left_joint4" value="1.57"/>
+        <joint name="left_joint5" value="0"/>
+    </group_state>
+    <group_state name="close" group="left_gripper"><joint name="left_gripper_joint_1" value="0"/></group_state>
+    <group_state name="open" group="left_gripper"><joint name="left_gripper_joint_1" value="1"/></group_state>
+    <group_state name="init" group="right_arm">
+        <joint name="right_joint1" value="0"/>
+        <joint name="right_joint2" value="0"/>
+        <joint name="right_joint3" value="0"/>
+        <joint name="right_joint4" value="0"/>
+        <joint name="right_joint5" value="0"/>
+    </group_state>
+    <group_state name="home" group="right_arm">
+        <joint name="right_joint1" value="0"/>
+        <joint name="right_joint2" value="-1.57"/>
+        <joint name="right_joint3" value="1.57"/>
+        <joint name="right_joint4" value="1.57"/>
+        <joint name="right_joint5" value="0"/>
+    </group_state>
+    <group_state name="close" group="right_gripper"><joint name="right_gripper_joint_1" value="0"/></group_state>
+    <group_state name="open" group="right_gripper"><joint name="right_gripper_joint_1" value="1"/></group_state>
+    <group_state name="home" group="both_arms">
+        <joint name="left_joint1" value="0"/>
+        <joint name="left_joint2" value="-1.57"/>
+        <joint name="left_joint3" value="1.57"/>
+        <joint name="left_joint4" value="1.57"/>
+        <joint name="left_joint5" value="0"/>
+        <joint name="right_joint1" value="0"/>
+        <joint name="right_joint2" value="-1.57"/>
+        <joint name="right_joint3" value="1.57"/>
+        <joint name="right_joint4" value="1.57"/>
+        <joint name="right_joint5" value="0"/>
+    </group_state>
+    <end_effector name="left_end_effector" parent_link="left_end_effector_link" group="left_gripper" parent_group="left_arm"/>
+    <passive_joint name="left_gripper_joint_2"/>
+    <end_effector name="right_end_effector" parent_link="right_end_effector_link" group="right_gripper" parent_group="right_arm"/>
+    <passive_joint name="right_gripper_joint_2"/>
+    <disable_collisions link1="left_link0" link2="left_link1" reason="Adjacent"/>
+    <disable_collisions link1="left_link1" link2="left_link2" reason="Adjacent"/>
+    <disable_collisions link1="left_link2" link2="left_link3" reason="Adjacent"/>
+    <disable_collisions link1="left_link2" link2="left_link4" reason="Never"/>
+    <disable_collisions link1="left_link3" link2="left_link4" reason="Adjacent"/>
+    <disable_collisions link1="left_link4" link2="left_link5" reason="Adjacent"/>
+    <disable_collisions link1="left_link5" link2="left_link6" reason="Adjacent"/>
+    <disable_collisions link1="left_link5" link2="left_link7" reason="Adjacent"/>
+    <disable_collisions link1="left_link6" link2="left_link7" reason="Always"/>
+    <disable_collisions link1="board" link2="left_link0" reason="Adjacent"/>
+    <disable_collisions link1="board" link2="left_link1" reason="Never"/>
+    <disable_collisions link1="right_link0" link2="right_link1" reason="Adjacent"/>
+    <disable_collisions link1="right_link1" link2="right_link2" reason="Adjacent"/>
+    <disable_collisions link1="right_link2" link2="right_link3" reason="Adjacent"/>
+    <disable_collisions link1="right_link2" link2="right_link4" reason="Never"/>
+    <disable_collisions link1="right_link3" link2="right_link4" reason="Adjacent"/>
+    <disable_collisions link1="right_link4" link2="right_link5" reason="Adjacent"/>
+    <disable_collisions link1="right_link5" link2="right_link6" reason="Adjacent"/>
+    <disable_collisions link1="right_link5" link2="right_link7" reason="Adjacent"/>
+    <disable_collisions link1="right_link6" link2="right_link7" reason="Always"/>
+    <disable_collisions link1="board" link2="right_link0" reason="Adjacent"/>
+    <disable_collisions link1="board" link2="right_link1" reason="Never"/>
+    <disable_collisions link1="left_link0" link2="right_link0" reason="Never"/>
+    <disable_collisions link1="left_link0" link2="right_link1" reason="Never"/>
+    <disable_collisions link1="left_link1" link2="right_link0" reason="Never"/>
+    <disable_collisions link1="left_link1" link2="right_link1" reason="Never"/>
+</robot>

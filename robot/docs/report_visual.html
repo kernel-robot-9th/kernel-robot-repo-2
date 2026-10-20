@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>OMX 자연어 Pick &amp; Place — 진행 보고</title>
+<style>
+  @page { size: A4; margin: 14mm 14mm 16mm; }
+  :root {
+    --ink: #1d2433; --sub: #5b6475; --line: #e3e6ec; --bg: #f6f7fa;
+    --blue: #2f6fed; --green: #1f9d63; --red: #d64545; --amber: #e0a106; --violet: #7a5af5;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: "Noto Sans CJK KR", sans-serif; color: var(--ink); margin: 0; font-size: 10.5pt; line-height: 1.55; }
+  h1 { font-size: 26pt; margin: 0 0 6px; letter-spacing: -0.5px; }
+  h2 { font-size: 16pt; margin: 0 0 10px; padding-bottom: 6px; border-bottom: 2px solid var(--ink); }
+  h3 { font-size: 11.5pt; margin: 14px 0 6px; }
+  p { margin: 4px 0 8px; }
+  .page { page-break-after: always; }
+  .page:last-child { page-break-after: auto; }
+  .sub { color: var(--sub); }
+  .small { font-size: 9pt; }
+  .tag { display: inline-block; font-size: 8.5pt; padding: 1px 8px; border-radius: 10px; background: var(--bg); color: var(--sub); border: 1px solid var(--line); }
+  .cover-band { background: linear-gradient(120deg, #1d2433, #2f4a7a); color: #fff; border-radius: 14px; padding: 28px 30px; margin-bottom: 18px; }
+  .cover-band .sub { color: #c9d3e6; }
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 14px 0 18px; }
+  .kpi { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+  .kpi .v { font-size: 20pt; font-weight: 700; line-height: 1.1; }
+  .kpi .l { font-size: 8.5pt; color: var(--sub); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .card { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: #fff; }
+  .card h3 { margin-top: 0; }
+  img { max-width: 100%; border-radius: 8px; border: 1px solid var(--line); display: block; }
+  figcaption { font-size: 8.5pt; color: var(--sub); margin-top: 4px; }
+  figure { margin: 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 9.5pt; }
+  th, td { border-bottom: 1px solid var(--line); padding: 6px 6px; text-align: left; vertical-align: top; }
+  th { background: var(--bg); font-weight: 600; }
+  .ok { color: var(--green); font-weight: 700; }
+  .ng { color: var(--red); font-weight: 700; }
+  .step { display: grid; grid-template-columns: 28px 1fr; gap: 10px; margin: 8px 0; }
+  .num { width: 26px; height: 26px; border-radius: 50%; background: var(--ink); color: #fff; font-weight: 700; display: flex; align-items: center; justify-content: center; font-size: 10pt; }
+  .callout { background: #fff8e6; border: 1px solid #f3d995; border-radius: 10px; padding: 10px 12px; }
+  .callout.blue { background: #eef4ff; border-color: #c9dafc; }
+  .fixrow { display: grid; grid-template-columns: 1.1fr 1.2fr 1.2fr; gap: 0; border-bottom: 1px solid var(--line); }
+  .fixrow > div { padding: 7px 8px; font-size: 9.3pt; }
+  .fixrow.head > div { background: var(--bg); font-weight: 600; }
+  .bar-label { font-size: 9pt; }
+  .footer { position: fixed; bottom: -10mm; left: 0; right: 0; font-size: 8pt; color: var(--sub); text-align: right; }
+</style>
+</head>
+<body>
+
+<!-- ============================ PAGE 1: 요약 ============================ -->
+<section class="page">
+  <div class="cover-band">
+    <div class="sub small">진행 보고 · 2026-10-15 · 시뮬레이션(Gazebo) 단계</div>
+    <h1>말로 시키면 블록을 옮기는 로봇 팔</h1>
+    <div class="sub">ROBOTIS OMX-F · ROS 2 Jazzy · MoveIt 2 · Ollama(gemma4:e2b) · 탑뷰 카메라 + ArUco 마커 4개</div>
+  </div>
+
+  <p><b>"빨간 블록을 파란 블록 위에 쌓아줘"</b> 같은 한국어/영어 명령을 받아, 카메라로 블록을 찾고, 언어 모델이 할 일을 정하고,
+  로봇 팔이 실제로 집어서 옮깁니다. Depth 카메라 없이 <b>테이블 네 꼭짓점의 ArUco 마커</b>만으로 블록의 실제 위치(m)를 계산합니다.</p>
+
+  <div class="kpis">
+    <div class="kpi"><div class="v ok">5 / 5</div><div class="l">최종 자연어 명령 테스트<br>(실행 4 + 올바른 거부 1)</div></div>
+    <div class="kpi"><div class="v">2.1 mm</div><div class="l">카메라로 구한 블록 위치<br>최대 오차 (실제 위치 대비)</div></div>
+    <div class="kpi"><div class="v">10 / 10</div><div class="l">언어 모델 명령 해석 정확도<br>(개선 전 8/10)</div></div>
+    <div class="kpi"><div class="v">≈ 1–2 s</div><div class="l">명령 해석 시간<br>(첫 호출만 ≈15 s, 모델 로딩)</div></div>
+  </div>
+
+  <h3>어떻게 동작하나요?</h3>
+  <svg viewBox="0 0 760 210" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="Noto Sans CJK KR" font-size="13">
+    <defs>
+      <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#5b6475"/></marker>
+    </defs>
+    <!-- boxes -->
+    <g>
+      <rect x="10" y="40" width="160" height="120" rx="12" fill="#eef4ff" stroke="#2f6fed"/>
+      <text x="90" y="68" text-anchor="middle" font-weight="700" fill="#2f6fed">① 보기</text>
+      <text x="90" y="92" text-anchor="middle">탑뷰 카메라</text>
+      <text x="90" y="112" text-anchor="middle" font-size="11" fill="#5b6475">마커 4개 → 좌표 변환</text>
+      <text x="90" y="130" text-anchor="middle" font-size="11" fill="#5b6475">색으로 블록 찾기</text>
+
+      <rect x="200" y="40" width="160" height="120" rx="12" fill="#f4efff" stroke="#7a5af5"/>
+      <text x="280" y="68" text-anchor="middle" font-weight="700" fill="#7a5af5">② 이해</text>
+      <text x="280" y="92" text-anchor="middle">Ollama 언어 모델</text>
+      <text x="280" y="112" text-anchor="middle" font-size="11" fill="#5b6475">"무엇을 어디에?"</text>
+      <text x="280" y="130" text-anchor="middle" font-size="11" fill="#5b6475">검출된 블록 중에서만 선택</text>
+
+      <rect x="390" y="40" width="160" height="120" rx="12" fill="#fff8e6" stroke="#e0a106"/>
+      <text x="470" y="68" text-anchor="middle" font-weight="700" fill="#b07d00">③ 검증</text>
+      <text x="470" y="92" text-anchor="middle">좌표 계산 + 안전 확인</text>
+      <text x="470" y="112" text-anchor="middle" font-size="11" fill="#5b6475">팔이 닿는 범위인가?</text>
+      <text x="470" y="130" text-anchor="middle" font-size="11" fill="#5b6475">다른 블록과 부딪히나?</text>
+
+      <rect x="580" y="40" width="170" height="120" rx="12" fill="#eaf7f0" stroke="#1f9d63"/>
+      <text x="665" y="68" text-anchor="middle" font-weight="700" fill="#1f9d63">④ 동작 + 확인</text>
+      <text x="665" y="92" text-anchor="middle">MoveIt 2 → OMX-F</text>
+      <text x="665" y="112" text-anchor="middle" font-size="11" fill="#5b6475">집기 → 옮기기 → 놓기</text>
+      <text x="665" y="130" text-anchor="middle" font-size="11" fill="#5b6475">카메라로 결과 재확인</text>
+    </g>
+    <g stroke="#5b6475" stroke-width="2" marker-end="url(#ar)">
+      <line x1="172" y1="100" x2="196" y2="100"/>
+      <line x1="362" y1="100" x2="386" y2="100"/>
+      <line x1="552" y1="100" x2="576" y2="100"/>
+    </g>
+    <text x="10" y="25" font-size="12" fill="#5b6475">사용자: "파란 블록을 빨간 블록 위에 쌓아줘"</text>
+    <text x="10" y="192" font-size="11" fill="#5b6475">핵심 설계: 언어 모델은 <tspan font-weight="700">좌표를 만들지 않고</tspan> 블록 이름과 놓을 장소만 고릅니다. 좌표는 코드가 계산하므로 작은 모델이 틀린 숫자를 지어낼 수 없습니다.</text>
+  </svg>
+
+  <div class="grid2" style="margin-top:12px">
+    <div class="card">
+      <h3>지금 할 수 있는 명령</h3>
+      <table>
+        <tr><td>영역으로 옮기기</td><td>"빨간 블록을 <b>가운데</b>로"</td></tr>
+        <tr><td>다른 블록 옆에</td><td>"초록 블록을 노란 블록 <b>뒤에</b>"</td></tr>
+        <tr><td>위에 쌓기</td><td>"파란 블록을 빨간 블록 <b>위에</b>"</td></tr>
+        <tr><td>여러 단계</td><td>"A를 B 위에 올리고, C를 A 위에"</td></tr>
+        <tr><td>불가능한 요청</td><td>"보라색 블록…" → 이유와 함께 거부</td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <h3>현재 단계</h3>
+      <table>
+        <tr><td>설치·빌드</td><td class="ok">완료</td></tr>
+        <tr><td>시뮬레이션 환경</td><td class="ok">완료</td></tr>
+        <tr><td>카메라 인식</td><td class="ok">완료</td></tr>
+        <tr><td>로봇 동작</td><td class="ok">완료</td></tr>
+        <tr><td>손목 카메라 집기 확인</td><td class="ok">완료</td></tr>
+        <tr><td>캘리브레이션 도구</td><td class="ok">완료</td></tr>
+        <tr><td>언어 명령 해석</td><td class="ok">완료</td></tr>
+        <tr><td>실물 로봇 이전</td><td class="sub">다음 단계</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ PAGE 2: 보기 ============================ -->
+<section class="page">
+  <h2>① 보기 — Depth 없이 마커 4개로 위치 재기</h2>
+  <div class="grid2">
+    <figure>
+      <img src="img/debug_before.png">
+      <figcaption>카메라 화면 위에 인식 결과를 표시한 모습. 분홍 테두리 = ArUco 마커(0~3), 검은 점 = 블록 중심, 괄호 = 로봇 기준 실제 좌표(m).</figcaption>
+    </figure>
+    <div>
+      <div class="step"><div class="num">1</div><div><b>마커 4개를 찾는다</b><br><span class="sub">네 꼭짓점 마커의 실제 위치(로봇 기준 m)를 미리 알고 있습니다.</span></div></div>
+      <div class="step"><div class="num">2</div><div><b>화면 ↔ 테이블 변환식을 만든다</b><br><span class="sub">마커 4점으로 "화면의 점 → 테이블 위 실제 위치" 변환(호모그래피)을 계산합니다. 카메라 높이도 함께 역산됩니다(0.75 m, 실제와 일치).</span></div></div>
+      <div class="step"><div class="num">3</div><div><b>색으로 블록을 찾는다</b><br><span class="sub">빨강·초록·파랑·노랑 영역을 찾고, 블록이 회전한 각도도 구합니다.</span></div></div>
+      <div class="step"><div class="num">4</div><div><b>블록 높이만큼 보정한다</b><br><span class="sub">카메라는 블록 윗면을 보므로, 원근 때문에 생기는 위치 밀림(최대 ≈7 mm)을 카메라 위치를 이용해 보정합니다.</span></div></div>
+
+      <div class="callout blue" style="margin-top:10px">
+        <b>정확도</b> — 4개 블록 모두 시뮬레이터의 실제 위치와 비교해 오차 <b>0.5 ~ 2.1 mm</b>, 회전 각도 오차 <b>0°</b>.
+      </div>
+    </div>
+  </div>
+
+  <h3 style="margin-top:16px">블록별 위치 오차 (카메라 추정 vs 실제)</h3>
+  <svg viewBox="0 0 760 150" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="Noto Sans CJK KR" font-size="12">
+    <!-- axis 0..5 mm, x from 120 to 700 => 116 px/mm -->
+    <g stroke="#e3e6ec"><line x1="120" y1="10" x2="120" y2="128"/><line x1="236" y1="10" x2="236" y2="128"/><line x1="352" y1="10" x2="352" y2="128"/><line x1="468" y1="10" x2="468" y2="128"/><line x1="584" y1="10" x2="584" y2="128"/><line x1="700" y1="10" x2="700" y2="128"/></g>
+    <g fill="#5b6475" font-size="10" text-anchor="middle"><text x="120" y="143">0</text><text x="236" y="143">1</text><text x="352" y="143">2</text><text x="468" y="143">3</text><text x="584" y="143">4</text><text x="700" y="143">5 mm</text></g>
+    <text x="110" y="32" text-anchor="end">파랑</text><rect x="120" y="20" width="243.6" height="18" rx="3" fill="#2f6fed"/><text x="370" y="34">2.1</text>
+    <text x="110" y="60" text-anchor="end">빨강</text><rect x="120" y="48" width="185.6" height="18" rx="3" fill="#d64545"/><text x="312" y="62">1.6</text>
+    <text x="110" y="88" text-anchor="end">초록</text><rect x="120" y="76" width="104.4" height="18" rx="3" fill="#1f9d63"/><text x="231" y="90">0.9</text>
+    <text x="110" y="116" text-anchor="end">노랑</text><rect x="120" y="104" width="58" height="18" rx="3" fill="#e0a106"/><text x="185" y="118">0.5</text>
+  </svg>
+</section>
+
+<!-- ============================ PAGE 3: 이해 ============================ -->
+<section class="page">
+  <h2>② 이해 — 언어 모델이 "무엇을 어디에"를 고른다</h2>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>언어 모델에게 주는 것</h3>
+      <p class="small" style="font-family:monospace; background:var(--bg); padding:8px; border-radius:6px; line-height:1.4">
+        블록 목록:<br>
+        red_0 (0.180, 0.079)<br>
+        green_0 (0.200, −0.069)<br>
+        blue_0 (0.140, −0.128)<br>
+        yellow_0 (0.240, 0.020)<br><br>
+        명령: 파란 블록을 빨간 블록 위에 쌓아줘
+      </p>
+    </div>
+    <div class="card">
+      <h3>언어 모델이 돌려주는 것</h3>
+      <p class="small" style="font-family:monospace; background:var(--bg); padding:8px; border-radius:6px; line-height:1.4">
+        { "feasible": true,<br>
+        &nbsp;&nbsp;"steps": [<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;{ "pick": "blue_0",<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"place": "on_top:red_0" } ] }
+      </p>
+      <p class="small sub">→ 코드가 red_0의 위치와 높이(+2.5 cm)로 좌표를 계산</p>
+    </div>
+  </div>
+
+  <h3>개선 전후 비교 (명령 10개, gemma4:e2b)</h3>
+  <svg viewBox="0 0 760 120" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="Noto Sans CJK KR" font-size="12">
+    <text x="0" y="30">개선 전</text>
+    <rect x="80" y="15" width="600" height="24" rx="4" fill="#eef0f4"/>
+    <rect x="80" y="15" width="480" height="24" rx="4" fill="#e0a106"/>
+    <text x="570" y="32" font-weight="700">8 / 10</text>
+    <text x="690" y="32" fill="#5b6475" font-size="11">평균 5.3 s</text>
+    <text x="0" y="78">개선 후</text>
+    <rect x="80" y="63" width="600" height="24" rx="4" fill="#eef0f4"/>
+    <rect x="80" y="63" width="600" height="24" rx="4" fill="#1f9d63"/>
+    <text x="600" y="80" font-weight="700" fill="#fff">10 / 10</text>
+    <text x="690" y="80" fill="#5b6475" font-size="11">평균 3.1 s</text>
+    <text x="80" y="112" font-size="10.5" fill="#5b6475">평균 시간에는 첫 호출의 모델 로딩(≈15 s)이 포함됨. 이후 호출은 1~2 s.</text>
+  </svg>
+
+  <div class="callout" style="margin-top:8px">
+    <b>무엇을 바꿨나?</b> 처음에는 모델이 블록 이름 자리에 <code>"id"</code>라는 글자를 그대로 쓰거나, 장소 이름을 빠뜨리는 실수가 있었습니다.
+    지금은 <b>실제로 보이는 블록 이름과 허용된 장소 목록 안에서만 고를 수 있도록</b> 출력 형식을 매번 새로 만들어 강제합니다.
+    작은 모델(2B급)로도 실수가 사라졌습니다.
+  </div>
+
+  <h3>검증 단계에서 막아주는 것</h3>
+  <table>
+    <tr><th>상황</th><th>결과</th></tr>
+    <tr><td>없는 블록을 지시 ("보라색 블록")</td><td>언어 모델이 거부 + 이유 설명</td></tr>
+    <tr><td>팔이 닿지 않는 곳 (반경 25 cm 밖)</td><td>움직이기 전에 거부</td></tr>
+    <tr><td>놓을 자리에 다른 블록이 있음 (3.5 cm 이내)</td><td>움직이기 전에 거부</td></tr>
+    <tr><td>위에 다른 블록이 쌓인 블록을 집으려 함</td><td>움직이기 전에 거부</td></tr>
+    <tr><td>옮긴 뒤 블록이 목표에서 3 cm 이상 벗어남 / 쌓기가 무너짐</td><td>카메라로 확인해 실패로 보고</td></tr>
+  </table>
+</section>
+
+<!-- ============================ PAGE 4: 동작 ============================ -->
+<section class="page">
+  <h2>④ 동작 — 실제로 옮긴 결과</h2>
+  <div class="grid2">
+    <figure><img src="img/top_before.png" style="max-height:62mm; width:auto; margin:auto"><figcaption>시작 상태</figcaption></figure>
+    <figure><img src="img/top_after.png" style="max-height:62mm; width:auto; margin:auto"><figcaption>명령 4개 실행 후 (빨강 → 가운데, 파랑 → 빨강 위, 노랑 → 왼쪽 앞, 초록 → 노랑 뒤)</figcaption></figure>
+  </div>
+
+  <h3>최종 테스트 결과</h3>
+  <table>
+    <tr><th>명령</th><th>결과</th><th>목표와의 거리</th><th>걸린 시간</th></tr>
+    <tr><td>빨간 블록을 가운데로 옮겨</td><td class="ok">성공</td><td>5.2 mm</td><td>32 s*</td></tr>
+    <tr><td>파란 블록을 빨간 블록 위에 쌓아줘</td><td class="ok">성공 (쌓임 확인)</td><td>6.1 mm</td><td>18 s</td></tr>
+    <tr><td>노란 블록을 왼쪽 앞으로 옮겨</td><td class="ok">성공</td><td>3.5 mm</td><td>19 s</td></tr>
+    <tr><td>초록 블록(회전된 상태)을 노란 블록 뒤에 놔</td><td class="ok">성공</td><td>12.6 mm</td><td>21 s</td></tr>
+    <tr><td>보라색 블록을 가운데로 옮겨</td><td class="ok">올바르게 거부</td><td>–</td><td>1 s</td></tr>
+  </table>
+  <p class="small sub">* 첫 명령은 언어 모델 로딩 15 s 포함. 블록 하나 옮기는 동작 자체는 약 15–18 s.</p>
+
+  <h3>쌓기 동작을 옆에서 본 모습</h3>
+  <figure><img src="img/stack_sequence.png" style="max-height:84mm; width:auto; margin:auto"><figcaption>열기 → 접근 → 내려가기 → 집기 → 들기 → 이동 → 내려놓기 → 놓기 → 복귀. 파란 블록이 빨간 블록 위에 올라갔습니다.</figcaption></figure>
+</section>
+
+<!-- ============================ PAGE 5: 해결한 문제 ============================ -->
+<section class="page">
+  <h2>개발 중 해결한 문제들</h2>
+  <p class="sub">처음 통합 실행에서는 "성공"이라고 보고했지만 블록이 옮겨지지 않았습니다. 원인을 하나씩 찾아 고쳤습니다.</p>
+
+  <div class="fixrow head"><div>증상</div><div>원인</div><div>해결</div></div>
+  <div class="fixrow"><div>집게가 블록 위에서 멈추고 블록을 끝부분만 잡음</div><div>시뮬레이터의 관절 위치 제어 힘(게인)이 너무 약해 팔이 중력에 처짐 (최대 0.04 rad ≈ 2°)</div><div>게인 0.1 → 1.0. 관절 오차 <b>0</b>으로</div></div>
+  <div class="fixrow"><div>다음 동작이 거부됨</div><div>팔이 완전히 멈추기 전에 다음 경로를 보냄</div><div>관절 속도가 0이 될 때까지 기다린 뒤 실행</div></div>
+  <div class="fixrow"><div>집게를 끝까지 닫으면 블록이 튀어나감</div><div>닫힘 목표가 블록 폭보다 훨씬 작아 과도하게 조임</div><div>닫힘 값을 블록 크기에 맞게 조정</div></div>
+  <div class="fixrow"><div>쌓을 때 아래 블록을 밀어버림</div><div>이동 중 블록이 집게 안에서 기울어 2 cm 어긋남</div><div>잡는 힘을 높여 기울어짐 방지</div></div>
+  <div class="fixrow"><div>실패했는데 "성공"으로 보고</div><div>동작 결과를 확인하지 않음</div><div>놓은 뒤 카메라로 위치·쌓임 확인</div></div>
+  <div class="fixrow"><div>언어 모델이 "id" 같은 가짜 이름 출력</div><div>출력 형식 제약이 약함</div><div>보이는 블록 이름만 고르도록 강제 (8/10 → 10/10)</div></div>
+
+  <div class="grid2" style="margin-top:14px">
+    <figure><img src="img/stack_failure_weak_grip.png"><figcaption>수정 전: 약하게 잡은 파란 블록이 기울어져 빨간 블록 옆에 떨어짐</figcaption></figure>
+    <figure><img src="img/stack_sequence.png"><figcaption>수정 후: 블록이 집게 중심에 고정되어 정확히 쌓임</figcaption></figure>
+  </div>
+
+  <h3>반복 시험 (각 3회)</h3>
+  <table>
+    <tr><th>시험</th><th>성공</th><th>비고</th></tr>
+    <tr><td>일반 이동</td><td class="ok">3 / 3</td><td>목표와 4.3 ~ 5.4 mm, 매번 같은 방향으로 어긋남 → 보정 가능</td></tr>
+    <tr><td>회전된 블록(23°) 집기</td><td class="ok">3 / 3</td><td>집게 방향을 블록 각도에 맞춰 회전</td></tr>
+    <tr><td>쌓기</td><td><span class="ok">2</span> / 3 → <span class="ok">8 / 9</span></td><td>놓기 방식 개선 후 (다음 쪽 참고)</td></tr>
+  </table>
+</section>
+
+<!-- ============================ PAGE 5b: 손목 카메라 ============================ -->
+<section class="page">
+  <h2>손목 카메라로 "제대로 잡았나?" 확인</h2>
+  <p>블록을 들어 올린 직후 <b>그리퍼에 달린 손목 카메라</b>로 손가락 사이를 봅니다. 잡은 블록은 카메라 바로 앞에 있어 화면 가운데 상자를 거의 가득 채우고,
+  놓쳤다면 상자가 비어 있습니다. 상자 안에서 <b>집으려던 색이 60% 이상</b>이면 통과, 아니면 집게를 열고 물러난 뒤 실패로 보고합니다.</p>
+  <figure><img src="img/wrist_check.png"><figcaption>손목 카메라 화면. 초록 상자 = 통과, 빨간 상자 = 실패. 왼쪽부터 정상 집기 · 3.5 cm 어긋났지만 끌려 들어와 잡힘 · 빈 자리를 집음 · 블록 위에서 헛잡음(블록은 아래 테이블에 남음).</figcaption></figure>
+
+  <div class="grid2" style="margin-top:12px">
+    <div class="card">
+      <h3>시험 결과</h3>
+      <table>
+        <tr><th>상황</th><th>색 비율</th><th>판정</th></tr>
+        <tr><td>정상 집기 (반복 8회)</td><td>85–99%</td><td class="ok">통과</td></tr>
+        <tr><td>빈 자리를 집음</td><td>0%</td><td class="ng">실패</td></tr>
+        <tr><td>블록 위에서 헛잡음</td><td>0%</td><td class="ng">실패</td></tr>
+        <tr><td>다른 색 블록을 집음</td><td>0%</td><td class="ng">실패</td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <h3>함께 개선된 점</h3>
+      <p>• 쌓을 때 4 mm 위에서 놓기 → 아래 블록이 튕겨 나가지 않음<br>
+         • 놓을 때 집게를 조금만 열기 → 블록이 날아가지 않음<br>
+         • 쌓기 성공률 <b>2/3 → 8/9</b><br>
+         • 일반 이동 3/3 유지 (오차 4–6 mm)</p>
+    </div>
+  </div>
+  <div class="callout" style="margin-top:12px">
+    <b>남은 과제</b> — 위에서 내려다보는 카메라로는 쌓은 블록 아래가 "가려진 것"인지 "튕겨 나간 것"인지 구분하지 못합니다.
+    놓은 뒤 손목 카메라로 위 블록의 크기를 재서 실제로 쌓였는지 확인하는 기능을 다음에 추가할 계획입니다.
+  </div>
+</section>
+
+<!-- ============================ PAGE 6a: 캘리브레이션 ============================ -->
+<section class="page">
+  <h2>캘리브레이션 — 실제 환경에 맞추기</h2>
+  <p>카메라, 마커 위치, 조명, 손목 카메라는 설치할 때마다 달라집니다. 이를 맞추는 <b>4단계 도구</b>를 만들었고, 시뮬에서 정답과 비교해 검증했습니다.
+  결과는 설정 파일로 저장되고, 실행할 때 <code>calib_dir</code>로 지정하면 자동으로 적용됩니다.</p>
+
+  <svg viewBox="0 0 760 150" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="Noto Sans CJK KR" font-size="12">
+    <defs><marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#5b6475"/></marker></defs>
+    <g>
+      <rect x="5" y="15" width="170" height="120" rx="12" fill="#eef4ff" stroke="#2f6fed"/>
+      <text x="90" y="40" text-anchor="middle" font-weight="700" fill="#2f6fed">1. 카메라 렌즈</text>
+      <text x="90" y="64" text-anchor="middle">체커보드를 흔들면</text>
+      <text x="90" y="82" text-anchor="middle">자동으로 20장 촬영</text>
+      <text x="90" y="112" text-anchor="middle" font-size="11" fill="#5b6475">렌즈 초점·왜곡 계산</text>
+
+      <rect x="195" y="15" width="170" height="120" rx="12" fill="#f4efff" stroke="#7a5af5"/>
+      <text x="280" y="40" text-anchor="middle" font-weight="700" fill="#7a5af5">2. 블록 색</text>
+      <text x="280" y="64" text-anchor="middle">색별 블록을 놓으면</text>
+      <text x="280" y="82" text-anchor="middle">색 범위를 자동 측정</text>
+      <text x="280" y="112" text-anchor="middle" font-size="11" fill="#5b6475">조명이 바뀌어도 대응</text>
+
+      <rect x="385" y="15" width="170" height="120" rx="12" fill="#fff8e6" stroke="#e0a106"/>
+      <text x="470" y="40" text-anchor="middle" font-weight="700" fill="#b07d00">3. 마커 ↔ 로봇</text>
+      <text x="470" y="64" text-anchor="middle">로봇이 블록을 12곳에</text>
+      <text x="470" y="82" text-anchor="middle">놓고 카메라로 확인</text>
+      <text x="470" y="112" text-anchor="middle" font-size="11" fill="#5b6475">마커가 로봇 기준 어디인지</text>
+
+      <rect x="575" y="15" width="180" height="120" rx="12" fill="#eaf7f0" stroke="#1f9d63"/>
+      <text x="665" y="40" text-anchor="middle" font-weight="700" fill="#1f9d63">4. 손목 카메라</text>
+      <text x="665" y="64" text-anchor="middle">잡음 · 빈 집게 · 헛잡음</text>
+      <text x="665" y="82" text-anchor="middle">세 상태를 촬영</text>
+      <text x="665" y="112" text-anchor="middle" font-size="11" fill="#5b6475">판정 영역·기준값 자동 설정</text>
+    </g>
+    <g stroke="#5b6475" stroke-width="2" marker-end="url(#ar2)">
+      <line x1="177" y1="75" x2="191" y2="75"/><line x1="367" y1="75" x2="381" y2="75"/><line x1="557" y1="75" x2="571" y2="75"/>
+    </g>
+  </svg>
+
+  <h3>시뮬 검증 결과</h3>
+  <table>
+    <tr><th>단계</th><th>검증 방법</th><th>결과</th></tr>
+    <tr><td>1. 카메라 렌즈</td><td>시뮬 카메라의 실제 값과 비교</td><td class="ok">초점거리 오차 0.03 %</td></tr>
+    <tr><td>2. 블록 색</td><td>4색 블록 측정</td><td class="ok">4색 모두 인식, 98–100 %, 색끼리 겹침 없음</td></tr>
+    <tr><td>3. 마커 ↔ 로봇</td><td>마커 위치를 일부러 2° 돌리고 1.4 cm 옮긴 뒤 실행</td><td class="ok">회전 2.04° 되찾음, 맞춤 오차 3 mm</td></tr>
+    <tr><td>4. 손목 카메라</td><td>잡음과 놓침 구분</td><td class="ok">잡음 95–100 % vs 놓침 6 % → 확실히 구분</td></tr>
+  </table>
+
+  <figure style="margin-top:10px"><img src="img/wrist_calibration.png" style="max-height:50mm; width:auto; margin:auto">
+  <figcaption>손목 카메라 캘리브레이션이 자동으로 찍은 세 장면(잡음 · 빈 집게 · 헛잡음)과 정해진 판정 영역</figcaption></figure>
+
+  <div class="callout blue" style="margin-top:10px">
+    <b>알아둘 점</b> — 3단계는 카메라 좌표를 <b>"로봇이 실제로 블록을 놓는 위치"</b>에 맞춥니다. 그래서 카메라와 로봇 사이의 일치는 0–1 mm로 좋아지지만,
+    시뮬에서는 로봇이 늘 약 9 mm 짧게 놓는 버릇까지 함께 반영되어 절대 위치는 그만큼 이동합니다. 블록 위에 쌓기·옆에 놓기처럼 블록 기준 작업에 유리한 방식입니다.
+  </div>
+</section>
+
+<!-- ============================ PAGE 6: 다음 단계 ============================ -->
+<section class="page">
+  <h2>다음 단계</h2>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>시뮬레이션에서 더 할 일</h3>
+      <p>• 놓는 위치의 일정한 어긋남(≈4 mm) 보정<br>
+         • 쌓기 성공률 높이기 (내려놓는 속도 낮추기 등)<br>
+         • 명령 시나리오를 늘려 성공률 통계 측정<br>
+         • 더 큰 언어 모델과 비교 (16 GB GPU 안에서)</p>
+    </div>
+    <div class="card">
+      <h3>실물 로봇으로 옮길 때 필요한 것</h3>
+      <p>• <b>마커</b>: 마커 사이 거리만 자로 재기 (로봇 기준 위치는 캘리브레이션 도구가 구함)<br>
+         • <b>카메라</b>: 장치 번호, 해상도 → 렌즈 캘리브레이션 도구<br>
+         • <b>블록</b>: 실제 크기, 색 → 색 캘리브레이션 도구<br>
+         • <b>로봇</b>: U2D2 포트, 그리퍼 잡는 힘 확인<br>
+         • 원하는 명령 예시 5~10개</p>
+    </div>
+  </div>
+
+  <div class="callout blue" style="margin-top:12px">
+    <b>실물 이전이 쉬운 이유</b> — 카메라 인식, 언어 모델, 검증 로직은 시뮬레이션과 실물에서 그대로 쓰입니다.
+    바뀌는 것은 <b>설정 파일 값</b>(마커 좌표, 색 범위, 잡는 높이)과 <b>카메라·로봇 드라이버 실행</b>뿐입니다.
+  </div>
+
+  <h3 style="margin-top:16px">실행 방법 (요약)</h3>
+  <p class="small" style="font-family:monospace; background:var(--bg); padding:10px; border-radius:8px; line-height:1.6">
+    # 터미널 1 — 전체 실행 (Gazebo + RViz + 인식 + 언어 모델 + 동작)<br>
+    ros2 launch vla_bringup sim_vla.launch.py<br><br>
+    # 터미널 2 — 한국어로 명령<br>
+    ros2 run vla_planner cli<br>
+    &gt; 빨간 블록을 가운데로 옮겨
+  </p>
+  <p class="small sub">자세한 내용은 기술 문서(report_technical.pdf)와 README.md 참고.</p>
+</section>
+
+</body>
+</html>

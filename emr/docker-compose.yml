@@ -1,0 +1,59 @@
+# =============================================================================
+# EMR 비품·배송 — 한 번에 띄우기
+#   docker compose up --build
+#   web  http://localhost:5173   (Vite 핫리로드, frontend/ 수정 즉시 반영)
+#   api  http://localhost:8000/docs  (uvicorn --reload, backend/ 수정 즉시 반영)
+#   db   localhost:5432  (emr/emr/emr)
+# =============================================================================
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: emr
+      POSTGRES_PASSWORD: emr
+      POSTGRES_DB: emr
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U emr -d emr"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://emr:emr@db:5432/emr   # 컨테이너 안에서는 host가 db
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRE_MINUTES: 480
+      CORS_ORIGINS: '["http://localhost:5173"]'
+      SEED: ${SEED:-0}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app          # 코드 핫리로드
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./frontend
+      target: dev
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-/api/v1}   # 같은 주소 → Vite 프록시. 다른 PC에서 IP로 접속해도 동작
+      API_PROXY_TARGET: http://api:8000         # Vite 프록시가 넘길 백엔드 (컨테이너 안 주소)
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - api
+
+volumes:
+  pgdata:

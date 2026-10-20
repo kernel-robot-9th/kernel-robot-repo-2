@@ -1,0 +1,93 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+    Property Tree Widget:
+      Expanded:
+        - /MotionPlanning1
+  - Class: rviz_common/Help
+    Name: Help
+  - Class: rviz_common/Views
+    Name: Views
+Visualization Manager:
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Grid
+      Value: true
+    - Class: moveit_rviz_plugin/MotionPlanning
+      Name: MotionPlanning
+      Planned Path:
+        Loop Animation: true
+        State Display Time: 0.05 s
+        Trajectory Topic: display_planned_path
+      Planning Scene Topic: monitored_planning_scene
+      Robot Description: robot_description
+      Scene Geometry:
+        Scene Alpha: 1
+      Scene Robot:
+        Robot Alpha: 0.5
+      Value: true
+    - Class: rviz_default_plugins/Image
+      Enabled: true
+      Max Value: 1
+      Median window: 5
+      Min Value: 0
+      Name: Top camera (detections)
+      Normalize Range: true
+      Topic:
+        Depth: 1
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /vla/debug_image
+      Value: true
+    - Class: rviz_default_plugins/Image
+      Enabled: false
+      Max Value: 1
+      Median window: 5
+      Min Value: 0
+      Name: Top camera (raw)
+      Normalize Range: true
+      Topic:
+        Depth: 1
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /camera/image_raw
+      Value: false
+    - Class: rviz_default_plugins/Image
+      Enabled: true
+      Max Value: 1
+      Median window: 5
+      Min Value: 0
+      Name: Wrist grasp check
+      Normalize Range: true
+      Topic:
+        Depth: 1
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /vla/wrist_debug
+      Value: true
+  Global Options:
+    Fixed Frame: world
+  Tools:
+    - Class: rviz_default_plugins/Interact
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+  Value: true
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 0.9
+      Focal Point:
+        X: 0.15
+        Y: 0.0
+        Z: 0.05
+      Name: Current View
+      Pitch: 0.6
+      Target Frame: world
+      Yaw: 3.6
+Window Geometry:
+  QMainWindow State: 000000ff00000000fd00000002000000000000017c000003d7fc0200000005fb000000100044006900730070006c00610079007301000000110000011a0000001a00fffffffb0000001c004d006f00740069006f006e0050006c0061006e006e0069006e00670100000131000002b70000001a00fffffffb0000000800480065006c00700000000000ffffffff0000001a00fffffffb0000000a005600690065007700730000000000ffffffff0000001a00fffffffb00000044004d006f00740069006f006e0050006c0061006e006e0069006e00670020002d0020005400720061006a006500630074006f0072007900200053006c00690064006500720000000000ffffffff0000001a00ffffff000000010000026c000003d7fc0200000003fb0000002e0054006f0070002000630061006d006500720061002000280064006500740065006300740069006f006e007300290100000011000002600000001a00fffffffb000000200054006f0070002000630061006d0065007200610020002800720061007700290000000000ffffffff0000001a00fffffffb000000220057007200690073007400200067007200610073007000200063006800650063006b0100000277000001710000001a00ffffff000001e8000003d700000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  Height: 1000
+  Width: 1500

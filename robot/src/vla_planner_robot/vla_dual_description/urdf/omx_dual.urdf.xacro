@@ -1,0 +1,103 @@
+<?xml version="1.0"?>
+<!--
+  Two ROBOTIS OMX-F arms (left_ / right_) on a raised board, working on the floor.
+
+  Frame `world` = the table/marker frame on the FLOOR (z = 0 is the work surface).
+  Both arms face +x; their link0 frames sit on the board top at y = +-base_separation/2.
+  base_separation = distance between the two link0 origins (gap between base plates + plate width).
+-->
+<robot name="omx_dual" xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:arg name="use_sim" default="false" />
+  <xacro:arg name="use_mock_hardware" default="false" />
+  <xacro:arg name="mock_sensor_commands" default="false" />
+  <xacro:arg name="left_port" default="/dev/ttyACM0" />
+  <xacro:arg name="right_port" default="/dev/ttyACM1" />
+  <xacro:arg name="controllers_yaml" default="$(find vla_dual_description)/config/dual_sim_controllers.yaml" />
+
+  <xacro:arg name="base_x" default="0.0" />
+  <xacro:arg name="base_separation" default="0.33" />
+  <xacro:arg name="board_height" default="0.075" />
+  <xacro:arg name="board_front" default="0.06" />   <!-- board front edge, x ahead of link0 -->
+  <xacro:arg name="board_back" default="0.16" />    <!-- board back edge, x behind link0 -->
+  <xacro:arg name="board_half_width" default="0.30" />
+  <!-- measured arm base poses (vla_calibration table, one run per arm); empty = derived from base_x and base_separation -->
+  <xacro:arg name="left_x" default="" />
+  <xacro:arg name="left_y" default="" />
+  <xacro:arg name="left_yaw" default="0.0" />
+  <xacro:arg name="right_x" default="" />
+  <xacro:arg name="right_y" default="" />
+  <xacro:arg name="right_yaw" default="0.0" />
+
+  <xacro:property name="bx" value="$(arg base_x)" />
+  <xacro:property name="sep" value="$(arg base_separation)" />
+  <xacro:property name="bh" value="$(arg board_height)" />
+  <xacro:property name="bf" value="$(arg board_front)" />
+  <xacro:property name="bb" value="$(arg board_back)" />
+  <xacro:property name="bw" value="$(arg board_half_width)" />
+
+  <xacro:include filename="$(find open_manipulator_description)/gazebo/omx_f.gazebo.xacro" />
+  <xacro:include filename="$(find open_manipulator_description)/urdf/omx_f/omx_f_arm.urdf.xacro" />
+  <xacro:include filename="$(find open_manipulator_description)/ros2_control/omx_f.ros2_control.xacro" />
+
+  <link name="world"/>
+
+  <!-- the raised board both arms stand on -->
+  <link name="board">
+    <visual>
+      <origin xyz="0 0 ${-bh / 2}" rpy="0 0 0"/>
+      <geometry><box size="${bf + bb} ${2 * bw} ${bh}"/></geometry>
+      <material name="wood"><color rgba="0.82 0.66 0.45 1"/></material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 ${-bh / 2}" rpy="0 0 0"/>
+      <geometry><box size="${bf + bb} ${2 * bw} ${bh}"/></geometry>
+    </collision>
+    <inertial>
+      <mass value="5.0"/>
+      <inertia ixx="0.1" ixy="0" ixz="0" iyy="0.1" iyz="0" izz="0.1"/>
+    </inertial>
+  </link>
+  <joint name="board_fixed" type="fixed">
+    <parent link="world"/>
+    <child link="board"/>
+    <origin xyz="${bx + (bf - bb) / 2} 0 ${bh}" rpy="0 0 0"/>
+  </joint>
+
+  <xacro:macro name="dual_arm" params="side x y yaw">
+    <joint name="${side}_world_fixed" type="fixed">
+      <parent link="world"/>
+      <child link="${side}_link0"/>
+      <origin xyz="${x} ${y} ${bh}" rpy="0 0 ${yaw}"/>
+    </joint>
+    <joint name="${side}_end_effector_joint" type="fixed">
+      <parent link="${side}_link5"/>
+      <child link="${side}_end_effector_link"/>
+      <origin xyz="0.09193 -0.0016 0" rpy="0 0 0"/>
+    </joint>
+    <link name="${side}_end_effector_link"/>
+    <xacro:omx_f prefix="${side}_" />
+    <xacro:omx_f_gazebo prefix="${side}_" />
+  </xacro:macro>
+
+  <xacro:property name="lx" value="${bx if '$(arg left_x)' == '' else float('$(arg left_x)')}" />
+  <xacro:property name="ly" value="${sep / 2 if '$(arg left_y)' == '' else float('$(arg left_y)')}" />
+  <xacro:property name="rx" value="${bx if '$(arg right_x)' == '' else float('$(arg right_x)')}" />
+  <xacro:property name="ry" value="${-sep / 2 if '$(arg right_y)' == '' else float('$(arg right_y)')}" />
+  <xacro:dual_arm side="left" x="${lx}" y="${ly}" yaw="$(arg left_yaw)" />
+  <xacro:dual_arm side="right" x="${rx}" y="${ry}" yaw="$(arg right_yaw)" />
+
+  <xacro:omx_f_system name="LeftOMXF" prefix="left_" use_sim="$(arg use_sim)"
+    use_mock_hardware="$(arg use_mock_hardware)" mock_sensor_commands="$(arg mock_sensor_commands)"
+    port_name="$(arg left_port)"/>
+  <xacro:omx_f_system name="RightOMXF" prefix="right_" use_sim="$(arg use_sim)"
+    use_mock_hardware="$(arg use_mock_hardware)" mock_sensor_commands="$(arg mock_sensor_commands)"
+    port_name="$(arg right_port)"/>
+
+  <xacro:if value="$(arg use_sim)">
+    <gazebo>
+      <plugin filename="gz_ros2_control-system" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+        <parameters>$(arg controllers_yaml)</parameters>
+      </plugin>
+    </gazebo>
+  </xacro:if>
+</robot>

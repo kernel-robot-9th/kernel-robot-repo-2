@@ -1,0 +1,2 @@
+blue_0: floor (+19.3, -0.3) cm, long side +70 deg, size 5.5 x 2.7 cm -> arm (+0.245, +0.003), reach 0.245 m
+--x 0.245 --y 0.003 --z -0.036 --yaw 75 --place-x 0.200 --place-y 0.097 --place-z -0.028

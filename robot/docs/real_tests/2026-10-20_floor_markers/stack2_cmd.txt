@@ -1,0 +1,1 @@
+--x 0.212 --y -0.066 --z -0.036 --yaw -27 --place-x 0.196 --place-y 0.087 --place-z -0.015 --place-yaw 90

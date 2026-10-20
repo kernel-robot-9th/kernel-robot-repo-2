@@ -1,0 +1,10 @@
+@import "tailwindcss";
+
+body { @apply bg-slate-50 text-slate-900; }
+
+/* 마커 카드 인쇄 (features/markers/MarkerPrintDialog.tsx) — 카드가 열려 있으면 앱 화면은 빼고 카드만 찍는다 */
+@media print {
+  body:has(dialog.marker-print[open]) > #root { display: none; }
+  dialog.marker-print[open] { position: static; margin: 0 auto; box-shadow: none; }
+  dialog.marker-print::backdrop { background: none; }
+}

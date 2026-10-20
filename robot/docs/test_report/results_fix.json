@@ -1,0 +1,70 @@
+[
+  {
+    "trial": 9,
+    "action": "carry",
+    "command": "그릇을 두 팔로 들어서 뒤로 옮겨",
+    "success": true,
+    "message": "done",
+    "plan": "{\"feasible\": true, \"reason\": \"The command specifies picking the tray and moving it to the back.\", \"steps\": [{\"pick\": \"tray_0\", \"place\": \"back\", \"arm\": \"auto\", \"place_mode\": \"region\", \"region\": \"back\"}]}",
+    "arms": [
+      "both"
+    ],
+    "handoff": false,
+    "llm_s": 3.9,
+    "duration_s": 50.4,
+    "final": [
+      0.0912,
+      -0.003,
+      -0.0
+    ],
+    "target": [
+      0.1,
+      0.0,
+      0.0
+    ],
+    "xy_err_mm": 9.3,
+    "z_err_mm": -0.0,
+    "tilt_max_deg": 2.4,
+    "verified": [
+      "step 1 verified: tray 7 mm from target"
+    ],
+    "images": [
+      "trial09_before_fix.png",
+      "trial09_after_fix.png"
+    ]
+  },
+  {
+    "trial": 10,
+    "action": "carry",
+    "command": "쟁반을 양손으로 들어서 가운데로 옮겨",
+    "success": true,
+    "message": "done",
+    "plan": "{\"feasible\": true, \"reason\": \"Executing the command to move the tray to the center.\", \"steps\": [{\"pick\": \"tray_0\", \"place\": \"center\", \"arm\": \"auto\", \"place_mode\": \"region\", \"region\": \"center\"}]}",
+    "arms": [
+      "both"
+    ],
+    "handoff": false,
+    "llm_s": 4.0,
+    "duration_s": 50.9,
+    "final": [
+      0.1235,
+      0.0001,
+      -0.0
+    ],
+    "target": [
+      0.13,
+      0.0,
+      0.0
+    ],
+    "xy_err_mm": 6.5,
+    "z_err_mm": -0.0,
+    "tilt_max_deg": 2.1,
+    "verified": [
+      "step 1 verified: tray 4 mm from target"
+    ],
+    "images": [
+      "trial10_before_fix.png",
+      "trial10_after_fix.png"
+    ]
+  }
+]

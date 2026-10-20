@@ -1,0 +1,343 @@
+[
+  {
+    "trial": 1,
+    "action": "auto",
+    "command": "빨간 블록을 왼쪽 뒤 구석으로 옮겨",
+    "success": true,
+    "message": "done",
+    "plan": "{\"feasible\": true, \"reason\": \"Moving the red block to the back-left corner.\", \"steps\": [{\"pick\": \"red_0\", \"place\": \"back_left\", \"arm\": \"auto\", \"place_mode\": \"region\", \"region\": \"back_left\"}]}",
+    "arms": [
+      "left"
+    ],
+    "handoff": false,
+    "llm_s": 2.3,
+    "duration_s": 18.6,
+    "final": [
+      0.0919,
+      0.2576,
+      0.0125
+    ],
+    "target": [
+      0.1,
+      0.26,
+      0.0125
+    ],
+    "xy_err_mm": 8.5,
+    "z_err_mm": 0.0,
+    "tilt_max_deg": null,
+    "verified": [
+      "step 1 verified: red block 8 mm from target"
+    ],
+    "images": [
+      "trial01_before_final.png",
+      "trial01_after_final.png"
+    ]
+  },
+  {
+    "trial": 2,
+    "action": "auto",
+    "command": "초록 블록을 오른쪽 앞으로 옮겨",
+    "success": true,
+    "message": "done",
+    "plan": "{\"feasible\": true, \"reason\": \"Moving the green block to the front right position.\", \"steps\": [{\"pick\": \"green_0\", \"place\": \"front_right\", \"arm\": \"auto\", \"place_mode\": \"region\", \"region\": \"front_right\"}]}",
+    "arms": [
+      "right"
+    ],
+    "handoff": false,
+    "llm_s": 3.0,
+    "duration_s": 18.6,
+    "final": [
+      0.1984,
+      -0.1408,
+      0.0125
+    ],
+    "target": [
+      0.22,
+      -0.14,
+      0.0125
+    ],
+    "xy_err_mm": 21.7,
+    "z_err_mm": 0.0,
+    "tilt_max_deg": null,
+    "verified": [
+      "step 1 verified: green block 21 mm from target"
+    ],
+    "images": [
+      "trial02_before_final.png",
+      "trial02_after_final.png"
+    ]
+  },
+  {
+    "trial": 3,
+    "action": "named_arm",
+    "command": "왼팔로 노란 블록을 왼쪽으로 옮겨",
+    "success": false,
+    "message": "step 1: yellow block is 38 mm away from the target",
+    "plan": "",
+    "arms": [
+      "left"
+    ],
+    "handoff": false,
+    "llm_s": 2.1,
+    "duration_s": 19.6,
+    "final": [
+      0.1485,
+      0.2598,
+      0.0125
+    ],
+    "target": [
+      0.16,
+      0.22,
+      0.0125
+    ],
+    "xy_err_mm": 41.4,
+    "z_err_mm": 0.0,
+    "tilt_max_deg": null,
+    "verified": [],
+    "images": [
+      "trial03_before_final.png",
+      "trial03_after_final.png"
+    ]
+  },
+  {
+    "trial": 4,
+    "action": "named_arm",
+    "command": "오른팔로 파란 블록을 오른쪽 뒤 구석으로 옮겨",
+    "success": true,
+    "message": "done",
+    "plan": "{\"feasible\": true, \"reason\": \"Moving the blue block to the back right area using the right arm.\", \"steps\": [{\"pick\": \"blue_0\", \"place\": \"back_right\", \"arm\": \"right\", \"place_mode\": \"region\", \"region\": \"back_right\"}]}",
+    "arms": [
+      "right"
+    ],
+    "handoff": false,
+    "llm_s": 5.5,
+    "duration_s": 22.8,
+    "final": [
+      0.0915,
+      -0.2595,
+      0.0125
+    ],
+    "target": [
+      0.1,
+      -0.26,
+      0.0125
+    ],
+    "xy_err_mm": 8.5,
+    "z_err_mm": 0.0,
+    "tilt_max_deg": null,
+    "verified": [
+      "step 1 verified: blue block 7 mm from target"
+    ],
+    "images": [
+      "trial04_before_final.png",
+      "trial04_after_final.png"
+    ]
+  },
+  {
+    "trial": 5,
+    "action": "stack",
+    "command": "빨간 블록을 노란 블록 위에 쌓아",
+    "success": true,
+    "message": "done",
+    "plan": "{\"feasible\": true, \"reason\": \"Stacking the red block on top of the yellow block.\", \"steps\": [{\"pick\": \"red_0\", \"place\": \"on_top:yellow_0\", \"arm\": \"auto\", \"place_mode\": \"on_top\", \"target\": \"yellow_0\"}]}",
+    "arms": [
+      "left"
+    ],
+    "handoff": false,
+    "llm_s": 3.3,
+    "duration_s": 21.5,
+    "final": [
+      0.2061,
+      0.0951,
+      0.0375
+    ],
+    "target": [
+      0.2096,
+      0.1005,
+      0.0375
+    ],
+    "xy_err_mm": 6.4,
+    "z_err_mm": 0.0,
+    "tilt_max_deg": null,
+    "verified": [
+      "step 1 verified: red block 6 mm from target"
+    ],
+    "images": [
+      "trial05_before_final.png",
+      "trial05_after_final.png"
+    ]
+  },
+  {
+    "trial": 6,
+    "action": "stack",
+    "command": "파란 블록을 초록 블록 위에 쌓아",
+    "success": true,
+    "message": "done",
+    "plan": "{\"feasible\": true, \"reason\": \"Picking the blue block and placing it on top of the green block.\", \"steps\": [{\"pick\": \"blue_0\", \"place\": \"on_top:green_0\", \"arm\": \"auto\", \"place_mode\": \"on_top\", \"target\": \"green_0\"}]}",
+    "arms": [
+      "right"
+    ],
+    "handoff": false,
+    "llm_s": 2.5,
+    "duration_s": 19.6,
+    "final": [
+      0.2015,
+      -0.0998,
+      0.0375
+    ],
+    "target": [
+      0.2081,
+      -0.0939,
+      0.0375
+    ],
+    "xy_err_mm": 8.8,
+    "z_err_mm": 0.0,
+    "tilt_max_deg": null,
+    "verified": [
+      "step 1 verified: blue block 10 mm from target"
+    ],
+    "images": [
+      "trial06_before_final.png",
+      "trial06_after_final.png"
+    ]
+  },
+  {
+    "trial": 7,
+    "action": "handoff",
+    "command": "빨간 블록을 오른쪽으로 옮겨",
+    "success": false,
+    "message": "step 2: red block is 272 mm away from the target",
+    "plan": "",
+    "arms": [
+      "left",
+      "right"
+    ],
+    "handoff": true,
+    "llm_s": 6.5,
+    "duration_s": 42.7,
+    "final": [
+      0.4281,
+      -0.1585,
+      0.0125
+    ],
+    "target": [
+      0.16,
+      -0.22,
+      0.0125
+    ],
+    "xy_err_mm": 275.0,
+    "z_err_mm": 0.0,
+    "tilt_max_deg": null,
+    "verified": [
+      "step 1 verified: red block 9 mm from target"
+    ],
+    "images": [
+      "trial07_before_final.png",
+      "trial07_after_final.png"
+    ]
+  },
+  {
+    "trial": 8,
+    "action": "handoff",
+    "command": "파란 블록을 왼쪽으로 옮겨",
+    "success": true,
+    "message": "done",
+    "plan": "{\"feasible\": true, \"reason\": \"Moving the blue block to the left side.\", \"steps\": [{\"pick\": \"blue_0\", \"place\": \"left\", \"arm\": \"auto\", \"place_mode\": \"region\", \"region\": \"left\"}]}",
+    "arms": [
+      "left",
+      "right"
+    ],
+    "handoff": true,
+    "llm_s": 1.8,
+    "duration_s": 39.2,
+    "final": [
+      0.1669,
+      0.2205,
+      0.0125
+    ],
+    "target": [
+      0.16,
+      0.22,
+      0.0125
+    ],
+    "xy_err_mm": 6.9,
+    "z_err_mm": 0.0,
+    "tilt_max_deg": null,
+    "verified": [
+      "step 1 verified: blue block 8 mm from target",
+      "step 2 verified: blue block 8 mm from target"
+    ],
+    "images": [
+      "trial08_before_final.png",
+      "trial08_after_final.png"
+    ]
+  },
+  {
+    "trial": 9,
+    "action": "carry",
+    "command": "그릇을 두 팔로 들어서 뒤로 옮겨",
+    "success": true,
+    "message": "done",
+    "plan": "{\"feasible\": true, \"reason\": \"Moving the tray to the back.\", \"steps\": [{\"pick\": \"tray_0\", \"place\": \"back\", \"arm\": \"auto\", \"place_mode\": \"region\", \"region\": \"back\"}]}",
+    "arms": [
+      "both"
+    ],
+    "handoff": false,
+    "llm_s": 2.6,
+    "duration_s": 50.1,
+    "final": [
+      0.0924,
+      -0.0009,
+      -0.0
+    ],
+    "target": [
+      0.1,
+      0.0,
+      0.0
+    ],
+    "xy_err_mm": 7.7,
+    "z_err_mm": -0.0,
+    "tilt_max_deg": 2.4,
+    "verified": [
+      "step 1 verified: tray 5 mm from target"
+    ],
+    "images": [
+      "trial09_before_final.png",
+      "trial09_after_final.png"
+    ]
+  },
+  {
+    "trial": 10,
+    "action": "carry",
+    "command": "쟁반을 양손으로 들어서 가운데로 옮겨",
+    "success": true,
+    "message": "done",
+    "plan": "{\"feasible\": true, \"reason\": \"Executing the command to move the tray to the center.\", \"steps\": [{\"pick\": \"tray_0\", \"place\": \"center\", \"arm\": \"auto\", \"place_mode\": \"region\", \"region\": \"center\"}]}",
+    "arms": [
+      "both"
+    ],
+    "handoff": false,
+    "llm_s": 4.2,
+    "duration_s": 48.0,
+    "final": [
+      0.1211,
+      -0.0012,
+      -0.0
+    ],
+    "target": [
+      0.13,
+      0.0,
+      0.0
+    ],
+    "xy_err_mm": 9.0,
+    "z_err_mm": -0.0,
+    "tilt_max_deg": 4.7,
+    "verified": [
+      "step 1 verified: tray 7 mm from target"
+    ],
+    "images": [
+      "trial10_before_final.png",
+      "trial10_after_final.png"
+    ]
+  }
+]

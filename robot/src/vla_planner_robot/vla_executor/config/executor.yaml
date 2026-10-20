@@ -1,0 +1,23 @@
+vla_executor:
+  ros__parameters:
+    use_sim_time: true
+    grasp_z: 0.014
+    place_z: 0.014
+    stack_clearance: 0.004
+    approach_height: 0.06
+    block_height: 0.025
+    gripper_open: 1.0
+    gripper_closed: 0.05
+    gripper_release: 0.35
+    gripper_effort: 5.0
+    velocity_scaling: 0.3
+    acceleration_scaling: 0.3
+    min_reach: 0.09
+    max_reach: 0.25
+    # wrist-camera grasp check (after lift)
+    wrist_check: true
+    wrist_required: true
+    wrist_image_topic: /wrist_camera/image_raw
+    wrist_roi: [0.40, 0.40, 0.65, 0.58]
+    wrist_min_fill: 0.6
+    wrist_timeout: 2.0

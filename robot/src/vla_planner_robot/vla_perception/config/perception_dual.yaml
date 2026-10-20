@@ -1,0 +1,15 @@
+vla_perception:
+  ros__parameters:
+    use_sim_time: true
+    image_topic: /camera/image_raw
+    camera_info_topic: /camera/camera_info
+    frame_id: world                 # table frame on the floor (URDF root of omx_dual)
+    aruco_dictionary: DICT_5X5_100
+    marker_ids: [0, 1, 2, 3]
+    # marker centers in the world/table frame, [x0, y0, x1, y1, ...] metres
+    marker_positions: [0.10, 0.40, 0.40, 0.40, 0.40, -0.40, 0.10, -0.40]
+    block_height: 0.025
+    roi_margin: 0.12               # grow the marker polygon (radially, so ~0.04 m at the near edge): objects up to the board edge stay whole
+    tray_colors: [purple]
+    tray_min_length: 0.12
+    tray_height: 0.02

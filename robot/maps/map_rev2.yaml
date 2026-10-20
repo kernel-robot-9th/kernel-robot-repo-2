@@ -1,0 +1,8 @@
+# EMR 맵 '병원'(id 4, 원본 map_rev2.yaml)에서 꺼냄 — emr_map_export.py
+image: map_rev2.png
+mode: trinary
+resolution: 0.02
+origin: [-1.801, -6.847, 0.0]
+negate: 0
+occupied_thresh: 0.65
+free_thresh: 0.25

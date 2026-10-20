@@ -1,0 +1,13 @@
+# Two-arm carry of a tray by its two end handles (input frame, metres / rad).
+float64 tray_x
+float64 tray_y
+float64 tray_yaw      # long-axis yaw
+float64 tray_length   # end to end
+float64 place_x
+float64 place_y
+float64 place_yaw
+---
+bool success
+string message
+---
+string stage

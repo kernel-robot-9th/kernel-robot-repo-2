@@ -1,0 +1,17 @@
+# Top-down pick at (pick_x, pick_y) and place at (place_x, place_y) [m], in the executor's
+# input frame (link0 for one arm, world for two). Heights are above the work surface.
+string arm               # left | right | "" = the arm that reaches both points
+float64 pick_x
+float64 pick_y
+float64 pick_yaw
+float64 pick_z_offset    # height of the picked block above the table (0 = on the table)
+string pick_color        # expected color for the wrist-camera grasp check ("" = any block color)
+float64 place_x
+float64 place_y
+float64 place_yaw
+float64 place_z_offset   # extra height for stacking (0 = on the table)
+---
+bool success
+string message
+---
+string stage
