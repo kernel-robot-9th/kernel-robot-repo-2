@@ -10,6 +10,7 @@ import { createBrowserRouter, redirect } from 'react-router'
 import { auth } from './api/client'
 import { Layout } from './components/Layout'
 import { Deliveries } from './pages/Deliveries'
+import { DeliveryLog } from './pages/DeliveryLog'
 import { Login } from './pages/Login'
 import { MapView } from './pages/MapView'
 import { Nurses } from './pages/Nurses'
@@ -28,6 +29,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, loader: () => redirect('/deliveries') },
       { path: 'deliveries', Component: Deliveries },
+      { path: 'delivery-log', Component: DeliveryLog },   // 관리자 배송 기록 (2026-10-21)
       { path: 'map', Component: MapView },
       { path: 'supplies', Component: Supplies },
       { path: 'nurses', Component: Nurses },

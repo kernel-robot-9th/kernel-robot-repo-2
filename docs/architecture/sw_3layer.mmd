@@ -1,0 +1,74 @@
+flowchart TB
+  %% 병원 배송 로봇 SW 3계층 구조 — 지금 구현 기준 (2026-10-21)
+  %% draw.io: Arrange > Insert > Advanced > Mermaid 에 붙여 넣기
+  %% 색: 초록=구현 / 노랑=일부·다르게 / 빨강=없음, 점선 테두리=Priority O(옵션)
+  %% 뺀 것: 환자 UI, 환자 요청·역할별 품목 분기, 비상 조작 콘솔, Safety Monitor
+
+  subgraph P["Presentation Layer — GUI · EMR 웹 React :5173"]
+    direction LR
+    UI["간호사 관제 UI<br/>재고 · 배송 예약/단계/기록 · 알림 · 맵/장소<br/>없음: 맵 위 로봇 위치, 응급 알림<br/>SR-01,04,05,06,07,08,09"]:::part
+  end
+
+  subgraph A["Application Layer — 중앙 서버 · EMR FastAPI :8000"]
+    direction TB
+    REQ["Request Service<br/>간호사 배송 예약 등록·변경·취소·조회<br/>SRD-02, SR-02"]:::ok
+    INV["Inventory Service<br/>비품 등록·편집·검색·삭제, 재고, 유효기간<br/>SRD-01, SR-01"]:::ok
+    DSP["Task Dispatcher<br/>로봇이 가져감(claim) → 출발·도착·수령/실패<br/>계획: 서버가 할당<br/>SR-04"]:::part
+    FLT["Fleet State Manager<br/>서버에 없음 (관제 PC robot_monitor)<br/>SR-09"]:::none
+    ALT["Alert Service<br/>재고 부족 · 배송 단계 · 실패→관리자 (SSE)<br/>없음: 응급·추적 실패 알림<br/>SR-07, SR-08"]:::part
+    AUTH["Auth / 역할 관리<br/>간호사 JWT · 관리자/간호사 · 로봇별 키<br/>계획: 명찰 마커로 배송 확인 → 지금 일회용 마커<br/>SR-06, SR-08"]:::part
+    LOG["Monitoring & Logging [O]<br/>배송 기록 delivery_events + 서버 로그<br/>SR-05"]:::partopt
+    MED["Media Relay [O]<br/>없음<br/>SR-07"]:::noneopt
+    MAP["Map Registry<br/>Pinky 맵 업로드 · 장소 찍기 · 복귀 장소<br/>SR-09"]:::ok
+    DB[("관계형 DB · PostgreSQL 16<br/>비품·배송·배송 기록·맵·장소·로봇<br/>로봇 상태는 가정값")]:::part
+    OBJ[("오브젝트 스토리지 [O]<br/>없음<br/>SRD-07")]:::noneopt
+    %% 보이지 않는 연결로 4열 배치 (서비스 → 횡단 기능 → 저장소)
+    REQ ~~~ AUTH ~~~ DB
+    INV ~~~ MAP ~~~ OBJ
+    DSP ~~~ LOG
+    FLT ~~~ ALT ~~~ MED
+  end
+
+  subgraph R["Robot Layer — ROS 2 Jazzy"]
+    direction TB
+    subgraph RC["관제 PC (서버와 같은 PC)"]
+      direction LR
+      RTM["Robot Task Manager<br/>delivery_executor 상태 기계<br/>계획: 로봇 온보드 · 가짜 Nav2로만 검증<br/>SR-04, SR-09"]:::part
+      MON["로봇 상태 수집 (그림 밖)<br/>robot_monitor :8090<br/>EMR 미연결<br/>SR-09"]:::part
+    end
+    subgraph RP["Pinky Pro AMR 온보드"]
+      direction LR
+      NAV["Navigation<br/>Nav2 · SLAM, 실물 주행 1회 성공<br/>SR-04, SR-09"]:::ok
+      TRK["Nurse Tracking<br/>명찰 ArUco 마커로 따라가기<br/>SR-08"]:::part
+    end
+    subgraph RO["OMX-F 로봇팔 (이 PC + USB)"]
+      direction LR
+      MAN["Manipulation<br/>LLM 플래너 + IK (색 블록, 시뮬)<br/>모방학습 정책 (거즈) — 미연결<br/>SR-11, SR-13 [O]"]:::part
+    end
+    subgraph V["Vision Subsystem · Pi 카메라 / USB 카메라 (계획: RealSense)"]
+      direction LR
+      EMG["응급 상황 감지 [O]<br/>없음<br/>SRD-07, SR-07"]:::noneopt
+      VID["비품 식별 / 포즈 추정<br/>ArUco 테이블 + HSV 색 블록<br/>SR-10, SR-12 [O]"]:::part
+      ARU["ArUco 마커 인증<br/>명찰 마커 검출 (따라가기)<br/>없음: 수령 마커 카메라 노드<br/>SR-06, SR-08"]:::part
+      PER["사람 검출 + 트래커<br/>없음 (마커 추적으로 대신)<br/>SR-08"]:::none
+    end
+  end
+
+  P <-->|"REST /api/v1 (JWT) + SSE 알림 · 계획: REST + WebSocket"| A
+  A <-->|"HTTP 로봇별 키 claim·progress·receipt · 계획: rosbridge / MQTT"| RC
+  RC <-->|"ROS 2 DDS · Pinky 도메인 0"| RP
+  RC <-->|"ROS 2 DDS · OMX 도메인 56"| RO
+
+  classDef ok fill:#dff3e4,stroke:#1d6b34,color:#1d2330
+  classDef part fill:#fdf0d2,stroke:#8a5a00,color:#1d2330
+  classDef none fill:#fbe3e1,stroke:#a3302a,color:#1d2330
+  classDef partopt fill:#fdf0d2,stroke:#8a5a00,color:#1d2330,stroke-dasharray:5 5
+  classDef noneopt fill:#fbe3e1,stroke:#a3302a,color:#1d2330,stroke-dasharray:5 5
+
+  style P fill:#e9f0fb,stroke:#9db6e0
+  style A fill:#eaf4ec,stroke:#9cc7a6
+  style R fill:#fbf1e4,stroke:#e2b980
+  style RC fill:#fffaf3,stroke:#e2b980
+  style RP fill:#fffaf3,stroke:#e2b980
+  style RO fill:#fffaf3,stroke:#e2b980
+  style V fill:#fffaf3,stroke:#e2b980

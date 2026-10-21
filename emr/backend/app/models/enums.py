@@ -7,6 +7,7 @@
 #   - SupplyCategory / RequestableBy  비품 분류
 #   - DeliveryStatus                  배송 상태
 #   - DeliveryFailureReason           배송 실패 사유 (2026-10-20)
+#   - DeliveryEventType / DeliveryEventActor  배송 기록 사건 종류·누가 (2026-10-21, 로드맵 4단계)
 #   - RobotType / RobotStatus         로봇 종류·상태
 #   - NotificationEvent               실시간 알림 종류 (DB에 저장하지 않음, SSE event 이름)
 #   - check_values()                  CHECK 제약용 IN 리스트
@@ -56,6 +57,26 @@ class DeliveryFailureReason(StrEnum):
     NOT_RECEIVED = "not_received"                # 도착 후 수령 대기 시간 안에 수령 없음
     DESTINATION_BLOCKED = "destination_blocked"  # 목적지가 실행기 설정의 금지 장소
     ROBOT_ERROR = "robot_error"                  # 그 밖의 로봇 쪽 오류
+
+
+class DeliveryEventType(StrEnum):
+    """배송 기록(delivery_events)의 사건 종류 (2026-10-21, 로드맵 4단계).
+    간호사: 예약·변경·취소. 로봇: 출발(claim)·도착·수령·실패. 상태가 실제로 바뀐 때만 남긴다(멱등 재보고·거부는 남기지 않음).
+    """
+    RESERVED = "reserved"      # 간호사 예약
+    UPDATED = "updated"        # 간호사 변경 (바뀐 값만 details에)
+    CANCELLED = "cancelled"    # 간호사 취소
+    DISPATCHED = "dispatched"  # 로봇이 맡아 출발
+    ARRIVED = "arrived"        # 로봇 도착 보고 (일회용 마커 번호는 기록하지 않음)
+    RECEIVED = "received"      # 로봇이 일회용 마커로 수령 확인
+    FAILED = "failed"          # 로봇 실패 보고 (사유는 details)
+
+
+class DeliveryEventActor(StrEnum):
+    """배송 기록의 행위자 종류."""
+    NURSE = "nurse"
+    ROBOT = "robot"
+
 
 class RobotType(StrEnum):
     """로봇 종류. 등록 후 바꿀 수 없다."""

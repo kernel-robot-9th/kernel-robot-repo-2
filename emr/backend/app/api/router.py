@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.api.v1 import auth, deliveries, locations, maps, notifications, nurses, robot_access, robots, supplies
+from app.api.v1 import auth, deliveries, delivery_events, locations, maps, notifications, nurses, robot_access, robots, supplies
 
 api_router = APIRouter()  # main.py가 /api/v1 prefix로 include
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
@@ -18,6 +18,7 @@ api_router.include_router(nurses.router, prefix="/nurses", tags=["nurses"])
 api_router.include_router(maps.router, prefix="/maps", tags=["maps"])
 api_router.include_router(locations.router, prefix="/locations", tags=["locations"])
 api_router.include_router(deliveries.router, prefix="/deliveries", tags=["deliveries"])
+api_router.include_router(delivery_events.router, prefix="/delivery-events", tags=["delivery-events"])
 api_router.include_router(robots.router, prefix="/robots", tags=["robots"])
 api_router.include_router(notifications.router, prefix="/notifications", tags=["notifications"])
 api_router.include_router(robot_access.router, prefix="/robot", tags=["robot-access"])  # 로봇 키 인증

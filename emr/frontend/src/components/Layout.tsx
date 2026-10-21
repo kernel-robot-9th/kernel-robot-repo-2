@@ -4,13 +4,13 @@
 //          실시간 알림 연결(useNotificationStream)과 토스트, 도착 수령 마커 창(ReceiptMarkerWatcher, 2026-10-20)도 여기서 한 번만 둔다
 // 작성일 : 2026-10-14
 // 구성   :
-//   - NAV      메뉴 정의 (경로·라벨)
+//   - NAV      메뉴 정의 (경로·라벨, adminOnly는 관리자에게만 보임 — 실제 차단은 백엔드 403)
 //   - Layout   <Outlet/>으로 하위 페이지 렌더
 // =============================================================================
 import { NavLink, Outlet, useNavigate } from 'react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { auth } from '../api/client'
-import { useMe } from '../api/hooks'
+import { useIsAdmin, useMe } from '../api/hooks'
 import { NURSE_ROLE_LABEL } from '../api/types'
 import { ReceiptMarkerWatcher } from '../features/deliveries/ReceiptMarkerWatcher'
 import { NotificationBell } from '../features/notifications/NotificationBell'
@@ -18,18 +18,20 @@ import { Toasts } from '../features/notifications/Toasts'
 import { useNotificationStream } from '../features/notifications/useNotificationStream'
 import { Badge, Button } from './ui'
 
-const NAV = [
+const NAV: { to: string; label: string; adminOnly?: boolean }[] = [
   { to: '/deliveries', label: '배송 예약' },
   { to: '/map', label: '맵' },
   { to: '/supplies', label: '비품' },
   { to: '/nurses', label: '간호사' },
   { to: '/sites', label: '장소·맵·로봇' },
+  { to: '/delivery-log', label: '배송 기록', adminOnly: true },   // 2026-10-21
 ]
 
 export function Layout() {
   const nav = useNavigate()
   const qc = useQueryClient()
   const me = useMe()
+  const isAdmin = useIsAdmin()
   const { connected } = useNotificationStream()
 
   const logout = () => {
@@ -43,7 +45,7 @@ export function Layout() {
       <aside className="w-48 border-r border-slate-200 bg-white p-4">
         <div className="mb-6 text-lg font-bold">EMR 배송</div>
         <nav className="flex flex-col gap-1">
-          {NAV.map(n => (
+          {NAV.filter(n => !n.adminOnly || isAdmin).map(n => (
             <NavLink
               key={n.to}
               to={n.to}
