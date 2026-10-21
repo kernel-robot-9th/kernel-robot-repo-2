@@ -50,6 +50,7 @@ ACTIVE_STATUSES_SQL = "status IN ('dispatched', 'arrived')"
 
 if TYPE_CHECKING:
     from app.models.location import Location
+    from app.models.nurse import Nurse
     from app.models.robot import Robot
     from app.models.supply import Supply
 
@@ -107,6 +108,7 @@ class Delivery(TimestampMixin, Base):
     receipt_marker_id: Mapped[int | None] = mapped_column(Integer)  # 일회용 수령 마커 (DICT_4X4_250 50~249), 도착 때 생성
 
     destination_location: Mapped[Location] = relationship()
+    nurse: Mapped[Nurse] = relationship(foreign_keys=[nurse_id])  # 예약한 간호사 (배송 기록 화면 — 2026-10-21)
     assigned_robot: Mapped[Robot | None] = relationship(foreign_keys=[assigned_robot_id])
     items: Mapped[list[DeliveryItem]] = relationship(
         back_populates="delivery", cascade="all, delete-orphan", order_by="DeliveryItem.id"

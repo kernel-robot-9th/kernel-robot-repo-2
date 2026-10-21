@@ -21,6 +21,7 @@ uvicorn app.main:app --reload          # http://localhost:8000/docs  (N001 / nur
 - `GET/POST /api/v1/locations`, `GET/PATCH/DELETE /api/v1/locations/{id}` — 장소(배송 위치·맵 좌표) 조회·등록·편집·삭제
 - `GET/POST /api/v1/robots`, `GET/PATCH/DELETE /api/v1/robots/{id}` — 로봇 등록·조회·수정·삭제, 종류(manipulator·amr)·이름·상태 (`?robot_type=`, `?status=`로 필터)
 - `GET/POST /api/v1/deliveries`, `GET/PATCH /api/v1/deliveries/{id}`, `POST .../{id}/cancel` — 배송 일정 예약 (로그인 필요, 본인 예약만)
+- `GET /api/v1/deliveries/{id}/events` — 배송 한 건의 기록(예약·변경·취소·출발·도착·수령·실패, 본인·관리자), `GET /api/v1/delivery-events` — 관리자 배송 기록(거르기·최근 순) (2026-10-21)
 
 ## 테스트
 ```bash

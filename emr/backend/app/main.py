@@ -66,6 +66,7 @@ def create_app() -> FastAPI:
             {"name": "maps", "description": "맵 관리 — 맵 yaml 파일 이름과 resolution·origin"},
             {"name": "locations", "description": "장소 관리 — 배송 위치, 맵 좌표(미터·라디안), 소속 맵"},
             {"name": "deliveries", "description": "배송 일정 예약 — 간호사 본인 예약 등록·조회·변경·취소 (로그인 필요)"},
+            {"name": "delivery-events", "description": "배송 기록 — 예약·변경·취소·출발·도착·수령·실패 (관리자 목록, 2026-10-21)"},
             {"name": "robots", "description": "로봇 관리 — 등록·조회·수정·삭제, 종류(매니퓰레이터·AMR)·이름·상태"},
             {"name": "notifications", "description": "알림 — 재고 부족 목록과 실시간 스트림(SSE) (로그인 필요)"},
             {"name": "robot-access", "description": "로봇 전용 — 배송 수령 확인. 간호사 토큰이 아니라 `X-Robot-Api-Key`(로봇별 키)로 호출"},

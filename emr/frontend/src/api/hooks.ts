@@ -10,12 +10,14 @@
 //   - useNurses   / useNurseMutations          (등록·수정·비활성화·비밀번호 초기화는 관리자)
 //   - useMaps, useLocations, useRobots (+ mutations — 변경은 관리자). useMapMutations: 맵 파일 업로드·교체·삭제
 //   - useDeliveries / useDeliveryMutations     (재고가 바뀌므로 비품 목록·재고 부족 목록도 다시 불러옴)
+//   - useDeliveryEvents                        배송 한 건의 기록 (본인·관리자) — 2026-10-21
+//   - useDeliveryEventLog                      관리자 배송 기록 화면 (거르기 + 더 보기) — 2026-10-21
 //   - useLowStock                              재고 부족 비품 (알림창). 실시간 갱신은 features/notifications
 // =============================================================================
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './client'
 import type {
-  Delivery, DeliveryCreate, DeliveryUpdate,
+  AdminDeliveryEvent, Delivery, DeliveryCreate, DeliveryEvent, DeliveryEventFilters, DeliveryUpdate,
   Location, MapInfo, Nurse, NurseCreate, NurseUpdate, PasswordChange, PasswordReset,
   Robot, RobotApiKey, Supply, SupplyCreate, SupplyUpdate,
 } from './types'
@@ -36,6 +38,7 @@ export const keys = {
   robots: ['robots'] as const,
   deliveries: ['deliveries'] as const,
   lowStock: ['notifications', 'low-stock'] as const,
+  deliveryEventLog: ['delivery-events'] as const,
 }
 
 // ---------- 인증 ----------
@@ -218,3 +221,31 @@ export function useDeliveryMutations() {
     }),
   }
 }
+
+// ---------- 배송 기록 (2026-10-21, 로드맵 4단계) ----------
+/** 배송 한 건의 기록, 일어난 순서. 키가 deliveries 아래라 예약·변경·취소 뒤 무효화에 같이 걸린다.
+ *  [입력] deliveryId: null이면 부르지 않음 (창이 닫혀 있을 때) */
+export const useDeliveryEvents = (deliveryId: number | null) =>
+  useQuery({
+    queryKey: [...keys.deliveries, deliveryId, 'events'],
+    queryFn: () => api.get<DeliveryEvent[]>(`/deliveries/${deliveryId}/events`),
+    enabled: deliveryId != null,
+  })
+
+export const DELIVERY_EVENT_PAGE_SIZE = 50
+/** 관리자 배송 기록 — 최근 것부터 50개씩 '더 보기'. 조건이 바뀌면 처음부터.
+ *  [입력] filters: 비어 있는 값은 보내지 않는다 */
+export const useDeliveryEventLog = (filters: DeliveryEventFilters) =>
+  useInfiniteQuery({
+    queryKey: [...keys.deliveryEventLog, filters],
+    queryFn: ({ pageParam }) => {
+      const params = new URLSearchParams({ limit: String(DELIVERY_EVENT_PAGE_SIZE), offset: String(pageParam) })
+      for (const [name, value] of Object.entries(filters)) {
+        if (value !== undefined && value !== '') params.set(name, String(value))
+      }
+      return api.get<AdminDeliveryEvent[]>(`/delivery-events?${params}`)
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, pages) =>
+      lastPage.length < DELIVERY_EVENT_PAGE_SIZE ? undefined : pages.length * DELIVERY_EVENT_PAGE_SIZE,
+  })

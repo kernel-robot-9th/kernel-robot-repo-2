@@ -1,12 +1,13 @@
 // =============================================================================
 // 파일   : src/api/types.ts
-// 역할   : 백엔드 응답·요청 타입 — "EMR 비품·배송 백엔드 현황" 문서의 7개 테이블 기준
+// 역할   : 백엔드 응답·요청 타입 — "EMR 비품·배송 백엔드 현황" 문서의 7개 테이블 + delivery_events(2026-10-21) 기준
 // 작성일 : 2026-10-14
 // 구성   :
 //   - 공통      ApiError, Page
 //   - 인증      LoginIn, TokenOut, Nurse(역할), PasswordReset, PasswordChange
 //   - 마스터    Supply, Map, Location, Robot
 //   - 배송      Delivery, DeliveryItem, DeliveryCreate, DeliveryUpdate
+//   - 배송 기록 DeliveryEvent, AdminDeliveryEvent, DeliveryEventFilters, DELIVERY_EVENT_LABEL (2026-10-21, 로드맵 4단계)
 //   - 알림      NotificationEventType, LowStockEvent, DeliveryReceivedEvent (SSE /notifications/stream)
 // =============================================================================
 // [검토 필요] 손으로 옮긴 타입이다. 백엔드 기동 후 `npm run gen`으로 src/api/schema.d.ts를 만들고
@@ -180,6 +181,72 @@ export const DELIVERY_FAILURE_REASON_LABEL: Record<DeliveryFailureReason, string
   destination_blocked: '지금은 로봇이 갈 수 없는 장소입니다',
   robot_error: '로봇 오류',
 }
+// ---------- 배송 기록 (2026-10-21, 로드맵 4단계) ----------
+/** 간호사: 예약·변경·취소 / 로봇: 출발·도착·수령·실패. 상태가 실제로 바뀐 때만 남는다 (거부·같은 보고 반복은 없음) */
+export type DeliveryEventType = 'reserved' | 'updated' | 'cancelled' | 'dispatched' | 'arrived' | 'received' | 'failed'
+export interface DeliveryEventItem {
+  supply_id: number
+  name: string       // 당시 비품 이름
+  quantity: number
+}
+export interface DeliveryEventPlace {
+  id: number
+  name: string       // 당시 장소 이름
+}
+export interface DeliveryEventChange<T> {
+  from: T
+  to: T
+}
+/** reserved — 예약 내용 */
+export interface ReservedEventDetails {
+  scheduled_at: string
+  destination: DeliveryEventPlace
+  items: DeliveryEventItem[]
+}
+/** updated — 바뀐 것만 */
+export interface UpdatedEventDetails {
+  scheduled_at?: DeliveryEventChange<string>
+  destination?: DeliveryEventChange<DeliveryEventPlace>
+  items?: DeliveryEventChange<DeliveryEventItem[]>
+}
+/** failed — 실패 사유 */
+export interface FailedEventDetails {
+  failure_reason: DeliveryFailureReason
+}
+export interface DeliveryEvent {
+  id: number
+  delivery_id: number
+  event_type: DeliveryEventType
+  occurred_at: string
+  actor_type: 'nurse' | 'robot'
+  actor_name: string              // 간호사 이름 또는 로봇 이름(당시 — 로봇을 지워도 남음)
+  actor_robot_id: number | null   // 로봇을 지웠으면 null
+  details: ReservedEventDetails | UpdatedEventDetails | FailedEventDetails | null  // 일회용 마커 번호는 없다
+}
+/** 관리자 기록 화면 (GET /delivery-events) */
+export interface AdminDeliveryEvent extends DeliveryEvent {
+  destination_location_name: string  // 지금 이름
+  nurse_name: string                 // 예약한 간호사
+}
+/** 관리자 기록 화면 거르기. since는 포함, until은 미포함 (ISO, 시간대 포함) */
+export interface DeliveryEventFilters {
+  event_type?: DeliveryEventType
+  robot_id?: number
+  nurse_id?: number
+  delivery_id?: number
+  since?: string
+  until?: string
+}
+export const DELIVERY_EVENT_LABEL: Record<DeliveryEventType, string> = {
+  reserved: '예약',
+  updated: '변경',
+  cancelled: '취소',
+  dispatched: '출발',
+  arrived: '도착',
+  received: '수령',
+  failed: '실패',
+}
+
 export const ROBOT_STATUS_LABEL: Record<RobotStatus, string> = {
   idle: '대기',
   delivering: '배송 중',
