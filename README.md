@@ -112,6 +112,8 @@ cd ~/dev_ws/ollama_ws && ./setup_ollama.sh        # Ollama가 없으면 ./setup_
 - [배송 API 계약](docs/api_contract_delivery_2026-10-20.md): EMR과 배송 실행기 사이의 상태·API·오류 코드
 - [Pinky 여러 대 운영 구조](docs/pinky_multi_robot_2026-10-20.md): 관제 PC 구조, ROS 도메인 분리, 맵 공유
 - [Pinky 분석](docs/pinky_analysis_2026-10-20.md): 실측 상태와 남은 과제
+- [모방학습 데이터셋 점검](docs/il_dataset_review/README.md): 같은 문장·다른 시작 환경에서 정책이 출발·멈추는 문제, 데이터·실행 쪽 제안
+- [OMX 스킬 인터페이스 설계](docs/omx_skill_interface_2026-10-21.md): LLM 플래너가 고전 IK와 모방학습 정책을 같은 규격으로 부르는 구조(초안)
 - [서버 현황 보고서](docs/server_report_2026-10-19.md)
 - [올리기 전 검증 보고서](docs/verification_report_2026-10-20.md): 영역별로 어디까지 확인했는지, 남은 시험
 
