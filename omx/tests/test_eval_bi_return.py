@@ -37,7 +37,7 @@ class ReturnMotionTests(unittest.TestCase):
         robot.left_arm.bus.disconnect.assert_called_once_with(disable_torque=True)
 
     def setUp(self):
-        self.args = SimpleNamespace(
+        self.args = SimpleNamespace(stages=None, 
             return_via=[10.] * 6, start_pose=[20.] * 6,
             return_via_time=.1, return_home_time=.1, return_tolerance=.01,
             return_settle_time=.2, fps=30, episode_time=1, task="test",

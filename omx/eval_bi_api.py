@@ -8,12 +8,15 @@
 외부 -> 이 서버:
   POST /command {"command": "pick and place blue gauze", "request_id": "cycle-001"}
   POST /return  {"gripper_open": true, "request_id": "cycle-001"}
+  POST /pinky   {"pinky_arrive": true 또는 false}  (계속 보내도 됨)
   GET /end-point -> {"end_point": false 또는 true}
   GET /status    -> 이동 상태와 전송 결과
 
 이 서버 -> callback-url:
   이동/도착 확인 성공: POST {"end_point": true}
   이동 실패:          POST {"end_point": false}
+  pinky 집기 결과:     POST {"pinky_done": true 또는 false}
+  pinky 후 양팔 복귀:  POST {"end_point": true 또는 false}
   헤더 X-Request-ID에 요청 ID 포함. 재전송 시 수신 측에서 같은 ID를 중복 처리하지 마세요.
 
 request_id는 작업마다 새 값, HTTP 재시도에는 같은 값을 사용합니다.
@@ -39,6 +42,16 @@ POST /command가 오기 전에는 모델/로봇을 실행하지 않습니다.
 모델은 첫 요청에서 로드 후 재사용합니다. 실행 중 POST /return은 같은 제어 루프에
 복귀 이벤트를 전달합니다. request_id를 생략하거나 현재 작업 ID와 맞춰 보내세요.
 평가 시간 종료 시에도 복귀합니다. --no-return/--dry-run/복수 episodes는 API에서 금지합니다.
+
+POST /pinky {"pinky_arrive": true/false}: 최신 값을 기억합니다 (계속 보내도 됩니다).
+최근 작업(모방학습 + 시작 자세 복귀)이 끝나 end_point가 true이고 결과 전송도 끝난 상태에서
+pinky_arrive가 true이면 그때 양팔 동작을 시작합니다. 순서는 상관없습니다:
+end_point가 나중에 true가 되어도, 그 전에 받은 pinky_arrive=true가 있으면 바로 시작합니다.
+pinky_arrive=false를 받으면 기억한 값을 지웁니다. 시작할 때도 지웁니다.
+동작 (pinky_sequence.json, 양팔 동시):
+  위치 이동(그리퍼 열면서) -> 닫기 -> 올리기 -> 그리퍼 열기 -> 콜백 {"pinky_done": true}
+  -> 양팔 경유 자세 -> 시작 자세 -> 콜백 {"end_point": true}
+작업당 한 번만 실행되며 이동 중에는 end_point가 false입니다. 끝나도 토크는 켜 둡니다.
 """
 import argparse
 import copy
@@ -112,6 +125,19 @@ def move_left_once():
     run_verified_motion()
 
 
+PINKY_SEQUENCE = None  # --pinky-sequence; None = pinky_sequence.json next to pinky_move.py
+
+
+def move_pinky_once():
+    from pinky_move import DEFAULT_SEQUENCE, pick
+    pick(PINKY_SEQUENCE or DEFAULT_SEQUENCE)
+
+
+def return_both_home():
+    from pinky_move import DEFAULT_SEQUENCE, return_home
+    return_home(PINKY_SEQUENCE or DEFAULT_SEQUENCE)
+
+
 def send_result(url, payload, request_id):
     """Bounded timeout; only an HTTP 2xx response counts as delivery."""
     with httpx.Client(timeout=3.0, trust_env=False) as client:
@@ -122,6 +148,12 @@ def send_result(url, payload, request_id):
 class ReturnRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     gripper_open: StrictBool
+    request_id: str | None = Field(default=None, min_length=1, max_length=128)
+
+
+class PinkyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    pinky_arrive: StrictBool
     request_id: str | None = Field(default=None, min_length=1, max_length=128)
 
 
@@ -139,7 +171,8 @@ class CommandRequest(BaseModel):
 
 
 class ReturnController:
-    def __init__(self, callback_url=None, motion=move_left_once, sender=send_result, policy_runner=None):
+    def __init__(self, callback_url=None, motion=move_left_once, sender=send_result, policy_runner=None,
+                 pinky_motion=move_pinky_once, home_motion=return_both_home):
         if callback_url:
             url = httpx.URL(callback_url)
             if url.scheme not in ("http", "https") or not url.host:
@@ -148,6 +181,9 @@ class ReturnController:
         self.motion = motion
         self.sender = sender
         self.policy_runner = policy_runner
+        self.pinky_motion = pinky_motion
+        self.home_motion = home_motion
+        self.pinky_arrive = False  # latest pinky_arrive value received
         self.return_event = threading.Event()
         self.lock = threading.Lock()
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="left-return")
@@ -157,6 +193,7 @@ class ReturnController:
         self.current = {
             "request_id": None, "end_point": False, "state": "idle",
             "error": None, "delivery": "not_sent", "delivery_error": None,
+            "pinky": None, "pinky_error": None,
         }
 
     def snapshot(self):
@@ -197,7 +234,7 @@ class ReturnController:
                 "request_id": request.request_id, "end_point": False, "state": "running",
                 "error": None, "delivery": "pending" if self.callback_url else "disabled",
                 "delivery_error": None,
-                "command": command,
+                "command": command, "pinky": None, "pinky_error": None,
             }
             self.requests[request.request_id] = self.current
             response = {**self.current, "accepted": True}
@@ -221,24 +258,77 @@ class ReturnController:
         # Movement outcome is independent of network success. Never repeat motion
         # because a notification failed.
         try:
-            if self.callback_url:
-                payload = {"end_point": self.snapshot()["end_point"]}
-                for attempt in range(3):
-                    try:
-                        self.sender(self.callback_url, payload, request_id)
-                    except Exception as exc:
-                        with self.lock:
-                            self.current.update(delivery="retrying", delivery_error=str(exc))
-                        if attempt < 2:
-                            time.sleep(0.2)
-                    else:
-                        with self.lock:
-                            self.current.update(delivery="sent", delivery_error=None)
-                        break
+            self._deliver({"end_point": self.snapshot()["end_point"]}, request_id)
+        finally:
+            with self.lock:
+                self.busy = False
+                self._maybe_start_pinky()
+
+    def _deliver(self, payload, request_id):
+        if self.callback_url:
+            for attempt in range(3):
+                try:
+                    self.sender(self.callback_url, payload, request_id)
+                except Exception as exc:
+                    with self.lock:
+                        self.current.update(delivery="retrying", delivery_error=str(exc))
+                    if attempt < 2:
+                        time.sleep(0.2)
                 else:
                     with self.lock:
-                        self.current["delivery"] = "failed"
-                    logging.error("Result delivery failed; GET /status retains the motion result")
+                        self.current.update(delivery="sent", delivery_error=None)
+                    break
+            else:
+                with self.lock:
+                    self.current["delivery"] = "failed"
+                logging.error("Result delivery failed; GET /status retains the motion result")
+
+    def start_pinky(self, request):
+        with self.lock:
+            if self.closing:
+                raise HTTPException(503, "Server is shutting down")
+            self.pinky_arrive = request.pinky_arrive
+            if self._maybe_start_pinky():
+                return {**self.current, "accepted": True}
+            return {**self.current, "accepted": False, "waiting": self.pinky_arrive}
+
+    def _maybe_start_pinky(self):
+        """Call with the lock held. Start only when end_point and pinky_arrive are both true."""
+        ready = (self.pinky_arrive and not self.busy and not self.closing
+                 and self.current["state"] == "completed" and self.current["end_point"]
+                 and self.current["pinky"] is None)
+        if not ready:
+            return False
+        self.busy = True
+        self.pinky_arrive = False  # consumed; a continuing sender will set it again
+        # The arms leave the start pose, so end_point no longer holds.
+        self.current.update(end_point=False, pinky="running", pinky_error=None)
+        self.executor.submit(self._run_pinky, self.current["request_id"])
+        return True
+
+    def _run_pinky(self, request_id):
+        try:
+            try:
+                self.pinky_motion()
+            except Exception as exc:
+                logging.exception("Pinky pick failed")
+                with self.lock:
+                    self.current.update(pinky="failed", pinky_error=str(exc))
+                self._deliver({"pinky_done": False}, request_id)
+                return
+            with self.lock:
+                self.current["pinky"] = "returning"
+            self._deliver({"pinky_done": True}, request_id)
+            try:
+                self.home_motion()
+            except Exception as exc:
+                logging.exception("Return after pinky failed")
+                with self.lock:
+                    self.current.update(pinky="return_failed", pinky_error=str(exc))
+            else:
+                with self.lock:
+                    self.current.update(pinky="completed", end_point=True)
+            self._deliver({"end_point": self.snapshot()["end_point"]}, request_id)
         finally:
             with self.lock:
                 self.busy = False
@@ -250,8 +340,8 @@ class ReturnController:
 
 
 def create_app(callback_url=None, motion=move_left_once, sender=send_result, lock_path=None,
-               policy_runner=None):
-    controller = ReturnController(callback_url, motion, sender, policy_runner)
+               policy_runner=None, pinky_motion=move_pinky_once, home_motion=return_both_home):
+    controller = ReturnController(callback_url, motion, sender, policy_runner, pinky_motion, home_motion)
 
     @asynccontextmanager
     async def lifespan(app):
@@ -282,6 +372,11 @@ def create_app(callback_url=None, motion=move_left_once, sender=send_result, loc
         """개방 신호를 받아 복귀 시작. 본문 bool은 JSON true/false로 전달."""
         return controller.start(request)
 
+    @app.post("/pinky", status_code=202)
+    def request_pinky(request: PinkyRequest):
+        """pinky_arrive 최신 값 저장. end_point도 true이면 양팔 집기 -> 놓기 -> 복귀 시작."""
+        return controller.start_pinky(request)
+
     @app.get("/end-point")
     def get_end_point():
         return {"end_point": controller.snapshot()["end_point"]}
@@ -302,6 +397,8 @@ def parse_server_args(argv=None):
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--callback-url", default=os.environ.get("END_POINT_CALLBACK_URL") or None)
+    parser.add_argument("--pinky-sequence", default=None,
+                        help="pose file for the pinky pick (default: pinky_sequence.json)")
     options, evaluation_argv = parser.parse_known_args(argv)
     runner = None
     if evaluation_argv:
@@ -316,6 +413,10 @@ def parse_server_args(argv=None):
 if __name__ == "__main__":
     import uvicorn
     options, runner = parse_server_args()
+    if options.pinky_sequence:
+        from pinky_move import load_sequence
+        load_sequence(options.pinky_sequence)  # fail fast on a bad file
+        PINKY_SEQUENCE = options.pinky_sequence
     logging.basicConfig(level=logging.INFO)
     # Reuse the module app's controller only when configuration matches.
     app.state.controller.close()
