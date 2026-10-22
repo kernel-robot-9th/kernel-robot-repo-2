@@ -68,6 +68,7 @@ const BADGE: Record<string, string> = {
   dispatched: 'bg-blue-100 text-blue-800',     // 배송: 로봇 출발
   arrived: 'bg-teal-100 text-teal-800',        // 배송: 도착, 수령 대기
   failed: 'bg-red-100 text-red-800',           // 배송: 실패
+  updated: 'bg-indigo-100 text-indigo-800',    // 배송 기록: 간호사 변경 (2026-10-21)
   active: 'bg-green-100 text-green-800',
   inactive: 'bg-slate-200 text-slate-600',
   idle: 'bg-slate-200 text-slate-700',

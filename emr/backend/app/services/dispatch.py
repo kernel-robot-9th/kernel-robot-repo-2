@@ -6,7 +6,8 @@
 #   - DispatchService  overview(GET /robot/me), claim(배송 가져가기), report_progress(도착·실패 보고),
 #                      confirm_receipt(일회용 마커로 수령 확인)
 # 계약: docs/api_contract_delivery_2026-10-20.md. 상태 흐름은 app/models/enums.py DeliveryStatus
-# 성공·거부 모두 structlog로 남긴다(어느 로봇이 어느 배송에 무엇을 했는지). 별도 기록 테이블은 4단계
+# 성공·거부 모두 structlog로 남긴다(어느 로봇이 어느 배송에 무엇을 했는지). 실제로 상태를 바꾼 출발·도착·수령·실패는
+# 배송 기록(delivery_events)에도 남긴다 — 멱등 재보고·거부는 남기지 않음 (2026-10-21, 로드맵 4단계)
 # =============================================================================
 from __future__ import annotations
 
@@ -19,12 +20,13 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import Conflict, Forbidden, NotFound
 from app.models.delivery import RECEIPT_MARKER_ID_MAX, RECEIPT_MARKER_ID_MIN, RECEIPT_WAIT_SECONDS, Delivery
-from app.models.enums import DeliveryFailureReason, DeliveryStatus, RobotType
+from app.models.enums import DeliveryEventType, DeliveryFailureReason, DeliveryStatus, RobotType
 from app.models.location import Location
 from app.models.robot import Robot
 from app.repositories.delivery import DeliveryRepository
 from app.repositories.robot import RobotRepository
 from app.services.delivery import DeliveryService
+from app.services.delivery_events import DeliveryEventRecorder
 from app.services.delivery_notifier import DeliveryNotifier
 
 log = structlog.get_logger(__name__)
@@ -53,6 +55,7 @@ class DispatchService:
         self.robots = RobotRepository(db)
         self.deliveries = DeliveryService(db)
         self.notifier = DeliveryNotifier(db)
+        self.events = DeliveryEventRecorder(db)
 
     def overview(self, robot: Robot) -> RobotOverview:
         """로봇 자신의 정보 — 실행기가 시작·재시작할 때 이어서 할 일을 알려 준다.
@@ -96,6 +99,7 @@ class DispatchService:
         delivery.dispatched_at = now
         attempt.info("delivery_dispatched", delivery_id=delivery.id, destination_location_id=delivery.destination_location_id)
         self.notifier.notify_dispatched(delivery)
+        self.events.record_by_robot(delivery, DeliveryEventType.DISPATCHED, robot, now)
         return delivery
 
     def report_progress(
@@ -128,6 +132,7 @@ class DispatchService:
             delivery.receipt_marker_id = receipt_marker_id
             attempt.info("delivery_arrived")
             self.notifier.notify_arrived(delivery)
+            self.events.record_by_robot(delivery, DeliveryEventType.ARRIVED, delivery.assigned_robot, now)
             return delivery
 
         # stage == failed
@@ -144,6 +149,9 @@ class DispatchService:
         delivery.failure_reason = failure_reason
         attempt.info("delivery_failed", failure_reason=failure_reason)
         self.notifier.notify_failed(delivery)
+        self.events.record_by_robot(
+            delivery, DeliveryEventType.FAILED, delivery.assigned_robot, now, {"failure_reason": failure_reason},
+        )
         return delivery
 
     def confirm_receipt(self, delivery_id: int, aruco_marker_id: int, robot_id: int) -> Delivery:
@@ -172,6 +180,7 @@ class DispatchService:
         delivery.received_by_robot_id = robot_id
         attempt.info("receipt_confirmed", nurse_id=delivery.nurse_id)
         self.notifier.notify_received(delivery)
+        self.events.record_by_robot(delivery, DeliveryEventType.RECEIVED, delivery.assigned_robot, delivery.received_at)
         return delivery
 
     # ---- 내부 ----------------------------------------------------------------

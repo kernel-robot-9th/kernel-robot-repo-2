@@ -4,6 +4,7 @@
 # 작성일 : 2026-10-14
 # 구성   :
 #   - DeliveryService  create/list_for_nurse/get/update/cancel (간호사 쪽), restore_stock (취소·실패 공용)
+#                      예약·변경·취소는 배송 기록(delivery_events)에도 남긴다 (2026-10-21)
 # 로봇 쪽(배송 가져가기·진행 보고·수령 확인)은 app/services/dispatch.py (2026-10-20)
 # =============================================================================
 from __future__ import annotations
@@ -14,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import BadRequest, Conflict, Forbidden, NotFound
 from app.models.delivery import Delivery, DeliveryItem
-from app.models.enums import DeliveryStatus
+from app.models.enums import DeliveryEventType, DeliveryStatus
 from app.models.location import Location
 from app.repositories.delivery import DeliveryRepository
 from app.repositories.location import LocationRepository
@@ -22,6 +23,7 @@ from app.repositories.supply import SupplyRepository
 from app.schemas.delivery import (
     DeliveryCreate, DeliveryItemIn, DeliveryUpdate,
 )
+from app.services.delivery_events import DeliveryEventRecorder, DeliverySnapshot
 from app.services.low_stock import LowStockNotifier, is_low_stock
 
 
@@ -36,6 +38,7 @@ class DeliveryService:
         self.supplies = SupplyRepository(db)
         self.locations = LocationRepository(db)
         self.low_stock_notifier = LowStockNotifier(db)
+        self.events = DeliveryEventRecorder(db)
 
     def create(self, data: DeliveryCreate, nurse_id: int) -> Delivery:
         """예약 등록.
@@ -46,10 +49,14 @@ class DeliveryService:
         self._validate_destination(data.destination_location_id)
         self._validate_items(data.items)
         self._adjust_stock(self._quantities(data.items))
-        return self.repo.add(Delivery(
+        delivery = self.repo.add(Delivery(
             nurse_id=nurse_id, destination_location_id=data.destination_location_id, scheduled_at=data.scheduled_at,
             items=self._to_items(data.items),
         ))
+        self.events.record_by_nurse(
+            delivery, DeliveryEventType.RESERVED, nurse_id, datetime.now(UTC), self.events.reserved_details(delivery),
+        )
+        return delivery
 
     def list_for_nurse(
         self, nurse_id: int, status: DeliveryStatus | None = None, limit: int = 100, offset: int = 0,
@@ -78,6 +85,7 @@ class DeliveryService:
         [출력] Delivery (reserved 아니면 Conflict)
         """
         delivery = self._get_reserved(delivery_id, nurse_id)
+        before = DeliverySnapshot.of(delivery)
         if data.scheduled_at is not None:
             self._validate_scheduled_at(data.scheduled_at)
             delivery.scheduled_at = data.scheduled_at
@@ -94,6 +102,9 @@ class DeliveryService:
                 for supply_id in previous_quantities.keys() | new_quantities.keys()
             })
             self.repo.replace_items(delivery, self._to_items(data.items))
+        changes = self.events.update_changes(before, DeliverySnapshot.of(delivery))
+        if changes:   # 같은 값을 다시 보낸 변경은 기록하지 않는다
+            self.events.record_by_nurse(delivery, DeliveryEventType.UPDATED, nurse_id, datetime.now(UTC), changes)
         return delivery
 
     def cancel(self, delivery_id: int, nurse_id: int) -> Delivery:
@@ -104,6 +115,7 @@ class DeliveryService:
         delivery = self._get_reserved(delivery_id, nurse_id)
         self.restore_stock(delivery)
         delivery.status = DeliveryStatus.CANCELLED
+        self.events.record_by_nurse(delivery, DeliveryEventType.CANCELLED, nurse_id, datetime.now(UTC))
         return delivery
 
     def restore_stock(self, delivery: Delivery) -> None:
