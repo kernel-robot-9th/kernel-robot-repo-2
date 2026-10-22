@@ -6,6 +6,7 @@ claim_period_s: 3.0         # 배송을 가져갈지 묻는 주기
 navigation_timeout_s: 180.0 # 목적지·복귀 주행 한 번의 최대 시간 — 넘으면 Nav2 목표를 취소하고 실패로 본다
 map_wait_s: 10.0            # 시작할 때 로봇 /map을 기다리는 시간 (EMR 맵과 같은지 확인)
 receipt_debounce_s: 3.0     # 카메라가 같은 마커 번호를 계속 내보내도 이 간격에 한 번만 EMR에 보낸다
+receipt_poll_s: 2.0         # 수령 대기 중 /robot/me 확인 주기 — 병상 배송 "받았습니다" 버튼 수령을 알아차림 (2026-10-22)
 
 robots:
   pinky_1:

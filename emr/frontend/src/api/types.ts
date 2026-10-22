@@ -8,6 +8,7 @@
 //   - 마스터    Supply, Map, Location, Robot
 //   - 배송      Delivery, DeliveryItem, DeliveryCreate, DeliveryUpdate
 //   - 배송 기록 DeliveryEvent, AdminDeliveryEvent, DeliveryEventFilters, DELIVERY_EVENT_LABEL (2026-10-21, 로드맵 4단계)
+//   - 병상 단말 BedsideDevice, BedsideApiKey (관리자), BedsideMe·BedsideSupply·BedsideDelivery·BedsideRequest (환자 화면, 2026-10-22)
 //   - 알림      NotificationEventType, LowStockEvent, DeliveryReceivedEvent (SSE /notifications/stream)
 // =============================================================================
 // [검토 필요] 손으로 옮긴 타입이다. 백엔드 기동 후 `npm run gen`으로 src/api/schema.d.ts를 만들고
@@ -126,6 +127,57 @@ export interface RobotApiKey {
   issued_at: string
 }
 
+// ---------- 병상 단말 (2026-10-22) ----------
+/** 관리자: 병상 단말 (GET /bedside-devices) */
+export interface BedsideDevice {
+  id: number
+  name: string            // 예: 301호-1
+  location_id: number     // 병실 — 요청한 배송의 목적지
+  has_api_key: boolean
+  api_key_issued_at: string | null
+  updated_at: string
+}
+export interface BedsideDeviceCreate {
+  name: string
+  location_id: number
+}
+export type BedsideDeviceUpdate = Partial<BedsideDeviceCreate>
+/** POST /bedside-devices/{id}/api-key 응답. api_key는 다시 조회할 수 없다 */
+export interface BedsideApiKey {
+  bedside_device_id: number
+  api_key: string
+  issued_at: string
+}
+/** 환자 화면 (X-Bedside-Api-Key) — 마커·간호사 정보·재고 수량 없음 */
+export interface BedsideDelivery {
+  id: number
+  status: DeliveryStatus
+  created_at: string
+  items: { name: string; quantity: number }[]
+  assigned_robot_name: string | null
+  dispatched_at: string | null
+  arrived_at: string | null
+  received_at: string | null
+  failed_at: string | null
+  failure_reason: DeliveryFailureReason | null
+  receipt_deadline_at: string | null
+}
+export interface BedsideMe {
+  id: number
+  name: string
+  room: { id: number; name: string; has_position: boolean }
+  active_delivery: BedsideDelivery | null
+}
+export interface BedsideSupply {
+  id: number
+  name: string
+  in_stock: boolean
+}
+export interface BedsideRequest {
+  items: { supply_id: number; quantity: number }[]   // 품목당 1–5
+}
+export const BEDSIDE_MAX_QUANTITY = 5
+
 // ---------- 배송 ----------
 /** 예약 → 출발(로봇이 맡음) → 도착(일회용 마커 생김) → 수령(로봇이 마커를 읽음). 예약만 간호사가 취소 가능,
  *  출발·도착에서 실패하면 failed(재고 복구). docs/api_contract_delivery_2026-10-20.md (2026-10-20) */
@@ -138,9 +190,13 @@ export interface DeliveryItem {
   supply_id: number
   quantity: number
 }
+/** 배송을 만든 쪽: 간호사 예약(수령 = 일회용 마커) · 병상 단말 환자 요청(수령 = "받았습니다" 버튼, 2026-10-22) */
+export type DeliveryRequester = 'nurse' | 'bedside'
 export interface Delivery {
   id: number
-  nurse_id: number
+  nurse_id: number | null              // 병상 요청이면 null
+  requester_type: DeliveryRequester
+  bedside_name: string | null          // 요청한 병상 (병상 요청일 때)
   destination_location_id: number
   scheduled_at: string // ISO 8601
   status: DeliveryStatus
@@ -218,15 +274,16 @@ export interface DeliveryEvent {
   delivery_id: number
   event_type: DeliveryEventType
   occurred_at: string
-  actor_type: 'nurse' | 'robot'
-  actor_name: string              // 간호사 이름 또는 로봇 이름(당시 — 로봇을 지워도 남음)
+  actor_type: 'nurse' | 'robot' | 'bedside'
+  actor_name: string              // 간호사 이름, 로봇 이름 또는 병상 이름(당시 — 지워도 남음)
   actor_robot_id: number | null   // 로봇을 지웠으면 null
   details: ReservedEventDetails | UpdatedEventDetails | FailedEventDetails | null  // 일회용 마커 번호는 없다
 }
 /** 관리자 기록 화면 (GET /delivery-events) */
 export interface AdminDeliveryEvent extends DeliveryEvent {
   destination_location_name: string  // 지금 이름
-  nurse_name: string                 // 예약한 간호사
+  requester_type: DeliveryRequester
+  requester_name: string            // 예약한 간호사 이름 또는 병상 이름 (2026-10-22, 전 nurse_name)
 }
 /** 관리자 기록 화면 거르기. since는 포함, until은 미포함 (ISO, 시간대 포함) */
 export interface DeliveryEventFilters {
@@ -271,8 +328,9 @@ export interface LowStockEvent {
 /** SSE data. 배송 단계 알림 공통 — 예약한 간호사에게 온다(실패는 관리자에게도) (2026-10-19·20) */
 export interface DeliveryStageEvent {
   event: 'delivery_dispatched' | 'delivery_arrived' | 'delivery_received' | 'delivery_failed'
-  recipient_nurse_id: number
+  recipient_nurse_id: number | null  // 병상(환자) 요청이면 null — 실패만 관리자에게 온다 (2026-10-22)
   recipient_role?: string            // delivery_failed: 'admin'
+  bedside_name?: string | null       // 병상 요청이면 병상 이름
   delivery_id: number
   destination_location_name: string
   robot_name: string | null          // 로봇이 지워졌으면 null

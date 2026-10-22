@@ -1,5 +1,6 @@
 # 배송 배정·진행 API 계약 — EMR ↔ 관제 PC 배송 실행기 (2026-10-20)
 
+- 환자(병상 단말) 배송 추가(2026-10-22): 8장.
 - 구현(2026-10-20): EMR 마이그레이션 0008·`app/services/dispatch.py`·`delivery_notifier.py`·배송 화면, 관제 PC `robot/src/fms/delivery_executor`. 실제 EMR + 가짜 Nav2(도메인 77)로 확인, **실물 Pinky 종단 시험은 비품실 모방학습이 끝난 뒤**.
 - 범위: EMR 로드맵 2단계(배송 배정·진행) + 간호사 알림(5단계 일부). 양쪽(`emr/`, `robot/src/fms/delivery_executor`)이 이 문서를 기준으로 구현한다. 바꿀 때는 이 문서부터 고친다.
 - 사용자 결정(2026-10-20): 로봇 쪽이 EMR을 조회(claim) · 예약 시각이 지난 것부터 한 건씩 · 적재 없이 출발 · 수령은 **알림에 뜨는 일회용 마커를 로봇이 읽어서만** · 실패하면 재고 자동 복구 · 도착 후 5분 미수령이면 실패 + 복귀.
@@ -99,10 +100,12 @@ reserved ──(로봇 claim)──▶ dispatched ──(로봇 도착 보고)�
   "items": [{"name": "A 약품", "quantity": 3}],
   "dispatched_at": "2026-10-20T03:00:02Z",
   "arrived_at": null,
-  "receipt_deadline_at": null
+  "receipt_deadline_at": null,
+  "receipt_method": "marker"
 }
 ```
 - `receipt_deadline_at` = `arrived_at + receipt_wait_seconds` (arrived일 때만).
+- `receipt_method` (2026-10-22): `marker` = 간호사 배송, 로봇이 일회용 마커를 읽어 `receipt` 호출 / `button` = 환자(병상) 배송, 환자가 병상 화면 "받았습니다"로 수령(8장). `button`이면 로봇의 `receipt` 호출은 409 `delivery_receipt_by_button`.
 - 넣지 않는 것: 일회용 마커, 간호사 이름·id.
 
 ### 3.5 `POST /robot/deliveries/{id}/receipt` — 수령 확인 (기존 API, 규칙 변경)
@@ -114,6 +117,7 @@ reserved ──(로봇 claim)──▶ dispatched ──(로봇 도착 보고)�
 | 오류 | 코드 |
 |---|---|
 | 409 | `delivery_not_arrived` — 아직 도착 전이거나 끝난 배송 |
+| 409 | `delivery_receipt_by_button` — 환자(병상) 배송은 마커로 받지 않음 (2026-10-22) |
 | 403 | `delivery_not_assigned_to_robot` |
 | 403 | `receipt_marker_not_for_delivery` — 번호가 이 배송의 마커가 아님(간호사 고정 마커 포함) |
 | 422 | 번호가 0–249 밖 |
@@ -126,6 +130,7 @@ reserved ──(로봇 claim)──▶ dispatched ──(로봇 도착 보고)�
 4. Nav2 `navigate_to_pose`(map 프레임, 목적지 x·y·yaw). 성공 → `progress arrived`. 실패·시간 초과 → `failed navigation_failed` → 복귀.
 5. 도착 후 ROS 토픽 `receipt_marker`(std_msgs/Int32, 카메라 마커 노드가 발행 — 카메라가 없으면 사람이 `ros2 topic pub`)에서 번호를 받아 `receipt` 호출. 같은 번호는 3초에 한 번만 보낸다. 403이면 계속 기다린다.
 6. `receipt_deadline_at`까지 수령이 없으면 `failed not_received` → 복귀. `409 delivery_already_received`면 성공으로 본다.
+   대기 중 `receipt_poll_s`(기본 2초)마다 `GET /robot/me`를 불러 `active_delivery`가 없거나 다른 배송이면 **수령된 것**으로 보고 복귀한다 — 환자 배송의 버튼 수령을 알아차리는 방법 (2026-10-22).
 7. 복귀 주행 실패는 로그만 남기고 다음 claim을 하지 않는다(사람 확인 필요).
 
 설정(`robot/src/fms/delivery_executor/config/executor.yaml`): EMR 주소, 로봇별 이름·EMR 로봇 id·ROS 도메인·키 파일 경로(권한 600, 저장소 밖)·금지 장소 id, claim 주기, 주행 제한 시간.
@@ -153,3 +158,45 @@ reserved ──(로봇 claim)──▶ dispatched ──(로봇 도착 보고)�
 - 관리자 강제 실패(실행기가 죽어 `arrived`로 남은 배송) — 지금은 실행기 재시작으로 이어서 처리.
 - 카메라 마커 노드(Pinky 카메라 드라이버 + `DICT_4X4_250` 검출 → `receipt_marker` 발행) — 로봇 쪽 별도 과제.
 - 로봇 상태 보고(3단계)·배터리·끊김 알림.
+
+## 8. 환자(병상 단말) 배송 (2026-10-22)
+
+사용자 결정: 환자 비품 요청(SR-02) + "받았습니다" 버튼 수령(SR-06), **간호사 승인 없이 바로**, 환자 식별은 **병상 단말 키**(환자 개인정보 저장 안 함), 알림은 **실패만 관리자에게**, **병상당 진행 중 1건**.
+
+```
+환자 요청 ──▶ reserved(scheduled_at = 요청 시각, 목적지 = 병상의 병실) ──▶ 로봇 claim(3.2 그대로) ──▶ dispatched ──▶ arrived
+                                                                                  │ 마커는 내부에만 만들고 보여 주지 않음
+                                     환자 병상 화면 "받았습니다" ─▶ received        └ 5분 미수령 ─▶ failed (재고 복구, 관리자 알림)
+```
+
+### 8.1 관리자 — 병상 단말 등록 (간호사 JWT, 관리자만)
+| API | 내용 |
+|---|---|
+| `GET/POST /bedside-devices`, `PATCH/DELETE /bedside-devices/{id}` | 병상 이름(유일, 예 `301호-1`)·병실 장소. 진행 중 배송이 있으면 삭제 409 `bedside_has_active_delivery` |
+| `POST /bedside-devices/{id}/api-key` (201) · `DELETE …/api-key` (204) | 키 발급(평문은 응답에 한 번, `emr_bk_…`)·폐기. 재발급하면 이전 키 무효 |
+- 병상이 쓰는 장소는 삭제할 수 없다(409 `location_is_bedside_room`).
+
+### 8.2 병상 단말 API — 헤더 `X-Bedside-Api-Key` (간호사 JWT와 별개)
+키 오류는 401 `bedside_key_missing`·`bedside_key_invalid`.
+
+| API | 내용 |
+|---|---|
+| `GET /bedside/me` | 병상 이름, 병실(이름·좌표가 있는지), 진행 중 배송(없으면 null) |
+| `GET /bedside/supplies` | 환자가 요청할 수 있는 품목(`requestable_by = patient`, 삭제 안 됨): id·이름·재고 있음 여부(수량은 숨김) |
+| `POST /bedside/requests` `{"items": [{"supply_id": 3, "quantity": 1}]}` | 배송을 바로 만든다(201). 품목당 수량 1–5 |
+| `GET /bedside/deliveries` | 이 병상의 최근 배송 10건 (마커 없음) |
+| `POST /bedside/deliveries/{id}/receipt` | 도착한 이 병상의 배송을 수령 처리(200) |
+
+| 오류 | 코드 |
+|---|---|
+| 400 | `supply_not_found`, `supply_not_patient_requestable`, `delivery_item_duplicate` |
+| 409 | `bedside_request_in_progress` — 진행 중(예약·출발·도착) 배송이 이미 있음 |
+| 409 | `bedside_room_has_no_position` — 병실에 맵 좌표가 없어 로봇이 갈 수 없음 |
+| 409 | `stock_insufficient` |
+| 409 | `delivery_not_arrived` (수령) · 403 `delivery_not_for_bedside` (다른 병상 배송) |
+
+### 8.3 정해진 것
+- 배송 행의 예약한 쪽: `requester_type` = `nurse` | `bedside`. 병상 배송은 `nurse_id`가 없고 `bedside_name`(스냅숏)이 있다.
+- 로봇 쪽은 3.2 claim 규칙 그대로 환자 배송도 가져간다. 3.4의 `receipt_method`가 `button`이면 마커를 기다릴 필요가 없고, 4장 6번의 `/robot/me` 확인으로 수령을 알아차린다.
+- 알림: 환자 배송의 출발·도착·수령은 간호사에게 보내지 않는다. 실패만 관리자에게(`delivery_failed`, `recipient_role: admin`).
+- 배송 기록: 행위자 `bedside`(병상 이름 스냅숏)로 예약·수령을 남긴다.

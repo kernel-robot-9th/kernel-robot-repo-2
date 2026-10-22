@@ -10,6 +10,7 @@
 #   - CurrentAdmin         관리자 필수 파라미터 타입 별칭, ADMIN_RESPONSES
 #   - get_current_robot()  X-Robot-Api-Key 헤더 → Robot (로봇 전용 API, 2026-10-19)
 #   - CurrentRobot         로봇 키 필수 파라미터 타입 별칭, ROBOT_RESPONSES
+#   - get_current_bedside() / CurrentBedside / BEDSIDE_RESPONSES   X-Bedside-Api-Key 헤더 → 병상 단말 (2026-10-22)
 # =============================================================================
 from __future__ import annotations
 
@@ -22,9 +23,11 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.exceptions import Forbidden, Unauthorized
 from app.core.security import decode_token, hash_robot_api_key
+from app.models.bedside_device import BedsideDevice
 from app.models.enums import NurseRole
 from app.models.nurse import Nurse
 from app.models.robot import Robot
+from app.repositories.bedside_device import BedsideDeviceRepository
 from app.repositories.robot import RobotRepository
 from app.services.auth import AuthService
 
@@ -97,3 +100,27 @@ def get_current_robot(db: DB, raw_api_key: Annotated[str | None, Depends(robot_a
 
 CurrentRobot: TypeAlias = Annotated[Robot, Depends(get_current_robot)]  # 라우터 파라미터 타입: 로봇 키 필수
 ROBOT_RESPONSES = {401: {"description": "로봇 키 없음·틀림·폐기됨 (robot_key_missing·robot_key_invalid)"}}
+
+
+# 병상 단말 키도 헤더를 따로 쓴다 (간호사 JWT·로봇 키와 섞이지 않게, 2026-10-22)
+bedside_api_key_scheme = APIKeyHeader(
+    name="X-Bedside-Api-Key", auto_error=False,
+    description="관리자가 POST /api/v1/bedside-devices/{id}/api-key로 발급한 병상 단말 키",
+)
+
+
+def get_current_bedside(db: DB, raw_api_key: Annotated[str | None, Depends(bedside_api_key_scheme)]) -> BedsideDevice:
+    """X-Bedside-Api-Key 헤더의 키로 병상 단말을 찾는다. 실패 시 401.
+    [입력] db / raw_api_key: 헤더 값
+    [출력] BedsideDevice: 키가 지금 유효한 단말 (병실 로드됨)
+    """
+    if not raw_api_key:
+        raise Unauthorized("missing bedside api key", code="bedside_key_missing")
+    device = BedsideDeviceRepository(db).get_by_api_key_hash(hash_robot_api_key(raw_api_key))
+    if device is None:
+        raise Unauthorized("invalid or revoked bedside api key", code="bedside_key_invalid")
+    return device
+
+
+CurrentBedside: TypeAlias = Annotated[BedsideDevice, Depends(get_current_bedside)]  # 라우터 파라미터 타입: 병상 단말 키 필수
+BEDSIDE_RESPONSES = {401: {"description": "병상 단말 키 없음·틀림·폐기됨 (bedside_key_missing·bedside_key_invalid)"}}

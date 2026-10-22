@@ -37,7 +37,11 @@ def delivery(status="dispatched", destination=ROOM_301, delivery_id=12, deadline
 
 
 class FakeEmr:
-    def __init__(self, clock, claims=(), active=None, home=HOME, robot_id=1, marker=137, receipt_after_failed_code=None):
+    """실제 EMR처럼 맡은 배송(active)을 따라간다: claim·도착이면 그 배송, 수령·실패면 없음.
+    button_received_after_s: 도착하고 이만큼 지나면 병상 "받았습니다" 버튼이 눌린 것으로 친다 (/robot/me의 active가 사라짐)."""
+
+    def __init__(self, clock, claims=(), active=None, home=HOME, robot_id=1, marker=137, receipt_after_failed_code=None,
+                 button_received_after_s=None):
         self.clock = clock
         self.claims = list(claims)
         self.active = active
@@ -45,10 +49,15 @@ class FakeEmr:
         self.robot_id = robot_id
         self.marker = marker
         self.receipt_after_failed_code = receipt_after_failed_code
+        self.button_received_after_s = button_received_after_s
+        self.arrived_at = None
         self.calls: list[tuple] = []
 
     def me(self):
         self.calls.append(("me",))
+        if (self.button_received_after_s is not None and self.arrived_at is not None
+                and self.clock() - self.arrived_at >= self.button_received_after_s):
+            self.active = None   # 병상에서 "받았습니다"
         return EmrResponse(200, {"robot": {"id": self.robot_id, "name": "배송로봇 1호", "robot_type": "amr"},
                                  "home_location": self.home, "active_delivery": self.active, "receipt_wait_seconds": 300})
 
@@ -56,19 +65,24 @@ class FakeEmr:
         self.calls.append(("claim",))
         if not self.claims:
             return EmrResponse(204, None)
-        return EmrResponse(200, self.claims.pop(0))
+        self.active = self.claims.pop(0)
+        return EmrResponse(200, self.active)
 
     def progress(self, delivery_id, stage, failure_reason=None):
         self.calls.append(("progress", delivery_id, stage, failure_reason))
         if stage == "failed" and self.receipt_after_failed_code:
             return EmrResponse(409, {"code": self.receipt_after_failed_code})
         if stage == "arrived":
-            return EmrResponse(200, delivery("arrived", delivery_id=delivery_id, deadline=self.clock.iso(300)))
+            self.arrived_at = self.clock()
+            self.active = delivery("arrived", delivery_id=delivery_id, deadline=self.clock.iso(300))
+            return EmrResponse(200, self.active)
+        self.active = None
         return EmrResponse(200, delivery("failed", delivery_id=delivery_id))
 
     def receipt(self, delivery_id, aruco_marker_id):
         self.calls.append(("receipt", delivery_id, aruco_marker_id))
         if aruco_marker_id == self.marker:
+            self.active = None
             return EmrResponse(200, delivery("received", delivery_id=delivery_id))
         return EmrResponse(403, {"code": "receipt_marker_not_for_delivery"})
 
@@ -131,6 +145,18 @@ def test_full_delivery_received_then_home():
     assert stages(emr) == [(12, "arrived", None), (12, 99), (12, 137)]
     assert navigator.goals == [(0.26, -0.92, 0.0), (-0.6, -1.55, 0.0)]   # 301호 → 간호사스테이션
     assert state.finished == [(12, "received")] and state.phase == "stopped"
+
+
+def test_bedside_button_receipt_is_noticed_through_robot_me():
+    """병상 배송 (2026-10-22): 마커 없이 EMR에서 "받았습니다" → 대기 중 /robot/me에 맡은 배송이 없어지면 수령으로 보고 복귀."""
+    clock = Clock()
+    emr = FakeEmr(clock, claims=[delivery()], button_received_after_s=10)
+    navigator = FakeNavigator()
+    state = make_worker(emr, navigator, FakeMarkers(clock), clock).run(max_cycles=3)
+    assert stages(emr) == [(12, "arrived", None)]                      # 마커 보고도, 실패 보고도 없다
+    assert state.finished == [(12, "received")]
+    assert navigator.goals[-1] == (-0.6, -1.55, 0.0)                   # 복귀
+    assert sum(1 for call in emr.calls if call[0] == "me") >= 2        # 대기 중 확인 (시작 1번 + 대기 중)
 
 
 def test_not_received_after_deadline_fails_and_returns_home():

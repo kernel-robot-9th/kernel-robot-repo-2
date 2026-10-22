@@ -13,11 +13,14 @@
 //   - useDeliveryEvents                        배송 한 건의 기록 (본인·관리자) — 2026-10-21
 //   - useDeliveryEventLog                      관리자 배송 기록 화면 (거르기 + 더 보기) — 2026-10-21
 //   - useLowStock                              재고 부족 비품 (알림창). 실시간 갱신은 features/notifications
+//   - useBedsideDevices / useBedsideDeviceMutations   관리자 병상 단말 (2026-10-22)
+//   - useBedsideMe / useBedsideSupplies / useBedsideMutations   병상 화면 — 병상 단말 키로 (bedsideApi)
 // =============================================================================
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api } from './client'
+import { api, bedsideApi } from './client'
 import type {
-  AdminDeliveryEvent, Delivery, DeliveryCreate, DeliveryEvent, DeliveryEventFilters, DeliveryUpdate,
+  AdminDeliveryEvent, BedsideApiKey, BedsideDelivery, BedsideDevice, BedsideDeviceCreate, BedsideDeviceUpdate,
+  BedsideMe, BedsideRequest, BedsideSupply, Delivery, DeliveryCreate, DeliveryEvent, DeliveryEventFilters, DeliveryUpdate,
   Location, MapInfo, Nurse, NurseCreate, NurseUpdate, PasswordChange, PasswordReset,
   Robot, RobotApiKey, Supply, SupplyCreate, SupplyUpdate,
 } from './types'
@@ -25,7 +28,7 @@ import { ACTIVE_DELIVERY_STATUSES } from './types'
 
 declare module '@tanstack/react-query' {
   interface Register {
-    mutationMeta: { action: string }   // 작업 이름. main.tsx가 실패 시 "<action>에 실패했습니다" 팝업을 띄운다
+    mutationMeta: { action: string; inline?: boolean }   // 작업 이름. main.tsx가 실패 시 "<action>에 실패했습니다" 팝업을 띄운다. inline이면 팝업 없이 화면이 안내
   }
 }
 
@@ -39,6 +42,8 @@ export const keys = {
   deliveries: ['deliveries'] as const,
   lowStock: ['notifications', 'low-stock'] as const,
   deliveryEventLog: ['delivery-events'] as const,
+  bedsideDevices: ['bedside-devices'] as const,
+  bedside: ['bedside'] as const,   // 병상 화면 (단말 키)
 }
 
 // ---------- 인증 ----------
@@ -249,3 +254,64 @@ export const useDeliveryEventLog = (filters: DeliveryEventFilters) =>
     getNextPageParam: (lastPage, pages) =>
       lastPage.length < DELIVERY_EVENT_PAGE_SIZE ? undefined : pages.length * DELIVERY_EVENT_PAGE_SIZE,
   })
+
+// ---------- 병상 단말 — 관리자 (2026-10-22) ----------
+export const useBedsideDevices = () =>
+  useQuery({ queryKey: keys.bedsideDevices, queryFn: () => api.get<BedsideDevice[]>('/bedside-devices') })
+
+export function useBedsideDeviceMutations() {
+  const qc = useQueryClient()
+  const invalidate = () => qc.invalidateQueries({ queryKey: keys.bedsideDevices })
+  return {
+    create: useMutation({ mutationFn: (b: BedsideDeviceCreate) => api.post<BedsideDevice>('/bedside-devices', b), onSuccess: invalidate, meta: { action: '병상 단말 등록' } }),
+    update: useMutation({
+      mutationFn: ({ id, body }: { id: number; body: BedsideDeviceUpdate }) => api.patch<BedsideDevice>(`/bedside-devices/${id}`, body),
+      onSuccess: invalidate,
+      meta: { action: '병상 단말 수정' },
+    }),
+    remove: useMutation({ mutationFn: (id: number) => api.del(`/bedside-devices/${id}`), onSuccess: invalidate, meta: { action: '병상 단말 삭제' } }),
+    // 병상 단말 키 — 발급 응답의 키는 다시 볼 수 없다
+    issueApiKey: useMutation({
+      mutationFn: (id: number) => api.post<BedsideApiKey>(`/bedside-devices/${id}/api-key`),
+      onSuccess: invalidate,
+      meta: { action: '병상 단말 키 발급' },
+    }),
+    revokeApiKey: useMutation({ mutationFn: (id: number) => api.del(`/bedside-devices/${id}/api-key`), onSuccess: invalidate, meta: { action: '병상 단말 키 폐기' } }),
+  }
+}
+
+// ---------- 병상 화면 — 단말 키 (2026-10-22) ----------
+/** 진행 중 배송이 있으면 5초, 없으면 30초마다 새로 고친다 (로봇이 상태를 바꾼다).
+ *  [입력] enabled: 단말 키가 있을 때만 */
+export const useBedsideMe = (enabled: boolean) =>
+  useQuery({
+    queryKey: [...keys.bedside, 'me'],
+    queryFn: () => bedsideApi.get<BedsideMe>('/bedside/me'),
+    enabled,
+    retry: false,
+    refetchInterval: query => (query.state.data?.active_delivery ? ACTIVE_DELIVERIES_REFETCH_MS : DELIVERIES_REFETCH_MS),
+  })
+
+export const useBedsideSupplies = (enabled: boolean) =>
+  useQuery({ queryKey: [...keys.bedside, 'supplies'], queryFn: () => bedsideApi.get<BedsideSupply[]>('/bedside/supplies'), enabled, retry: false })
+
+/** 최근 배송 — 진행 중이 끝난 직후의 결과(받음·실패)를 보여 주려고 */
+export const useBedsideDeliveries = (enabled: boolean) =>
+  useQuery({ queryKey: [...keys.bedside, 'deliveries'], queryFn: () => bedsideApi.get<BedsideDelivery[]>('/bedside/deliveries'), enabled, retry: false })
+
+export function useBedsideMutations() {
+  const qc = useQueryClient()
+  const invalidate = () => qc.invalidateQueries({ queryKey: keys.bedside })
+  return {
+    request: useMutation({
+      mutationFn: (body: BedsideRequest) => bedsideApi.post<BedsideDelivery>('/bedside/requests', body),
+      onSettled: invalidate,
+      meta: { action: '비품 요청', inline: true },
+    }),
+    confirmReceipt: useMutation({
+      mutationFn: (deliveryId: number) => bedsideApi.post<BedsideDelivery>(`/bedside/deliveries/${deliveryId}/receipt`),
+      onSettled: invalidate,
+      meta: { action: '수령 확인', inline: true },
+    }),
+  }
+}

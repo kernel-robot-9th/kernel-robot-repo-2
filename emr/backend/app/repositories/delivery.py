@@ -5,6 +5,7 @@
 # 구성   :
 #   - DeliveryRepository  get_with_items, list_by_nurse, replace_items
 #                         배정·진행 (2026-10-20): get_active_for_robot, lock_next_claimable, arrived_receipt_marker_ids
+#                         병상 요청 (2026-10-22): get_active_for_bedside, list_for_bedside
 # =============================================================================
 from __future__ import annotations
 
@@ -19,6 +20,8 @@ from app.models.location import Location
 from app.repositories.base import BaseRepository
 
 ACTIVE_STATUSES = (DeliveryStatus.DISPATCHED, DeliveryStatus.ARRIVED)
+# 병상 기준 진행 중 = 예약·출발·도착 (병상당 하나 — uq_deliveries_bedside_active)
+BEDSIDE_ACTIVE_STATUSES = (DeliveryStatus.RESERVED, DeliveryStatus.DISPATCHED, DeliveryStatus.ARRIVED)
 
 
 def _with_details():
@@ -71,6 +74,29 @@ class DeliveryRepository(BaseRepository[Delivery]):
             .where(Delivery.assigned_robot_id == robot_id, Delivery.status.in_(ACTIVE_STATUSES))
         )
         return self.db.scalar(statement)
+
+    def get_active_for_bedside(self, bedside_device_id: int) -> Delivery | None:
+        """병상의 진행 중(예약·출발·도착) 배송. 부분 유일 인덱스로 많아야 하나 (2026-10-22).
+        [입력] bedside_device_id
+        [출력] Delivery | None
+        """
+        statement = (
+            select(Delivery).options(*_with_details())
+            .where(Delivery.bedside_device_id == bedside_device_id, Delivery.status.in_(BEDSIDE_ACTIVE_STATUSES))
+        )
+        return self.db.scalar(statement)
+
+    def list_for_bedside(self, bedside_device_id: int, limit: int = 10) -> list[Delivery]:
+        """병상의 최근 배송, 최근 것부터 (2026-10-22).
+        [입력] bedside_device_id / limit
+        [출력] list[Delivery]
+        """
+        statement = (
+            select(Delivery).options(*_with_details())
+            .where(Delivery.bedside_device_id == bedside_device_id)
+            .order_by(Delivery.created_at.desc(), Delivery.id.desc()).limit(limit)
+        )
+        return list(self.db.scalars(statement))
 
     def lock_next_claimable(self, now: datetime, map_id: int) -> Delivery | None:
         """로봇이 가져갈 다음 배송을 잠가서 가져온다: reserved이고 예약 시각이 지났고, 목적지에 그 맵의 좌표가 있는 것 중

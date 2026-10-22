@@ -9,6 +9,7 @@
 import { createBrowserRouter, redirect } from 'react-router'
 import { auth } from './api/client'
 import { Layout } from './components/Layout'
+import { Bedside } from './pages/Bedside'
 import { Deliveries } from './pages/Deliveries'
 import { DeliveryLog } from './pages/DeliveryLog'
 import { Login } from './pages/Login'
@@ -22,6 +23,7 @@ const requireAuth = () => (auth.get() ? null : redirect('/login'))
 
 export const router = createBrowserRouter([
   { path: '/login', Component: Login },
+  { path: '/bedside', Component: Bedside },   // 병상 화면 — 간호사 로그인과 별개, 병상 단말 키 (2026-10-22)
   {
     path: '/',
     Component: Layout,

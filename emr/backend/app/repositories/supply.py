@@ -40,6 +40,15 @@ class SupplyRepository(BaseRepository[Supply]):
         )
         return list(self.db.scalars(statement.order_by(Supply.stock_qty, Supply.code)))
 
+    def list_requestable_by(self, requestable_by: str) -> list[Supply]:
+        """요청 주체가 요청할 수 있는 비품, 이름 순 (환자 요청 화면 — 2026-10-22).
+        [입력] requestable_by: nurse | patient
+        [출력] list[Supply]: 삭제 표시 안 된 것만
+        """
+        statement = (select(Supply).where(Supply.is_deleted.is_(False), Supply.requestable_by == requestable_by)
+                     .order_by(Supply.name, Supply.id))
+        return list(self.db.scalars(statement))
+
     def get_by_code(self, code: str) -> Supply | None:
         """고유번호로 조회 (등록 시 중복 검사).
         [입력] code

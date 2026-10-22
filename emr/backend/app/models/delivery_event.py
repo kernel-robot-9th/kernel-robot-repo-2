@@ -23,13 +23,17 @@ if TYPE_CHECKING:
     from app.models.delivery import Delivery
     from app.models.nurse import Nurse
 
-# 아래 SQL은 마이그레이션 0009에 같은 문자열로 들어 있다 — 바꾸면 새 마이그레이션으로
+# 아래 SQL은 마이그레이션 0009(사건 종류)·0010(행위자 — bedside 추가)에 같은 문자열로 들어 있다 — 바꾸면 새 마이그레이션으로
 EVENT_TYPE_SQL = f"event_type IN ({check_values(DeliveryEventType)})"
 ACTOR_TYPE_SQL = f"actor_type IN ({check_values(DeliveryEventActor)})"
-# 간호사 사건은 간호사 id가, 로봇 사건은 로봇 이름(스냅숏)이 있다. 로봇 id는 로봇을 지우면 NULL이 될 수 있다
+# 간호사 사건은 간호사 id가, 로봇 사건은 로봇 이름(스냅숏)이, 병상 사건은 병상 이름(스냅숏)이 있다.
+# 로봇 id는 로봇을 지우면 NULL이 될 수 있다
 ACTOR_CONSISTENCY_SQL = (
-    "(actor_type = 'nurse' AND actor_nurse_id IS NOT NULL AND actor_robot_id IS NULL AND actor_robot_name IS NULL)"
-    " OR (actor_type = 'robot' AND actor_nurse_id IS NULL AND actor_robot_name IS NOT NULL)"
+    "(actor_type = 'nurse' AND actor_nurse_id IS NOT NULL AND actor_robot_id IS NULL AND actor_robot_name IS NULL"
+    " AND actor_bedside_name IS NULL)"
+    " OR (actor_type = 'robot' AND actor_nurse_id IS NULL AND actor_robot_name IS NOT NULL AND actor_bedside_name IS NULL)"
+    " OR (actor_type = 'bedside' AND actor_nurse_id IS NULL AND actor_robot_id IS NULL AND actor_robot_name IS NULL"
+    " AND actor_bedside_name IS NOT NULL)"
 )
 
 
@@ -59,6 +63,7 @@ class DeliveryEvent(Base):
         ForeignKey("robots.id", name="fk_delivery_events_actor_robot_id", ondelete="SET NULL"), index=True
     )
     actor_robot_name: Mapped[str | None] = mapped_column(String(64))  # 로봇 이름 스냅숏 (지워져도 누가 했는지 남김)
+    actor_bedside_name: Mapped[str | None] = mapped_column(String(64))  # 병상 이름 스냅숏 (환자 요청·받았습니다, 2026-10-22)
     details: Mapped[dict[str, Any] | None] = mapped_column(JSONB)  # 사건별 내용 (app/services/delivery_events.py)
 
     delivery: Mapped[Delivery] = relationship()
@@ -68,10 +73,12 @@ class DeliveryEvent(Base):
     def actor_name(self) -> str:
         """누가 했는지 화면에 보일 이름.
         [입력] 없음
-        [출력] str: 간호사 이름 또는 로봇 이름 스냅숏
+        [출력] str: 간호사 이름, 로봇 이름 스냅숏 또는 병상 이름 스냅숏
         """
         if self.actor_type == DeliveryEventActor.NURSE and self.actor_nurse is not None:
             return self.actor_nurse.name
+        if self.actor_type == DeliveryEventActor.BEDSIDE:
+            return self.actor_bedside_name or ""
         return self.actor_robot_name or ""
 
     @property
@@ -83,9 +90,17 @@ class DeliveryEvent(Base):
         return self.delivery.destination_location.name
 
     @property
-    def nurse_name(self) -> str:
-        """배송을 예약한 간호사 이름 (관리자 기록 화면).
+    def requester_name(self) -> str:
+        """배송을 예약한 쪽 이름 (관리자 기록 화면): 간호사 이름 또는 병상 이름 (2026-10-22, 전 nurse_name).
         [입력] 없음
         [출력] str
         """
-        return self.delivery.nurse.name
+        return self.delivery.requester_name
+
+    @property
+    def requester_type(self) -> str:
+        """배송을 예약한 쪽 종류: nurse | bedside.
+        [입력] 없음
+        [출력] str
+        """
+        return self.delivery.requester_type

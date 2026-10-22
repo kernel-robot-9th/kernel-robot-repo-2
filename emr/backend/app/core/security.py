@@ -8,6 +8,7 @@
 #   - create_access_token()  JWT 발급
 #   - decode_token()         JWT 검증 → 간호사 id
 #   - generate_robot_api_key() / hash_robot_api_key()   로봇별 API 키 발급·해시 (수령 확인용, 2026-10-19)
+#   - generate_bedside_api_key()   병상 단말 키 발급 (해시는 hash_robot_api_key와 같은 sha256, 2026-10-22)
 # =============================================================================
 from __future__ import annotations
 
@@ -21,6 +22,7 @@ import jwt
 from app.core.config import settings
 
 ROBOT_API_KEY_PREFIX = "emr_rk_"   # 로그·설정 파일에서 EMR 로봇 키임을 알아보게
+BEDSIDE_API_KEY_PREFIX = "emr_bk_"  # 병상 단말 키 (2026-10-22)
 
 
 def hash_password(raw_password: str) -> str:
@@ -70,6 +72,14 @@ def generate_robot_api_key() -> str:
     [출력] str: "emr_rk_..." 평문. 발급 응답에서 한 번만 보여 주고 저장·로그하지 않는다
     """
     return ROBOT_API_KEY_PREFIX + secrets.token_urlsafe(32)
+
+
+def generate_bedside_api_key() -> str:
+    """병상 단말에 줄 무작위 API 키 (256비트, 2026-10-22). 해시는 hash_robot_api_key로 (같은 sha256).
+    [입력] 없음
+    [출력] str: "emr_bk_..." 평문. 발급 응답에서 한 번만 보여 준다
+    """
+    return BEDSIDE_API_KEY_PREFIX + secrets.token_urlsafe(32)
 
 
 def hash_robot_api_key(raw_api_key: str) -> str:

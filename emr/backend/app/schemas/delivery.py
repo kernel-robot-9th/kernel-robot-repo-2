@@ -66,7 +66,9 @@ class DeliveryOut(OrmOut):
     """배송 응답 (간호사용). 본인 예약만 나가므로 일회용 수령 마커를 넣는다 — 로봇용 응답(RobotDeliveryOut)에는 없다."""
 
     id: int
-    nurse_id: int = Field(description="예약한 간호사")
+    nurse_id: int | None = Field(description="예약한 간호사 (병상 요청이면 null)")
+    requester_type: str = Field(description="nurse(간호사 예약) | bedside(병상 단말 환자 요청, 2026-10-22)")
+    bedside_name: str | None = Field(description="요청한 병상 이름 (병상 요청일 때)")
     destination_location_id: int
     destination_location: LocationOut = Field(description="배송 위치 상세 (이름·맵 좌표)")
     scheduled_at: datetime
@@ -142,6 +144,8 @@ class RobotDeliveryOut(OrmOut):
     dispatched_at: datetime | None
     arrived_at: datetime | None
     receipt_deadline_at: datetime | None = Field(description="arrived일 때 수령 마감 시각. 지나면 failed not_received로 보고")
+    receipt_method: str = Field(description="marker = 간호사 배송(일회용 마커를 읽어 receipt) | button = 병상 배송(환자가 "
+                                            "'받았습니다' — 대기 중 /robot/me로 알아차림, 2026-10-22)")
 
 
 class RobotBriefOut(OrmOut):

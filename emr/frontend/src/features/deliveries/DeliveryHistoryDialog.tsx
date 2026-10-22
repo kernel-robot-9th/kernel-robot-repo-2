@@ -42,7 +42,7 @@ export function DeliveryHistoryDialog({ deliveryId, onClose }: { deliveryId: num
                 <span className="w-12 shrink-0"><Badge value={event.event_type} label={DELIVERY_EVENT_LABEL[event.event_type]} /></span>
                 <span className="flex-1">
                   <span className="font-medium">{event.actor_name}</span>
-                  <span className="text-slate-500">{event.actor_type === 'robot' ? ' (로봇)' : ''}</span>
+                  <span className="text-slate-500">{{ robot: ' (로봇)', bedside: ' (병상)', nurse: '' }[event.actor_type]}</span>
                   {describeEvent(event) && <span className="block text-slate-600">{describeEvent(event)}</span>}
                 </span>
               </li>

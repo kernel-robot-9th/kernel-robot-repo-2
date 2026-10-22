@@ -23,7 +23,7 @@ const NAV: { to: string; label: string; adminOnly?: boolean }[] = [
   { to: '/map', label: '맵' },
   { to: '/supplies', label: '비품' },
   { to: '/nurses', label: '간호사' },
-  { to: '/sites', label: '장소·맵·로봇' },
+  { to: '/sites', label: '장소·맵·로봇·병상' },
   { to: '/delivery-log', label: '배송 기록', adminOnly: true },   // 2026-10-21
 ]
 

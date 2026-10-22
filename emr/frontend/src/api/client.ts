@@ -10,6 +10,7 @@
 //   - apiUrl()             <img> 등에 쓸 API 주소
 //   - api                  get/post/patch/del 단축
 //   - streamServerSentEvents()  로그인 헤더를 붙인 SSE 읽기 (EventSource는 헤더를 못 붙여 토큰이 URL에 남는다)
+//   - bedsideKey / bedsideApi   병상 단말 키(X-Bedside-Api-Key) 저장·호출 — 간호사 토큰과 따로 (2026-10-22). 401이면 단말 키만 지운다
 // =============================================================================
 // 기본은 같은 주소의 /api/v1 (Vite 프록시가 백엔드로 넘김). 백엔드를 다른 주소로 직접 부를 때만 VITE_API_URL로 바꾼다
 const BASE_URL: string = import.meta.env.VITE_API_URL || '/api/v1'
@@ -99,6 +100,51 @@ export const api = {
   put: <T>(path: string, body: unknown) => request<T>('PUT', path, body),
   del: <T = void>(path: string) => request<T>('DELETE', path),
 }
+
+// ---------- 병상 단말 (2026-10-22) ----------
+const BEDSIDE_KEY = 'emr_bedside_key'
+/** 병상 단말 키 저장 — 간호사 로그인 토큰(emr_token)과 따로. localStorage를 못 쓰면 이 탭에서만 유지 */
+let bedsideKeyInMemory: string | null = null
+export const bedsideKey = {
+  get(): string | null {
+    try { return localStorage.getItem(BEDSIDE_KEY) ?? bedsideKeyInMemory } catch { return bedsideKeyInMemory }
+  },
+  set(key: string) {
+    bedsideKeyInMemory = key
+    try { localStorage.setItem(BEDSIDE_KEY, key) } catch { /* 사생활 모드 등 — 메모리에만 */ }
+  },
+  clear() {
+    bedsideKeyInMemory = null
+    try { localStorage.removeItem(BEDSIDE_KEY) } catch { /* ignore */ }
+  },
+}
+
+/** 병상 단말 API 호출 (/bedside/...). 헤더 X-Bedside-Api-Key, 401이면 단말 키만 지운다(간호사 토큰은 그대로).
+ *  [입력] method, path('/bedside/me'), body?  [출력] Promise<T> — 실패는 ApiRequestError */
+async function bedsideRequest<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const headers: Record<string, string> = { Accept: 'application/json' }
+  const key = bedsideKey.get()
+  if (key) headers['X-Bedside-Api-Key'] = key
+  if (body !== undefined) headers['Content-Type'] = 'application/json'
+  let res: Response
+  try {
+    res = await fetch(BASE_URL + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) })
+  } catch (networkError) {
+    throw new ApiRequestError(0, 'network_error', networkError instanceof Error ? networkError.message : String(networkError))
+  }
+  if (res.status === 401) bedsideKey.clear()
+  if (!res.ok) throw await toApiRequestError(res)
+  return (await res.json()) as T
+}
+
+export const bedsideApi = {
+  get: <T>(path: string) => bedsideRequest<T>('GET', path),
+  post: <T>(path: string, body?: unknown) => bedsideRequest<T>('POST', path, body),
+}
+
+/** 병상 단말 키 오류인지 — 이 오류는 간호사 로그인 화면으로 보내지 않는다(main.tsx) */
+export const isBedsideKeyError = (err: unknown) =>
+  err instanceof ApiRequestError && err.code.startsWith('bedside_key_')
 
 /** 서버가 보낸 SSE 한 덩어리 → { event, data }. 주석(: ping)·retry만 있는 덩어리는 null.
  *  [입력] block: 빈 줄로 나뉜 한 덩어리  [출력] { event, data } | null

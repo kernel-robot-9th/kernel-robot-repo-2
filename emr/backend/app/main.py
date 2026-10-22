@@ -69,6 +69,8 @@ def create_app() -> FastAPI:
             {"name": "delivery-events", "description": "배송 기록 — 예약·변경·취소·출발·도착·수령·실패 (관리자 목록, 2026-10-21)"},
             {"name": "robots", "description": "로봇 관리 — 등록·조회·수정·삭제, 종류(매니퓰레이터·AMR)·이름·상태"},
             {"name": "notifications", "description": "알림 — 재고 부족 목록과 실시간 스트림(SSE) (로그인 필요)"},
+            {"name": "bedside-devices", "description": "병상 단말 관리 — 등록·병실·키 발급 (관리자, 2026-10-22)"},
+            {"name": "bedside-access", "description": "병상 단말 전용 — 환자 비품 요청·\"받았습니다\". `X-Bedside-Api-Key`로 호출"},
             {"name": "robot-access", "description": "로봇 전용 — 배송 수령 확인. 간호사 토큰이 아니라 `X-Robot-Api-Key`(로봇별 키)로 호출"},
         ],
         docs_url="/docs" if settings.ENV != "prod" else None,  # 운영에선 OpenAPI 비노출

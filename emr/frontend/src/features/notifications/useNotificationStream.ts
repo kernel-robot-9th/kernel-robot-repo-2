@@ -40,6 +40,10 @@ function showDeliveryToast(event: string, stage: DeliveryStageEvent, myNurseId: 
     showToast('배송 수령 완료', `${robot}이(가) ${what}의 수령을 확인했습니다.`, 'success')
   } else if (event === 'delivery_failed') {
     const reason = stage.failure_reason ? DELIVERY_FAILURE_REASON_LABEL[stage.failure_reason] : '로봇이 실패를 보고했습니다'
+    if (stage.bedside_name) {   // 병상(환자) 요청 배송 — 관리자에게만 온다 (2026-10-22)
+      showToast('환자 요청 배송 실패 (관리자 알림)', `#${stage.delivery_id} ${stage.bedside_name} 요청 ${what}: ${reason}. 재고는 되돌렸습니다.`, 'error')
+      return
+    }
     const mine = myNurseId === undefined || myNurseId === stage.recipient_nurse_id
     showToast(mine ? '배송 실패' : '배송 실패 (관리자 알림)', `#${stage.delivery_id} ${what}: ${reason}. 재고는 되돌렸습니다.`, 'error')
   }

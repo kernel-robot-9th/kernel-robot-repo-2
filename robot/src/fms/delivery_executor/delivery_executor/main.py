@@ -80,6 +80,7 @@ def main(argv: list[str] | None = None) -> int:
             navigation_timeout_s=float(config.get("navigation_timeout_s", 180.0)),
             map_wait_s=float(config.get("map_wait_s", 10.0)),
             receipt_debounce_s=float(config.get("receipt_debounce_s", 3.0)),
+            receipt_poll_s=float(config.get("receipt_poll_s", 2.0)),
         )
         emr = RobotEmrClient(config["emr_url"], read_api_key(robot["api_key_file"]))
         ros = RobotRos(name, int(robot.get("ros_domain_id", 0)), robot.get("namespace", ""))

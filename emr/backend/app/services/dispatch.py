@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import Conflict, Forbidden, NotFound
 from app.models.delivery import RECEIPT_MARKER_ID_MAX, RECEIPT_MARKER_ID_MIN, RECEIPT_WAIT_SECONDS, Delivery
-from app.models.enums import DeliveryEventType, DeliveryFailureReason, DeliveryStatus, RobotType
+from app.models.enums import DeliveryEventType, DeliveryFailureReason, DeliveryRequester, DeliveryStatus, RobotType
 from app.models.location import Location
 from app.models.robot import Robot
 from app.repositories.delivery import DeliveryRepository
@@ -171,6 +171,9 @@ class DispatchService:
         if delivery.assigned_robot_id != robot_id:
             attempt.warning("receipt_rejected", code="delivery_not_assigned_to_robot")
             raise Forbidden(f"delivery {delivery_id} is not assigned to this robot", code="delivery_not_assigned_to_robot")
+        if delivery.requester_type == DeliveryRequester.BEDSIDE:   # 병상 배송은 환자 화면 버튼으로만 (2026-10-22)
+            attempt.warning("receipt_rejected", code="delivery_receipt_by_button")
+            raise Conflict(f"delivery {delivery_id} is received by the bedside button", code="delivery_receipt_by_button")
         if aruco_marker_id != delivery.receipt_marker_id:
             attempt.warning("receipt_rejected", code="receipt_marker_not_for_delivery")
             raise Forbidden(f"aruco_marker_id {aruco_marker_id} is not this delivery's receipt marker", code="receipt_marker_not_for_delivery")

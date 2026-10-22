@@ -371,6 +371,7 @@ ROS_DOMAIN_ID=0 ros2 topic pub --once /receipt_marker std_msgs/msg/Int32 "{data:
 |---|---|
 | 시작 | `/robot/me`로 키가 설정의 로봇 것인지, 복귀 장소, **로봇 /map이 EMR 맵과 같은지** 확인. 맡고 있던 배송이 있으면 그 단계부터 이어서 |
 | 배송 | 3초마다 claim → 목적지 주행 → 도착 보고 → 마커 대기(같은 번호는 3초에 한 번) → 수령 → 복귀 |
+| 환자(병상) 배송 | `receipt_method: button` — 마커 대신 환자가 EMR 병상 화면에서 "받았습니다"를 누른다. 실행기는 대기 중 `receipt_poll_s`(2초)마다 `/robot/me`를 보고 맡은 배송이 없어지면 수령으로 보고 복귀(2026-10-22) |
 | 실패 | 주행 실패 → `navigation_failed`, 5분 미수령 → `not_received`, 금지 장소(비품실) → `destination_blocked`(움직이지 않음). 모두 EMR이 재고를 되돌리고 알림 |
 | 복귀 실패 | 멈춤(다음 배송을 맡지 않음) — 로봇 위치 확인 후 다시 시작 |
 | Ctrl+C | 진행 중 Nav2 목표를 취소해 로봇을 세움. 배송은 EMR에 남아 다음 시작 때 이어서(실패로 보고하지 않음) |

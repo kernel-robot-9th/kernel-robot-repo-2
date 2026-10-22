@@ -69,6 +69,18 @@ const ERROR_GUIDES: Record<string, ErrorGuide> = {
   robot_name_duplicate: { message: '같은 이름의 로봇이 이미 있습니다.', hint: '다른 이름을 입력해 주세요.' },
   robot_has_active_delivery: { message: '배송을 진행 중인 로봇은 삭제할 수 없습니다.', hint: '배송이 수령되거나 실패로 끝난 뒤 다시 시도해 주세요.' },
   location_is_robot_home: { message: '로봇의 복귀 장소로 쓰는 장소는 삭제할 수 없습니다.', hint: '로봇 탭에서 복귀 장소를 다른 곳으로 바꾼 뒤 삭제해 주세요.' },
+  // 병상 단말·환자 요청 (2026-10-22)
+  location_is_bedside_room: { message: '병상 단말의 병실로 쓰는 장소는 삭제할 수 없습니다.', hint: '병상 단말 탭에서 병실을 바꾸거나 단말을 삭제한 뒤 다시 시도해 주세요.' },
+  bedside_device_not_found: { message: '병상 단말을 찾을 수 없습니다.', hint: '목록을 새로 고친 뒤 다시 시도해 주세요.' },
+  bedside_name_duplicate: { message: '같은 이름의 병상 단말이 이미 있습니다.', hint: '다른 이름(예: 301호-2)을 써 주세요.' },
+  bedside_has_active_delivery: { message: '진행 중인 배송이 있는 병상 단말은 삭제할 수 없습니다.', hint: '배송이 받음이나 실패로 끝난 뒤 다시 시도해 주세요.' },
+  bedside_key_missing: { message: '병상 단말 키가 없습니다.', hint: '관리자에게 받은 단말 키를 입력해 주세요.' },
+  bedside_key_invalid: { message: '병상 단말 키가 틀렸거나 폐기되었습니다.', hint: '관리자에게 새 키를 받아 다시 입력해 주세요.' },
+  bedside_request_in_progress: { message: '이미 진행 중인 요청이 있습니다.', hint: '지금 요청이 도착해 받으신 뒤에 새로 요청해 주세요.' },
+  bedside_room_has_no_position: { message: '이 병실에는 로봇이 갈 위치가 아직 없습니다.', hint: '간호사에게 알려 주세요. 관리자가 맵에서 병실 위치를 정해야 합니다.' },
+  supply_not_patient_requestable: { message: '환자가 요청할 수 없는 품목입니다.', hint: '필요하면 간호사에게 말씀해 주세요.' },
+  delivery_not_for_bedside: { message: '이 병상의 배송이 아닙니다.', hint: '화면을 새로 고친 뒤 다시 시도해 주세요.' },
+  delivery_receipt_by_button: { message: '환자 요청 배송은 병상 화면의 "받았습니다" 버튼으로만 받을 수 있습니다.', hint: '로봇의 마커 읽기로는 수령 처리되지 않습니다.' },
   // 로봇 전용 API (배송 가져가기·진행 보고·수령 확인) — 관제 PC 배송 실행기가 받는 오류. 화면에서는 보일 일이 거의 없다
   robot_key_missing: { message: '로봇 API 키가 없습니다.', hint: '요청 헤더 X-Robot-Api-Key에 관리자가 발급한 키를 넣어 주세요.' },
   robot_key_invalid: { message: '로봇 API 키가 틀렸거나 폐기되었습니다.', hint: '장소·맵·로봇 화면의 로봇 탭에서 키를 다시 발급해 로봇에 설정해 주세요.' },

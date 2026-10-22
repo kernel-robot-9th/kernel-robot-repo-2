@@ -185,7 +185,8 @@ def test_admin_list_filters_and_requires_admin(
     assert [event["occurred_at"] for event in everything] == sorted((event["occurred_at"] for event in everything),
                                                                     reverse=True)
     assert {event["destination_location_name"] for event in everything} == {"301호"}
-    assert {event["nurse_name"] for event in everything} == {"김간호", "일반간호"}
+    assert {event["requester_name"] for event in everything} == {"김간호", "일반간호"}
+    assert {event["requester_type"] for event in everything} == {"nurse"}
 
     def ids(**params):
         response = client.get(EVENTS, headers=auth_headers, params=params)

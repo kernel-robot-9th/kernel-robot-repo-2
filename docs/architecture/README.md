@@ -2,7 +2,7 @@
 
 - 대상: 팀원 전체(웹·로봇·OMX). 팀 **Lv.1 SW 블록도**(3계층)를 지금 `~/dev_ws` 코드에 맞춰 다시 그리고, 블록마다 실제 파일·클래스를 붙였다.
 - 기준: `main`(2bb8227) + 작업 중 변경(EMR 배송 기록 — 로드맵 4단계, 아직 커밋 전).
-- **이 문서에서 뺀 것**(사용자 결정 2026-10-21): 환자 UI, 환자 요청·역할별 품목 분기, 비상 조작 콘솔, Safety Monitor.
+- **이 문서에서 뺀 것**(사용자 결정 2026-10-21): 비상 조작 콘솔, Safety Monitor. 환자 UI·환자 요청은 10-21엔 뺐지만 2026-10-22에 EMR에 넣었다 — 4.1-2절(병상 단말). 그림(`sw_3layer.png`·`.mmd`)에는 아직 없다.
 - 파일: 이 문서 · 그림 [`sw_3layer.png`](sw_3layer.png) · draw.io용 Mermaid 원본 [`sw_3layer.mmd`](sw_3layer.mmd)(draw.io 메뉴 배치 → 삽입 → 고급 → Mermaid에 붙여 넣기).
 - 경로 기준: 백엔드 `emr/backend/app/`, 프론트 `emr/frontend/src/`, 로봇 `robot/src/`.
 
@@ -55,6 +55,17 @@
 - `<pages/Deliveries.tsx, Deliveries>` : 배송 예약 화면(목록·변경·취소·기록·수령 마커 버튼)
 - `<features/deliveries/DeliveryForm.tsx, DeliveryForm>` : 예약 등록·변경 입력 폼
 - `<features/deliveries/DeliveryProgress.tsx, DeliveryProgress>` : 행마다 단계 표시(예약 → 출발 → 도착 → 수령/실패)
+
+#### 4.1-2 병상 단말 환자 요청 `bedside` — Request Service(환자) · 구현 (2026-10-22)
+환자가 병상 태블릿에서 `requestable_by=patient` 품목을 요청(SR-02) → 간호사 승인 없이 바로 배송 → 로봇 도착 뒤 "받았습니다" 버튼으로 수령(SR-06). 병상당 진행 중 1건, 품목당 1–5. 계약 `docs/api_contract_delivery_2026-10-20.md` 8장.
+- `<api/v1/bedside_access.py, router>` : 병상 단말 키(`X-Bedside-Api-Key`) 전용 `/bedside` — 내 병상·품목·요청·최근 배송·"받았습니다"
+- `<api/v1/bedside_devices.py, router>` : 관리자 병상 단말 등록·수정·삭제, 키 발급·폐기
+- `<services/bedside_request.py, BedsideRequestService>` : 요청 규칙(환자 품목만, 진행 중 1건, 병실 좌표 확인), 재고 차감(`DeliveryService.reserve_stock`), 버튼 수령
+- `<services/bedside_device.py, BedsideDeviceService>` · `<repositories/bedside_device.py, BedsideDeviceRepository>` · `<models/bedside_device.py, BedsideDevice>` : 병상 단말(이름·병실·키 해시)
+- `<core/deps.py, get_current_bedside>` : 요청마다 병상 단말 키 확인
+- `<pages/Bedside.tsx, Bedside>` : 병상 화면 `/bedside`(간호사 로그인과 별개) — 품목·수량, 진행 단계, 큰 "받았습니다" 버튼
+- `<pages/Sites.tsx, BedsideTab>` : 관리자 '병상 단말' 탭
+- 로봇 쪽: 로봇용 응답 `receipt_method`(`marker`·`button`), 실행기 `delivery_executor`는 대기 중 `/robot/me`로 버튼 수령을 알아차림. 알림은 실패만 관리자에게
 
 #### 4.2 비품 재고 `supply` — Inventory Service · 구현
 - `<api/v1/supplies.py, router>` : 비품 검색·한 건·등록·수정·삭제 표시

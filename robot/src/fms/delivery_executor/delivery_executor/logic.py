@@ -89,6 +89,7 @@ class WorkerSettings:
     navigation_timeout_s: float = 180.0
     map_wait_s: float = 10.0
     receipt_debounce_s: float = 3.0
+    receipt_poll_s: float = 2.0       # 수령 대기 중 /robot/me를 확인하는 주기 — 병상 배송 버튼 수령을 알아차림 (2026-10-22)
     retry_after_error_s: float = 5.0
 
 
@@ -251,18 +252,24 @@ class DeliveryWorker:
 
     def _wait_for_receipt(self, delivery_id: int, deadline_iso: str | None) -> bool:
         """마감까지 마커를 기다려 EMR에 보낸다. 같은 번호는 receipt_debounce_s에 한 번만.
+        receipt_poll_s마다 /robot/me도 확인한다 — 맡은 배송이 없어졌으면 EMR에서 수령된 것(병상 배송의 "받았습니다" 버튼, 2026-10-22).
         [출력] bool: 수령되면 True
         """
         self.state.phase = "waiting_receipt"
         deadline = _parse_time(deadline_iso) if deadline_iso else self.clock() + 300.0
         last_sent: dict[int, float] = {}
-        self.log.info("배송 %s: 수령 마커를 기다립니다 (마감까지 %.0f초)", delivery_id, max(0.0, deadline - self.clock()))
+        next_poll = self.clock() + self.settings.receipt_poll_s
+        self.log.info("배송 %s: 수령을 기다립니다 (마감까지 %.0f초)", delivery_id, max(0.0, deadline - self.clock()))
         while not self.stop_event.is_set():
             remaining = deadline - self.clock()
             if remaining <= 0:
                 self.log.info("배송 %s: 수령 시간이 지났습니다", delivery_id)
                 return False
-            marker = self.markers.wait_marker(min(1.0, remaining))
+            if self.clock() >= next_poll:
+                next_poll = self.clock() + self.settings.receipt_poll_s
+                if self._received_elsewhere(delivery_id):
+                    return True
+            marker = self.markers.wait_marker(min(1.0, remaining, max(0.0, next_poll - self.clock())))
             if marker is None:
                 continue
             now = self.clock()
@@ -276,6 +283,24 @@ class DeliveryWorker:
                 self.log.info("배송 %s: 더는 도착 상태가 아님 (%s)", delivery_id, response.code)
                 return response.code == "delivery_already_received"
             self.log.info("배송 %s: 마커 %s 거부 (%s) — 계속 기다립니다", delivery_id, marker, response.code)
+        return False
+
+    def _received_elsewhere(self, delivery_id: int) -> bool:
+        """EMR에서 이 배송이 이미 끝났는지 (/robot/me의 맡은 배송이 없거나 다른 배송). EMR이 안 되면 False로 계속 기다린다.
+        [입력] delivery_id
+        [출력] bool
+        """
+        try:
+            response = self.emr.me()
+        except EmrUnavailable as error:
+            self.log.warning("배송 %s: 수령 확인용 /robot/me 실패 (%s) — 계속 기다립니다", delivery_id, error)
+            return False
+        if response.status != 200:
+            return False
+        active = (response.body or {}).get("active_delivery")
+        if active is None or active.get("id") != delivery_id:
+            self.log.info("배송 %s: EMR에서 수령됨 (받았습니다 버튼)", delivery_id)
+            return True
         return False
 
     def _report_failed(self, delivery_id: int, failure_reason: str) -> None:

@@ -118,6 +118,13 @@ class DeliveryService:
         self.events.record_by_nurse(delivery, DeliveryEventType.CANCELLED, nurse_id, datetime.now(UTC))
         return delivery
 
+    def reserve_stock(self, quantity_by_supply_id: dict[int, int]) -> None:
+        """새 배송만큼 재고를 뺀다 — 병상 요청(BedsideRequestService)이 같은 규칙(잠금·부족이면 409·부족 알림)을 쓰게 (2026-10-22).
+        [입력] quantity_by_supply_id: {supply_id: 수량}
+        [출력] 없음 (모자라면 Conflict stock_insufficient)
+        """
+        self._adjust_stock(quantity_by_supply_id)
+
     def restore_stock(self, delivery: Delivery) -> None:
         """예약 때 뺀 수량을 재고로 되돌린다 — 취소와 배송 실패(DispatchService)가 함께 쓴다.
         [입력] delivery: 품목이 로드된 배송

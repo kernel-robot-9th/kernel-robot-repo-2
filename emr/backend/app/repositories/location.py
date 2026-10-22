@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from sqlalchemy import exists, select
 
+from app.models.bedside_device import BedsideDevice
 from app.models.delivery import Delivery
 from app.models.robot import Robot
 from app.models.location import Location
@@ -47,6 +48,13 @@ class LocationRepository(BaseRepository[Location]):
         [출력] bool
         """
         return bool(self.db.scalar(select(exists().where(Robot.home_location_id == location_id))))
+
+    def is_bedside_room(self, location_id: int) -> bool:
+        """이 장소를 병실로 쓰는 병상 단말이 있는가 (2026-10-22).
+        [입력] location_id
+        [출력] bool
+        """
+        return bool(self.db.scalar(select(exists().where(BedsideDevice.location_id == location_id))))
 
     def delete(self, location: Location) -> None:
         """행 삭제.

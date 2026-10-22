@@ -3,12 +3,12 @@
 // 역할   : 배송 단계 표시 — 예약 → 출발 → 도착 → 수령, 실패·취소는 사유와 함께 (로드맵 2단계, 2026-10-20)
 // 작성일 : 2026-10-20
 // 구성   :
-//   - useNowMs          지금 시각 (30초마다) — '예약 시각이 지났는지' 안내용
+//   - (useNowMs는 useNowMs.ts로 옮김, 2026-10-22)
 //   - DeliveryProgress  한 줄 단계 표시 + 지금 단계의 시각·로봇 이름
 // =============================================================================
-import { useEffect, useState } from 'react'
 import type { Delivery } from '../../api/types'
 import { DELIVERY_FAILURE_REASON_LABEL } from '../../api/types'
+import { useNowMs } from './useNowMs'
 
 const STEPS = [
   { status: 'reserved', label: '예약' },
@@ -18,17 +18,6 @@ const STEPS = [
 ] as const
 
 const time = (iso: string | null) => iso ? new Date(iso).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : ''
-
-/** 지금 시각(ms). 렌더 중에 Date.now()를 부르지 않도록 상태로 두고 주기적으로 갱신한다.
- *  [입력] intervalMs [출력] number */
-function useNowMs(intervalMs = 30_000): number {
-  const [nowMs, setNowMs] = useState(() => Date.now())
-  useEffect(() => {
-    const timer = window.setInterval(() => setNowMs(Date.now()), intervalMs)
-    return () => window.clearInterval(timer)
-  }, [intervalMs])
-  return nowMs
-}
 
 /** 지금 단계의 순번 (실패는 어디서 멈췄는지로). [입력] delivery [출력] 0~3 */
 function stepIndex(delivery: Delivery): number {

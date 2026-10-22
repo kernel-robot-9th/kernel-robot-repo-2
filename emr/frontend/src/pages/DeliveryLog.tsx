@@ -68,7 +68,7 @@ export function DeliveryLog() {
     <div className="space-y-4">
       <PageTitle>배송 기록</PageTitle>
       <p className="text-sm text-slate-500">
-        간호사 예약·변경·취소와 로봇 출발·도착·수령·실패를 최근 것부터 보여 줍니다. 2026-10-21 이전 배송은 기록이 없습니다.
+        간호사 예약·변경·취소, 병상(환자) 요청·받았습니다, 로봇 출발·도착·수령·실패를 최근 것부터 보여 줍니다. 2026-10-21 이전 배송은 기록이 없습니다.
       </p>
 
       <div className="grid grid-cols-6 items-end gap-3">
@@ -110,7 +110,7 @@ export function DeliveryLog() {
         <Table>
           <thead>
             <tr>
-              <Th>시각</Th><Th>배송</Th><Th>목적지</Th><Th>예약 간호사</Th><Th>사건</Th><Th>누가</Th><Th>내용</Th>
+              <Th>시각</Th><Th>배송</Th><Th>목적지</Th><Th>예약한 쪽</Th><Th>사건</Th><Th>누가</Th><Th>내용</Th>
             </tr>
           </thead>
           <tbody>
@@ -120,11 +120,12 @@ export function DeliveryLog() {
                 <Td className="whitespace-nowrap text-slate-500">{formatEventTime(event.occurred_at)}</Td>
                 <Td>#{event.delivery_id}</Td>
                 <Td>{event.destination_location_name}</Td>
-                <Td>{event.nurse_name}</Td>
+                <Td>{event.requester_name}{event.requester_type === 'bedside' && <span className="text-slate-500"> (병상)</span>}</Td>
                 <Td><Badge value={event.event_type} label={DELIVERY_EVENT_LABEL[event.event_type]} /></Td>
                 <Td>
                   {event.actor_name}
                   {event.actor_type === 'robot' && <span className="text-slate-500"> (로봇{event.actor_robot_id == null ? ' · 삭제됨' : ''})</span>}
+                  {event.actor_type === 'bedside' && <span className="text-slate-500"> (병상)</span>}
                 </Td>
                 <Td className="text-slate-600">{describeEvent(event)}</Td>
               </tr>

@@ -4,7 +4,7 @@
 # 작성일 : 2026-10-21
 # 구성   :
 #   - DeliverySnapshot      바꾸기 전·후를 비교할 배송 값 (예약 시각·목적지·품목, 이름은 당시 값)
-#   - DeliveryEventRecorder record_by_nurse / record_by_robot, reserved_details / update_changes
+#   - DeliveryEventRecorder record_by_nurse / record_by_robot / record_by_bedside(2026-10-22), reserved_details / update_changes
 #   - DeliveryEventService  history(배송 한 건 — 본인·관리자), list_for_admin(관리자 기록 화면)
 # 기록은 상태를 바꾼 요청과 같은 트랜잭션에 쓴다 — 409 등으로 롤백되면 기록도 남지 않는다(알림과 같은 규칙).
 # 일회용 수령 마커 번호는 기록하지 않는다(예약 간호사 화면에만 보여야 하는 값 — 관리자 기록 화면에도 안 나가게).
@@ -84,6 +84,19 @@ class DeliveryEventRecorder:
         return self.repo.add(DeliveryEvent(
             delivery_id=delivery.id, event_type=event_type, occurred_at=occurred_at,
             actor_type=DeliveryEventActor.ROBOT, actor_robot_id=robot.id, actor_robot_name=robot.name, details=details,
+        ))
+
+    def record_by_bedside(
+        self, delivery: Delivery, event_type: DeliveryEventType, bedside_name: str, occurred_at: datetime,
+        details: dict[str, Any] | None = None,
+    ) -> DeliveryEvent:
+        """병상 단말이 한 일 (환자 요청·받았습니다, 2026-10-22). 병상 이름은 스냅숏.
+        [입력] delivery / event_type / bedside_name / occurred_at / details
+        [출력] DeliveryEvent
+        """
+        return self.repo.add(DeliveryEvent(
+            delivery_id=delivery.id, event_type=event_type, occurred_at=occurred_at,
+            actor_type=DeliveryEventActor.BEDSIDE, actor_bedside_name=bedside_name, details=details,
         ))
 
     @staticmethod

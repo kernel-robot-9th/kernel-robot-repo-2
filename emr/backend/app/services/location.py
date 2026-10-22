@@ -73,6 +73,8 @@ class LocationService:
         location = self.get(location_id)
         if self.repo.is_robot_home(location_id):
             raise Conflict(f"location {location_id} is a robot home location", code="location_is_robot_home")
+        if self.repo.is_bedside_room(location_id):   # 2026-10-22
+            raise Conflict(f"location {location_id} is a bedside room", code="location_is_bedside_room")
         if self.repo.is_used_by_delivery(location_id):
             raise Conflict(f"location {location_id} is used by deliveries", code="location_in_use")
         self.repo.delete(location)
