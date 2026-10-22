@@ -9,6 +9,7 @@
 # For SmolVLA the task text is the instruction the robot follows; use the exact sentence from recording.
 # Optional env: POLICY=act|smolvla EPISODE_TIME=60 EPISODES=1 TOP_EXPOSURE=90 (match the recording)
 #   DISPLAY_DATA=false -> no rerun viewer (faster control loop)
+#   N_ACTION_STEPS=10 -> run only the first 10 of each 50-step chunk, then look again (default: as trained)
 #   OUT_SUFFIX=_aug -> use the augmented run; TOP_MASK=1 -> black out the top camera outside x0-400 y200-480, for models trained on *_masked datasets
 set -e
 NAME=${1:?dataset name used for training}
@@ -47,6 +48,7 @@ else
 fi
 EXTRA=()
 # Same keep-rectangle as masking/mask_dataset_stream.py (x1 y1 x2 y2).
+[ -n "$N_ACTION_STEPS" ] && EXTRA+=(--policy.n_action_steps="${N_ACTION_STEPS}") && echo "[policy] n_action_steps=${N_ACTION_STEPS}"
 [ -n "$TOP_MASK" ] && EXTRA+=(--robot.mask_rois="{${K_TOP}: [0, 200, 400, 480]}") && echo "[top cam] masked to x0-400 y200-480"
 CAMS="{${K_TOP}: {type: opencv, index_or_path: '/dev/cam_top', width: 640, height: 480, fps: 30, fourcc: MJPG}, ${K_WL}: {type: opencv, index_or_path: '/dev/cam_wrist_left', width: 640, height: 480, fps: 30, fourcc: MJPG}, ${K_WR}: {type: opencv, index_or_path: '/dev/cam_wrist', width: 640, height: 480, fps: 30, fourcc: MJPG}}"
 
