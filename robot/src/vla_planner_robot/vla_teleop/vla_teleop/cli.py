@@ -338,6 +338,12 @@ def cmd_start(cfg, args):
     gap = [math.degrees(a - b) for a, b in zip(leader_q, follower_q)]
     print(f'{time.strftime("%T")} {args.arm} arm: follower {arm["follower_serial"]}, leader {arm["leader_serial"]}')
     print(f'   leader-follower gap (deg): {[round(g, 1) for g in gap]}')
+    _, _, leader_z, _ = tool_pose(leader_q)
+    low = path_min_z(follower_q, leader_q)
+    if min(leader_z, low) < cfg['safe_z_min_m']:   # the follower first moves to the leader pose: never into the floor
+        print(f'refused: the leader pose puts the tool at z {leader_z:+.3f} (alignment path down to {low:+.3f}), below '
+              f'the safe height {cfg["safe_z_min_m"]:+.3f}. Raise / fold the leader first.', file=sys.stderr)
+        return 1
     if args.dry_run:
         print('dry run: nothing started')
         return 0

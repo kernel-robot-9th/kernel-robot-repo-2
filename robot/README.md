@@ -240,6 +240,8 @@ PYTHONPATH=vla_calibration:vla_executor:vla_perception:$PYTHONPATH \
 
 ## 7. 캘리브레이션 (`vla_calibration`)
 
+> **실물 탑뷰 카메라(2026-10-22)**: ChArUco 내부 캘리브레이션 + 테이블 9점 호모그래피(픽셀 → 오른팔 x, y)는 `ros2 run vla_calibration top_camera capture|intrinsics|points|homography`로 한다. 인쇄물·순서는 `docs/calibration/README.md`. 아래 표의 도구는 시뮬(ROS 토픽) 기준이다.
+
 실물(또는 카메라·마커·조명이 바뀐 환경)에서 아래 순서로 실행합니다. 결과는 `~/dev_ws/robot/calib/`에 저장되고,
 `calib_dir`로 지정하면 launch가 기본 설정 위에 덮어씁니다.
 

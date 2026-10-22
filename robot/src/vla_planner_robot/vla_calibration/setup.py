@@ -22,6 +22,8 @@ setup(
             'colors = vla_calibration.colors:main',
             'table = vla_calibration.table:main',
             'wrist = vla_calibration.wrist:main',
+            'top_camera = vla_calibration.top_camera:main',
+            'wrist_refine = vla_calibration.wrist_refine:main',
         ],
     },
 )

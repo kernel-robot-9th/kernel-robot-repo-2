@@ -1,0 +1,20 @@
+# Real top camera (2026-10-22): calibration files from `vla_calibration top_camera` instead of corner markers.
+vla_perception:
+  ros__parameters:
+    use_sim_time: false
+    image_topic: /camera/image_raw
+    camera_info_topic: /camera/camera_info
+    calibration_dir: ~/dev_ws/robot/calib       # top_intrinsics.yaml + top_homography.yaml
+    frame_id: link0                              # right-arm base frame (FK), as the homography outputs
+    # work area on the calibration board, right-arm frame (m): blocks outside it are ignored
+    roi_xy: [0.15, -0.17, 0.30, -0.17, 0.30, 0.13, 0.15, 0.13]
+    block_height: 0.025                          # parallax: blocks are seen by their top face
+    min_area: 800
+    max_area: 25000
+    debug_every: 2
+    colors: [green, blue, yellow, red]
+    # lit board scene, measured 2026-10-22: white board S < 50, black squares V < 100, carpet V < 145
+    hsv.green: [35, 60, 150, 85, 255, 255]
+    hsv.blue: [88, 65, 180, 130, 255, 255]       # light blue (S ~113, V ~220) and dark blue both count as blue; V >= 180 drops black squares in glare (V ~150)
+    hsv.yellow: [20, 80, 150, 34, 255, 255]
+    hsv.red: [0, 100, 120, 8, 255, 255, 160, 60, 150, 179, 255, 255]   # red and pink

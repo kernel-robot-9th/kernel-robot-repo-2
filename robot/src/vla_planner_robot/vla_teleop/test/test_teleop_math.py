@@ -87,3 +87,9 @@ def test_camera_ctrl_parsing_and_exposure_search():
     assert ctrls['auto_exposure']['value'] == 3 and ctrls['white_balance_automatic']['value'] == 1
     exposure, v = search_exposure(lambda e: min(255, e * 0.1), 48, 10000, target=230)   # clips above 2300
     assert 2250 <= exposure <= 2300 and v <= 230
+
+
+def test_focus_search_finds_the_sharpest_setting():
+    from vla_teleop.camera_lock import search_focus
+    focus, sharp = search_focus(lambda f: -abs(f - 437), 0, 1023)
+    assert abs(focus - 437) <= 16
