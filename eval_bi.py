@@ -42,8 +42,12 @@ import logging
 import math
 import os
 import subprocess
+import select
 import sys
+import termios
+import threading
 import time
+import tty
 from pathlib import Path
 
 
@@ -139,6 +143,9 @@ def parse_args(argv=None):
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--policy-path", required=True, help="checkpoint folder: .../checkpoints/<step>/pretrained_model")
     p.add_argument("--task", default="", help="instruction text (SmolVLA: use the exact sentence from recording)")
+    p.add_argument("--stages", default=None,
+                   help='stage sentences in order, separated by "|" (models trained on *_stages datasets); '
+                        'press the space bar in this terminal to move to the next stage')
     p.add_argument("--episode-time", type=float, default=60, help="seconds per episode")
     p.add_argument("--episodes", type=int, default=1)
     p.add_argument("--reset-time", type=float, default=10, help="pause between episodes (s)")
@@ -342,6 +349,31 @@ def torque_off(args):
     logging.warning("torque switched off directly after a failed disconnect")
 
 
+class SpaceKey:
+    """Counts space-bar presses in this terminal without Enter (background thread, cbreak mode)."""
+
+    def __init__(self):
+        self.presses = 0
+        self._stop = threading.Event()
+        self._fd = sys.stdin.fileno() if sys.stdin.isatty() else None
+        if self._fd is None:
+            logging.warning("stdin is not a terminal: stage switching by space bar is off")
+            return
+        self._old = termios.tcgetattr(self._fd)
+        tty.setcbreak(self._fd)
+        threading.Thread(target=self._run, daemon=True).start()
+
+    def _run(self):
+        while not self._stop.is_set():
+            if select.select([sys.stdin], [], [], 0.1)[0] and sys.stdin.read(1) == " ":
+                self.presses += 1
+
+    def close(self):
+        self._stop.set()
+        if self._fd is not None:
+            termios.tcsetattr(self._fd, termios.TCSADRAIN, self._old)
+
+
 def fake_observation(robot):
     """Random observation with the robot's feature layout (for --dry-run)."""
     obs = {}
@@ -365,38 +397,49 @@ def run_episode(robot, policy, preprocessor, postprocessor, features, args, dry_
     preprocessor.reset()
     postprocessor.reset()
     device = get_safe_torch_device(policy.config.device)
+    stages = args.stages.split("|") if args.stages else [args.task]
+    stage, keys = 0, (SpaceKey() if len(stages) > 1 else None)
+    logging.info(f"stage 1/{len(stages)}: {stages[0]!r}")
     start = time.perf_counter()
     steps = 0
     action = {}
-    while time.perf_counter() - start < args.episode_time:
-        t0 = time.perf_counter()
-        obs = fake_observation(robot) if dry_run else robot.get_observation()
-        if should_return is not None and should_return(obs):
-            logging.info("external return requested before inference")
-            break
-        observation_frame = build_dataset_frame(features, obs, prefix=OBS_STR)
-        action_values = predict_action(
-            observation=observation_frame,
-            policy=policy,
-            device=device,
-            preprocessor=preprocessor,
-            postprocessor=postprocessor,
-            use_amp=policy.config.use_amp,
-            task=args.task,
-            robot_type=robot.robot_type,
-        )
-        # A request arriving during inference must not be followed by another policy write.
-        if should_return is not None and should_return(obs):
-            logging.info("external return requested during inference")
-            break
-        action = make_robot_action(action_values, features)  # {"left_shoulder_pan.pos": ..., ...}
-        if not dry_run:
-            robot.send_action(action)
-        steps += 1
-        dt = time.perf_counter() - t0
-        if dt > 1 / args.fps:
-            logging.warning(f"loop {1 / dt:.1f} Hz is slower than target {args.fps} Hz")
-        precise_sleep(max(1 / args.fps - dt, 0.0))
+    try:
+        while time.perf_counter() - start < args.episode_time:
+            t0 = time.perf_counter()
+            obs = fake_observation(robot) if dry_run else robot.get_observation()
+            if should_return is not None and should_return(obs):
+                logging.info("external return requested before inference")
+                break
+            if keys is not None and keys.presses > stage and stage < len(stages) - 1:
+                stage += 1
+                policy.reset()  # drop the actions planned for the previous stage
+                logging.info(f"stage {stage + 1}/{len(stages)}: {stages[stage]!r}")
+            observation_frame = build_dataset_frame(features, obs, prefix=OBS_STR)
+            action_values = predict_action(
+                observation=observation_frame,
+                policy=policy,
+                device=device,
+                preprocessor=preprocessor,
+                postprocessor=postprocessor,
+                use_amp=policy.config.use_amp,
+                task=stages[stage],
+                robot_type=robot.robot_type,
+            )
+            # A request arriving during inference must not be followed by another policy write.
+            if should_return is not None and should_return(obs):
+                logging.info("external return requested during inference")
+                break
+            action = make_robot_action(action_values, features)  # {"left_shoulder_pan.pos": ..., ...}
+            if not dry_run:
+                robot.send_action(action)
+            steps += 1
+            dt = time.perf_counter() - t0
+            if dt > 1 / args.fps:
+                logging.warning(f"loop {1 / dt:.1f} Hz is slower than target {args.fps} Hz")
+            precise_sleep(max(1 / args.fps - dt, 0.0))
+    finally:
+        if keys is not None:
+            keys.close()
     if return_poses is not None:
         action = return_to_start(robot, args, dry_run=dry_run)
     return steps, action

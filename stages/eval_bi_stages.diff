@@ -1,0 +1,109 @@
+44a45
+> import select
+45a47,48
+> import termios
+> import threading
+46a50
+> import tty
+141a146,148
+>     p.add_argument("--stages", default=None,
+>                    help='stage sentences in order, separated by "|" (models trained on *_stages datasets); '
+>                         'press the space bar in this terminal to move to the next stage')
+344a352,376
+> class SpaceKey:
+>     """Counts space-bar presses in this terminal without Enter (background thread, cbreak mode)."""
+> 
+>     def __init__(self):
+>         self.presses = 0
+>         self._stop = threading.Event()
+>         self._fd = sys.stdin.fileno() if sys.stdin.isatty() else None
+>         if self._fd is None:
+>             logging.warning("stdin is not a terminal: stage switching by space bar is off")
+>             return
+>         self._old = termios.tcgetattr(self._fd)
+>         tty.setcbreak(self._fd)
+>         threading.Thread(target=self._run, daemon=True).start()
+> 
+>     def _run(self):
+>         while not self._stop.is_set():
+>             if select.select([sys.stdin], [], [], 0.1)[0] and sys.stdin.read(1) == " ":
+>                 self.presses += 1
+> 
+>     def close(self):
+>         self._stop.set()
+>         if self._fd is not None:
+>             termios.tcsetattr(self._fd, termios.TCSADRAIN, self._old)
+> 
+> 
+367a400,402
+>     stages = args.stages.split("|") if args.stages else [args.task]
+>     stage, keys = 0, (SpaceKey() if len(stages) > 1 else None)
+>     logging.info(f"stage 1/{len(stages)}: {stages[0]!r}")
+371,399c406,442
+<     while time.perf_counter() - start < args.episode_time:
+<         t0 = time.perf_counter()
+<         obs = fake_observation(robot) if dry_run else robot.get_observation()
+<         if should_return is not None and should_return(obs):
+<             logging.info("external return requested before inference")
+<             break
+<         observation_frame = build_dataset_frame(features, obs, prefix=OBS_STR)
+<         action_values = predict_action(
+<             observation=observation_frame,
+<             policy=policy,
+<             device=device,
+<             preprocessor=preprocessor,
+<             postprocessor=postprocessor,
+<             use_amp=policy.config.use_amp,
+<             task=args.task,
+<             robot_type=robot.robot_type,
+<         )
+<         # A request arriving during inference must not be followed by another policy write.
+<         if should_return is not None and should_return(obs):
+<             logging.info("external return requested during inference")
+<             break
+<         action = make_robot_action(action_values, features)  # {"left_shoulder_pan.pos": ..., ...}
+<         if not dry_run:
+<             robot.send_action(action)
+<         steps += 1
+<         dt = time.perf_counter() - t0
+<         if dt > 1 / args.fps:
+<             logging.warning(f"loop {1 / dt:.1f} Hz is slower than target {args.fps} Hz")
+<         precise_sleep(max(1 / args.fps - dt, 0.0))
+---
+>     try:
+>         while time.perf_counter() - start < args.episode_time:
+>             t0 = time.perf_counter()
+>             obs = fake_observation(robot) if dry_run else robot.get_observation()
+>             if should_return is not None and should_return(obs):
+>                 logging.info("external return requested before inference")
+>                 break
+>             if keys is not None and keys.presses > stage and stage < len(stages) - 1:
+>                 stage += 1
+>                 policy.reset()  # drop the actions planned for the previous stage
+>                 logging.info(f"stage {stage + 1}/{len(stages)}: {stages[stage]!r}")
+>             observation_frame = build_dataset_frame(features, obs, prefix=OBS_STR)
+>             action_values = predict_action(
+>                 observation=observation_frame,
+>                 policy=policy,
+>                 device=device,
+>                 preprocessor=preprocessor,
+>                 postprocessor=postprocessor,
+>                 use_amp=policy.config.use_amp,
+>                 task=stages[stage],
+>                 robot_type=robot.robot_type,
+>             )
+>             # A request arriving during inference must not be followed by another policy write.
+>             if should_return is not None and should_return(obs):
+>                 logging.info("external return requested during inference")
+>                 break
+>             action = make_robot_action(action_values, features)  # {"left_shoulder_pan.pos": ..., ...}
+>             if not dry_run:
+>                 robot.send_action(action)
+>             steps += 1
+>             dt = time.perf_counter() - t0
+>             if dt > 1 / args.fps:
+>                 logging.warning(f"loop {1 / dt:.1f} Hz is slower than target {args.fps} Hz")
+>             precise_sleep(max(1 / args.fps - dt, 0.0))
+>     finally:
+>         if keys is not None:
+>             keys.close()

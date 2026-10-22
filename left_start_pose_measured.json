@@ -1,0 +1,124 @@
+{
+  "pose": "start_pose",
+  "side": "left",
+  "units": "lerobot_normalized",
+  "joint_names": [
+    "shoulder_pan",
+    "shoulder_lift",
+    "elbow_flex",
+    "wrist_flex",
+    "wrist_roll",
+    "gripper"
+  ],
+  "values": [
+    -5.543345543345552,
+    -59.51159951159951,
+    51.30647130647131,
+    50.23199023199024,
+    -0.073260073260073,
+    49.5970695970696
+  ],
+  "raw_median": [
+    1934,
+    829,
+    3098,
+    3076,
+    2046,
+    2031
+  ],
+  "raw_spread": [
+    2,
+    0,
+    0,
+    0,
+    1,
+    0
+  ],
+  "raw_samples": [
+    [
+      1934,
+      829,
+      3098,
+      3076,
+      2045,
+      2031
+    ],
+    [
+      1935,
+      829,
+      3098,
+      3076,
+      2046,
+      2031
+    ],
+    [
+      1934,
+      829,
+      3098,
+      3076,
+      2046,
+      2031
+    ],
+    [
+      1934,
+      829,
+      3098,
+      3076,
+      2046,
+      2031
+    ],
+    [
+      1936,
+      829,
+      3098,
+      3076,
+      2046,
+      2031
+    ]
+  ],
+  "calibration": {
+    "shoulder_pan": {
+      "id": 11,
+      "drive_mode": 0,
+      "homing_offset": 0,
+      "range_min": 0,
+      "range_max": 4095
+    },
+    "shoulder_lift": {
+      "id": 12,
+      "drive_mode": 0,
+      "homing_offset": 0,
+      "range_min": 0,
+      "range_max": 4095
+    },
+    "elbow_flex": {
+      "id": 13,
+      "drive_mode": 0,
+      "homing_offset": 0,
+      "range_min": 0,
+      "range_max": 4095
+    },
+    "wrist_flex": {
+      "id": 14,
+      "drive_mode": 0,
+      "homing_offset": 0,
+      "range_min": 0,
+      "range_max": 4095
+    },
+    "wrist_roll": {
+      "id": 15,
+      "drive_mode": 0,
+      "homing_offset": 0,
+      "range_min": 0,
+      "range_max": 4095
+    },
+    "gripper": {
+      "id": 16,
+      "drive_mode": 0,
+      "homing_offset": 0,
+      "range_min": 0,
+      "range_max": 4095
+    }
+  },
+  "captured_at_unix": 1792475481.5349205
+}
