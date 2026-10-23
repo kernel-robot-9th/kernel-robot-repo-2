@@ -1,6 +1,7 @@
 # 배송 배정·진행 API 계약 — EMR ↔ 관제 PC 배송 실행기 (2026-10-20)
 
 - 환자(병상 단말) 배송 추가(2026-10-22): 8장.
+- **2026-10-22 변경 (사용자 결정)**: ① 수령 마커는 **일단 끔** — 간호사 배송도 화면의 **"받았습니다" 버튼**으로 수령(EMR 설정 `NURSE_RECEIPT_METHOD=button`, 기본). 마커 코드는 남아 있어 `marker`로 되살린다(2·3.4·5장). ② 실행기 주행은 **팀원 Pinky API(로봇 `:8080`)**, **인증 없이** 진행 — 운영 전에 인증을 넣는다(4장, 분석 `docs/pinky_fms_api_review_2026-10-22.md`).
 - 구현(2026-10-20): EMR 마이그레이션 0008·`app/services/dispatch.py`·`delivery_notifier.py`·배송 화면, 관제 PC `robot/src/fms/delivery_executor`. 실제 EMR + 가짜 Nav2(도메인 77)로 확인, **실물 Pinky 종단 시험은 비품실 모방학습이 끝난 뒤**.
 - 범위: EMR 로드맵 2단계(배송 배정·진행) + 간호사 알림(5단계 일부). 양쪽(`emr/`, `robot/src/fms/delivery_executor`)이 이 문서를 기준으로 구현한다. 바꿀 때는 이 문서부터 고친다.
 - 사용자 결정(2026-10-20): 로봇 쪽이 EMR을 조회(claim) · 예약 시각이 지난 것부터 한 건씩 · 적재 없이 출발 · 수령은 **알림에 뜨는 일회용 마커를 로봇이 읽어서만** · 실패하면 재고 자동 복구 · 도착 후 5분 미수령이면 실패 + 복귀.
@@ -31,10 +32,12 @@ reserved ──(로봇 claim)──▶ dispatched ──(로봇 도착 보고)�
 |---|---|
 | `navigation_failed` | 목적지까지 주행 실패(Nav2 중단·시간 초과) |
 | `not_received` | 도착 후 `receipt_wait_seconds`(300초) 안에 수령 없음 |
-| `destination_blocked` | 목적지가 실행기 설정의 금지 장소(지금 비품실) — 움직이지 않음 |
+| `destination_blocked` | 목적지가 실행기 설정의 금지 장소(2026-10-22 비품실 금지 해제 — 지금 없음)이거나 Pinky가 갈 수 없는 곳 — 움직이지 않음 |
 | `robot_error` | 그 밖의 로봇 쪽 오류 |
 
 ## 2. 일회용 수령 마커
+
+> **2026-10-22부터 꺼 둠**: 간호사 배송도 "받았습니다" 버튼으로 받는다(`NURSE_RECEIPT_METHOD=button`). 마커는 DB 규칙(`ck_deliveries_arrival`) 때문에 도착 때 여전히 만들지만 화면에 보이지 않고, 실행기도 읽지 않는다(`receipt_markers: false`). 로봇이 번호를 보내면(3.5) 지금도 받는다. 아래는 `NURSE_RECEIPT_METHOD=marker`로 되살렸을 때의 규칙.
 
 - ArUco **`DICT_4X4_250`**. 앞 50개(0–49)는 간호사 고정 마커(`DICT_4X4_50`)와 같고, 일회용 마커는 **50–249**.
 - `arrived`가 될 때 EMR이 지금 `arrived`인 다른 배송이 쓰지 않는 번호를 무작위로 하나 배정(`receipt_marker_id`). 그 배송이 `arrived`인 동안만 유효.
@@ -104,8 +107,9 @@ reserved ──(로봇 claim)──▶ dispatched ──(로봇 도착 보고)�
   "receipt_method": "marker"
 }
 ```
+- `destination`·`home_location`의 `robot_dest` (2026-10-22): 팀원 Pinky API 목적지 이름(`GET /dests`). 실행기가 `POST /goto {"dest"}`로 쓴다. 채우기: `emr/backend/scripts/import_pinky_dests.py`(Pinky 목적지 → EMR 맵 "Pinky 아레나"·장소, 다시 돌리면 갱신).
 - `receipt_deadline_at` = `arrived_at + receipt_wait_seconds` (arrived일 때만).
-- `receipt_method` (2026-10-22): `marker` = 간호사 배송, 로봇이 일회용 마커를 읽어 `receipt` 호출 / `button` = 환자(병상) 배송, 환자가 병상 화면 "받았습니다"로 수령(8장). `button`이면 로봇의 `receipt` 호출은 409 `delivery_receipt_by_button`.
+- `receipt_method` (2026-10-22): `button` = 사람이 화면에서 "받았습니다"로 수령 — 환자(병상) 배송은 항상(8장), 간호사 배송은 `NURSE_RECEIPT_METHOD=button`(지금 기본, 5장) / `marker` = 간호사 배송, 로봇이 일회용 마커를 읽어 `receipt` 호출(`NURSE_RECEIPT_METHOD=marker`). 병상 배송에 로봇이 `receipt`를 부르면 409 `delivery_receipt_by_button`.
 - 넣지 않는 것: 일회용 마커, 간호사 이름·id.
 
 ### 3.5 `POST /robot/deliveries/{id}/receipt` — 수령 확인 (기존 API, 규칙 변경)
@@ -124,27 +128,39 @@ reserved ──(로봇 claim)──▶ dispatched ──(로봇 도착 보고)�
 
 ## 4. 실행기 동작 (관제 PC, 로봇마다)
 
+주행 방식은 로봇마다 설정 `navigation`으로 고른다 (2026-10-22):
+
+| `navigation` | 주행 | 목적지 | 맵 확인 | ROS |
+|---|---|---|---|---|
+| `pinky_api` (**지금**) | 팀원 Pinky API `POST /goto {"dest", "dock"}` → 끝날 때까지 `GET /jobs/{id}` | EMR 장소의 **로봇 목적지**(`robot_dest`, 로봇용 응답 `destination`·`home_location`에 실림 — 2026-10-22, 0011). 설정 `dests` 표는 덮어쓰기(정밀 주차 등)(좌표를 넘기지 않음 — Pinky는 그림 cm) | 안 함(맵 API 없음). 대신 claim 전마다 `GET /status`: 위치 추정·Nav2 준비·`idle`이 아니면 맡지 않음 | 필요 없음 |
+| `ros` | Nav2 `navigate_to_pose`(map 프레임 x·y·yaw) | EMR 장소 좌표 | 로봇 `/map` = EMR 맵 | 같은 네트워크·도메인 |
+
+Pinky API는 **인증이 없다** — 지금은 그대로 진행(사용자 결정 2026-10-22), 운영 전에 토큰을 넣는다. 실행기는 자기가 시작한 작업(job)만 기다리고 취소한다.
+
+**주행은 비동기**(2026-10-22): 실행기는 주행을 보내고(`/goto` 202 → 작업 id) 기다리지 않는다. 반복마다(`navigation_poll_s`, 1초) `GET /jobs/{id}`를 한 번 보고, 끝나면 다음 단계(도착 보고·복귀)로 간다. 다른 작업 중(409)이면 다음 반복에서 다시 보낸다. 보내기 전에 `GET /plan`으로 갈 거리가 없으면(이미 그 목적지에 있음) `/goto` 없이 도착으로 본다. 연결 점검은 `executor --check`(GET만, 로봇을 움직이지 않음). **주행 제한 시간은 없다**(`navigation_timeout_s: null`, 사용자 결정) — 로봇 작업이 끝날 때까지 기다리고, 숫자를 넣으면 넘을 때 취소·`navigation_failed`.
+
 1. 시작: `GET /robot/me`. 복귀 장소가 없으면 기다리며 경고. `active_delivery`가 있으면 그 단계부터 이어서.
-2. 출발 전: 로봇 `/map`(해상도·원점·크기)이 EMR 맵과 같은지 확인. 다르면 배송을 맡지 않는다.
-3. 3초마다 `claim`. 받은 배송의 목적지가 금지 장소면 바로 `failed destination_blocked`(움직이지 않음).
-4. Nav2 `navigate_to_pose`(map 프레임, 목적지 x·y·yaw). 성공 → `progress arrived`. 실패·시간 초과 → `failed navigation_failed` → 복귀.
-5. 도착 후 ROS 토픽 `receipt_marker`(std_msgs/Int32, 카메라 마커 노드가 발행 — 카메라가 없으면 사람이 `ros2 topic pub`)에서 번호를 받아 `receipt` 호출. 같은 번호는 3초에 한 번만 보낸다. 403이면 계속 기다린다.
+2. 출발 전: (`ros`) 로봇 `/map`(해상도·원점·크기)이 EMR 맵과 같은지 확인. 다르면 배송을 맡지 않는다. (`pinky_api`) claim 전마다 `/status` 확인.
+3. 3초마다 `claim`(주행 중에는 하지 않음). 받은 배송의 목적지가 금지 장소(지금 없음)면 바로 `failed destination_blocked`(움직이지 않음). `pinky_api`에서 로봇 목적지가 없는 장소, Pinky가 못 간다는 곳(`/goto` 400)도 `destination_blocked`(움직이지 않음, 복귀 없음). Pinky가 다른 작업 중(409)이 30초 넘게 이어지면 `robot_error`.
+4. 주행 성공 → `progress arrived`. 실패(Pinky 작업 `failed` — 구간 결과 `blocked·contact·timeout·lost`)·(제한 시간을 정했을 때) 시간 초과 → `failed navigation_failed` → 복귀.
+5. (마커를 켰을 때만, `receipt_markers: true`) 도착 후 ROS 토픽 `receipt_marker`(std_msgs/Int32, 카메라 마커 노드가 발행 — 카메라가 없으면 사람이 `ros2 topic pub`)에서 번호를 받아 `receipt` 호출. 같은 번호는 3초에 한 번만 보낸다. 403이면 계속 기다린다. **지금은 꺼 둠** — 수령은 6번의 "받았습니다" 확인으로만.
 6. `receipt_deadline_at`까지 수령이 없으면 `failed not_received` → 복귀. `409 delivery_already_received`면 성공으로 본다.
-   대기 중 `receipt_poll_s`(기본 2초)마다 `GET /robot/me`를 불러 `active_delivery`가 없거나 다른 배송이면 **수령된 것**으로 보고 복귀한다 — 환자 배송의 버튼 수령을 알아차리는 방법 (2026-10-22).
+   대기 중 `receipt_poll_s`(기본 2초)마다 `GET /robot/me`를 불러 `active_delivery`가 없거나 다른 배송이면 **수령된 것**으로 보고 복귀한다 — 간호사·환자의 "받았습니다" 버튼 수령을 알아차리는 방법 (2026-10-22).
 7. 복귀 주행 실패는 로그만 남기고 다음 claim을 하지 않는다(사람 확인 필요).
 
-설정(`robot/src/fms/delivery_executor/config/executor.yaml`): EMR 주소, 로봇별 이름·EMR 로봇 id·ROS 도메인·키 파일 경로(권한 600, 저장소 밖)·금지 장소 id, claim 주기, 주행 제한 시간.
+설정(`robot/src/fms/delivery_executor/config/executor.yaml`): EMR 주소, 로봇별 이름·EMR 로봇 id·키 파일 경로(권한 600, 저장소 밖)·금지 장소 id, `navigation`(`pinky_api`·`ros`)·`pinky_api` 주소·`dests` 표(복귀 장소도 포함), `receipt_markers`(지금 `false`), `ros_domain_id`(ROS를 쓸 때만), claim 주기, 주행 제한 시간.
 
 ## 5. 간호사 화면·알림
 
 | 사건 | 알림 이벤트 | 받는 사람 | 화면 |
 |---|---|---|---|
 | 출발 | `delivery_dispatched` | 예약 간호사 | 토스트 "출발했습니다" |
-| 도착 | `delivery_arrived` (+ `receipt_marker_id`) | 예약 간호사 | 일회용 마커 창(수령·실패 때까지) |
+| 도착 | `delivery_arrived` (+ `receipt_method`, `receipt_marker_id`) | 예약 간호사 | 도착 창: **"받았습니다" 버튼**(지금) 또는 일회용 마커(`marker`일 때). 수령·실패 때까지 |
 | 수령 | `delivery_received` (기존) | 예약 간호사 | 초록 토스트 |
 | 실패 | `delivery_failed` (+ `failure_reason`) | 예약 간호사 + 관리자 | 빨간 토스트 |
 
-- 알림은 저장하지 않는다. 마커 창은 알림이 아니라 **내 배송 목록(arrived + 마커)**을 보고 띄운다 — 새로고침·끊김에도 다시 보인다.
+- 알림은 저장하지 않는다. 도착 창은 알림이 아니라 **내 배송 목록(arrived)**을 보고 띄운다 — 새로고침·끊김에도 다시 보인다.
+- **"받았습니다" (2026-10-22)**: `POST /deliveries/{id}/receipt`(간호사 JWT, 본인 배송) — `arrived`일 때만 `received`(받은 간호사 = 본인, 받은 로봇 = 맡은 로봇), 배송 기록 행위자 `nurse`. 거부: 403 `delivery_not_owned`, 404, 409 `delivery_not_arrived`, 409 `delivery_receipt_by_marker`(`NURSE_RECEIPT_METHOD=marker`일 때). 배송 목록 행에도 '받았습니다' 버튼. 실행기는 4장 6번으로 알아차린다.
 - 배송 목록은 진행 중 배송이 있으면 5초, 없으면 30초마다 새로 고친다.
 
 ## 6. 관리자
@@ -156,7 +172,8 @@ reserved ──(로봇 claim)──▶ dispatched ──(로봇 도착 보고)�
 
 - 출발 뒤 간호사 취소(로봇 되돌리기) — 지금은 불가, 5분 미수령으로 끝남.
 - 관리자 강제 실패(실행기가 죽어 `arrived`로 남은 배송) — 지금은 실행기 재시작으로 이어서 처리.
-- 카메라 마커 노드(Pinky 카메라 드라이버 + `DICT_4X4_250` 검출 → `receipt_marker` 발행) — 로봇 쪽 별도 과제.
+- 카메라 마커 노드(Pinky 카메라 드라이버 + `DICT_4X4_250` 검출 → `receipt_marker` 발행) — 로봇 쪽 별도 과제. 마커는 2026-10-22부터 꺼 둠 — 되살릴 때 Pinky API에 마커 경로를 둘지(ROS가 LAN 너머로 안 보임) 정한다.
+- Pinky API 인증(지금 없음)·EMR 장소 ↔ Pinky 목적지 대응(`stops` 표는 임시)·좌표 변환 — `docs/pinky_fms_api_review_2026-10-22.md` 9장. 팀원 API는 2026-10-22에 `/stops` → `/dests`, `{"stop"}` → `{"dest"}`로 이름을 바꿨다(반영함).
 - 로봇 상태 보고(3단계)·배터리·끊김 알림.
 
 ## 8. 환자(병상 단말) 배송 (2026-10-22)

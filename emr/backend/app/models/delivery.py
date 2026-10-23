@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.config import settings
 from app.models.base import Base, TimestampMixin
 from app.models.enums import DeliveryFailureReason, DeliveryRequester, DeliveryStatus, check_values
 
@@ -161,11 +162,17 @@ class Delivery(TimestampMixin, Base):
 
     @property
     def receipt_method(self) -> str:
-        """수령 방법 (로봇용 응답): marker = 간호사 배송(로봇이 일회용 마커를 읽음) / button = 병상 배송("받았습니다").
+        """수령 방법: button = "받았습니다" 버튼(병상 배송은 항상, 간호사 배송은 NURSE_RECEIPT_METHOD=button일 때 — 2026-10-22 기본)
+        / marker = 로봇이 일회용 마커를 읽음(간호사 배송, NURSE_RECEIPT_METHOD=marker)
+        / none = 로봇 전용 장소(충전 등)로의 이동 — 도착 보고가 곧 완료(received).
         [입력] 없음
         [출력] str
         """
-        return "button" if self.requester_type == DeliveryRequester.BEDSIDE else "marker"
+        if self.destination_location is not None and self.destination_location.robot_only:
+            return "none"   # 로봇 전용 장소(충전 등)로의 품목 없는 이동 — 도착하면 끝 (2026-10-22)
+        if self.requester_type == DeliveryRequester.BEDSIDE:
+            return "button"
+        return settings.NURSE_RECEIPT_METHOD
 
     @property
     def assigned_robot_name(self) -> str | None:

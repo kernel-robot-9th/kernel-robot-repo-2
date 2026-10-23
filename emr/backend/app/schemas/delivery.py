@@ -46,7 +46,7 @@ class DeliveryCreate(BaseModel):
 
     destination_location_id: int = Field(description="배송 위치 locations.id")
     scheduled_at: AwareDatetime = Field(description=SCHEDULED_AT_DESCRIPTION, examples=["2026-10-15T09:00:00+09:00"])
-    items: list[DeliveryItemIn] = Field(min_length=1, description="같은 supply_id는 한 번만")
+    items: list[DeliveryItemIn] = Field(description="같은 supply_id는 한 번만. 로봇 전용 장소(충전 등)로의 이동은 빈 목록 — '해당 사항 없음' (2026-10-22)")
 
 
 class DeliveryUpdate(BaseModel):
@@ -54,7 +54,7 @@ class DeliveryUpdate(BaseModel):
 
     destination_location_id: int | None = Field(default=None, description="배송 위치 locations.id")
     scheduled_at: AwareDatetime | None = Field(default=None, description=SCHEDULED_AT_DESCRIPTION)
-    items: list[DeliveryItemIn] | None = Field(default=None, min_length=1, description="보내면 품목 전체 교체")
+    items: list[DeliveryItemIn] | None = Field(default=None, description="보내면 품목 전체 교체. 로봇 전용 장소는 빈 목록")
 
 
 class DeliveryItemOut(OrmOut):
@@ -76,8 +76,8 @@ class DeliveryOut(OrmOut):
     items: list[DeliveryItemOut]
     created_at: datetime
     received_at: datetime | None = Field(description="수령 확인 시각. received가 아니면 null")
-    received_by_nurse_id: int | None = Field(description="마커로 확인된 간호사 (예약한 간호사)")
-    received_by_robot_id: int | None = Field(description="마커를 읽은 로봇. 로봇을 삭제했으면 null")
+    received_by_nurse_id: int | None = Field(description="받은 간호사 (예약한 간호사 — 마커 또는 버튼)")
+    received_by_robot_id: int | None = Field(description="가져다준 로봇 (마커를 읽었거나 버튼 수령 때 맡은 로봇). 로봇을 삭제했으면 null")
     assigned_robot_id: int | None = Field(description="맡은 로봇. 배정 전이거나 로봇을 삭제했으면 null")
     assigned_robot_name: str | None = Field(description="맡은 로봇 이름")
     dispatched_at: datetime | None = Field(description="로봇이 맡아 출발한 시각")
@@ -88,6 +88,9 @@ class DeliveryOut(OrmOut):
         description="일회용 수령 마커 (ArUco DICT_4X4_250, 50~249). 도착 때 생긴다 — 로봇 카메라에 보여 준다",
     )
     receipt_deadline_at: datetime | None = Field(description="수령 마감 시각 (arrived일 때만). 지나면 로봇이 실패 처리")
+    receipt_method: str = Field(description="button = 도착하면 화면의 '받았습니다'(POST /deliveries/{id}/receipt) | "
+                                            "marker = 일회용 마커를 로봇 카메라에 보여 줌 (설정 NURSE_RECEIPT_METHOD, 2026-10-22) | "
+                                            "none = 로봇 전용 장소로의 이동 — 도착하면 끝")
 
 
 class DeliveryReceiptIn(BaseModel):
@@ -126,6 +129,7 @@ class RobotLocationOut(OrmOut):
     map_x_m: float | None
     map_y_m: float | None
     map_yaw_rad: float | None
+    robot_dest: str | None = Field(description="로봇 목적지 이름 (Pinky API /dests). 실행기는 이 이름으로 POST /goto (2026-10-22)")
 
 
 class RobotDeliveryItemOut(OrmOut):
@@ -144,8 +148,9 @@ class RobotDeliveryOut(OrmOut):
     dispatched_at: datetime | None
     arrived_at: datetime | None
     receipt_deadline_at: datetime | None = Field(description="arrived일 때 수령 마감 시각. 지나면 failed not_received로 보고")
-    receipt_method: str = Field(description="marker = 간호사 배송(일회용 마커를 읽어 receipt) | button = 병상 배송(환자가 "
-                                            "'받았습니다' — 대기 중 /robot/me로 알아차림, 2026-10-22)")
+    receipt_method: str = Field(description="button = 간호사·환자가 화면에서 '받았습니다' — 실행기는 대기 중 /robot/me로 알아차림 "
+                                            "(병상 배송은 항상, 간호사 배송은 2026-10-22부터 기본) | marker = 일회용 마커를 읽어 receipt "
+                                            "| none = 로봇 전용 장소(충전 등)로의 품목 없는 이동 — 도착 보고가 곧 완료, 실행기는 그 자리에 머문다")
 
 
 class RobotBriefOut(OrmOut):

@@ -1,3 +1,1 @@
-time,id,color,top_x,top_y,u,v,arm_x,arm_y
-2026-10-22 17:08:42,blue_0,blue,0.2083,-0.0382,1405,680,0.2377,-0.0529
-2026-10-22 17:09:18,green_0,green,0.2199,0.0522,1254,667,0.2493,0.0359
+time,id,color,top_x,top_y,u,v,arm_x,arm_y,h_cmd,h_real,surface_z

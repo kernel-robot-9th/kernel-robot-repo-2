@@ -38,16 +38,17 @@ def test_delivery_create_list_get(client, seed, auth_headers):
     assert [r["id"] for r in client.get(URL, headers=auth_headers).json()] == [later["id"], created["id"]]  # 빠른 순
     assert client.get(f"{URL}/{created['id']}", headers=auth_headers).json()["destination_location"] == {
         "id": seed["room_301"].id, "name": "301호", "map_x_m": 12.5, "map_y_m": 3.2, "map_yaw_rad": 1.57,
-        "map_id": seed["ward_map"].id, "map": {"id": seed["ward_map"].id, "name": "3병동", "file_name": "ward3.yaml", "resolution_m_per_pixel": 0.05, "origin_x_m": -10.0, "origin_y_m": -10.0, "origin_yaw_rad": 0.0, "has_image": False, "image_width_px": None, "image_height_px": None, "image_file_name": None, "updated_at": ANY}}
+        "map_id": seed["ward_map"].id, "robot_dest": None, "robot_only": False, "map": {"id": seed["ward_map"].id, "name": "3병동", "file_name": "ward3.yaml", "resolution_m_per_pixel": 0.05, "origin_x_m": -10.0, "origin_y_m": -10.0, "origin_yaw_rad": 0.0, "has_image": False, "image_width_px": None, "image_height_px": None, "image_file_name": None, "updated_at": ANY}}
     assert client.get(f"{URL}/999999", headers=auth_headers).status_code == 404
 
 
 @requires_db
 def test_delivery_rejects_bad_input(client, seed, auth_headers):
-    past = (datetime.now(UTC) - timedelta(minutes=1)).isoformat()
+    past = (datetime.now(UTC) - timedelta(minutes=10)).isoformat()   # 5분 안의 과거("지금")는 받는다 (2026-10-22)
     assert client.post(URL, headers=auth_headers, json=_body(seed, scheduled_at=past)).status_code == 400
     assert client.post(URL, headers=auth_headers, json=_body(seed, scheduled_at="2030-01-01T09:00:00")).status_code == 422  # 시간대 없음
-    assert client.post(URL, headers=auth_headers, json=_body(seed, items=[])).status_code == 422
+    empty = client.post(URL, headers=auth_headers, json=_body(seed, items=[]))   # 품목 없음은 로봇 전용 장소 이동만 (2026-10-22)
+    assert empty.status_code == 400 and empty.json()["code"] == "delivery_items_required"
     assert client.post(URL, headers=auth_headers, json=_body(seed, items=[{"supply_id": 999999, "quantity": 1}])).status_code == 400
     assert client.post(URL, headers=auth_headers, json=_body(seed, destination_location_id=999999)).status_code == 400
     duplicate = [{"supply_id": seed["medication"].id, "quantity": 1}, {"supply_id": seed["medication"].id, "quantity": 2}]

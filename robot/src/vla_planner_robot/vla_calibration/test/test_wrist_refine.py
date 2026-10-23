@@ -17,3 +17,19 @@ def test_refined_homography_applies_the_correction_after_h():
     p = H @ [400.0, 200.0, 1.0]
     q = refined_homography(H, A) @ [400.0, 200.0, 1.0]
     assert np.allclose(q[:2] / q[2], p[:2] / p[2] + [0.03, 0.0])
+
+
+def test_fit_plane_and_descent_lookup(tmp_path):
+    import yaml
+    from vla_calibration.wrist_refine import Descent, fit_plane
+    xy = [(0.18, -0.05), (0.22, 0.04), (0.20, 0.10), (0.15, 0.0)]
+    dz = [0.01 + 0.05 * x - 0.02 * y for x, y in xy]
+    assert np.allclose(fit_plane(xy, dz), (0.01, 0.05, -0.02))
+    assert fit_plane(xy[:2], [0.01, 0.02])[0] == 0.015
+    path = tmp_path / 'd.yaml'
+    path.write_text(yaml.safe_dump({'size_model': {'k': 13.38, 'd0': 0.0609},
+                                    'rows': [[0.04, 133.0, 290.0, 90.0], [0.0, 220.0, 271.0, 297.0]]}))
+    d = Descent(str(path))
+    assert abs(d.height(13.38 / 0.0809) - 0.02) < 1e-9
+    u, v = d.ref(176.5)
+    assert abs(v - 193.5) < 1e-6 and abs(u - 280.5) < 1e-6

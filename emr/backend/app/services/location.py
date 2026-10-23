@@ -47,6 +47,7 @@ class LocationService:
         """
         if self.repo.get_by_name(data.name):
             raise Conflict(f"location name {data.name} already exists", code="location_name_duplicate")
+        self._check_robot_dest(data.robot_dest, None)
         location = Location(**data.model_dump())
         self._validate_map(location)
         return self.repo.add(location)
@@ -60,6 +61,7 @@ class LocationService:
         changes = data.model_dump(exclude_none=True)
         if "name" in changes and changes["name"] != location.name and self.repo.get_by_name(changes["name"]):
             raise Conflict(f"location name {changes['name']} already exists", code="location_name_duplicate")
+        self._check_robot_dest(changes.get("robot_dest"), location.id)
         for field, value in changes.items():
             setattr(location, field, value)
         self._validate_map(location)
@@ -78,6 +80,14 @@ class LocationService:
         if self.repo.is_used_by_delivery(location_id):
             raise Conflict(f"location {location_id} is used by deliveries", code="location_in_use")
         self.repo.delete(location)
+
+    def _check_robot_dest(self, robot_dest: str | None, location_id: int | None) -> None:
+        """로봇 목적지 이름은 장소 하나에만 (2026-10-22). [입력] robot_dest / location_id: 수정 중인 장소 [출력] 없음 (겹치면 Conflict)"""
+        if robot_dest is None:
+            return
+        other = self.repo.get_by_robot_dest(robot_dest)
+        if other is not None and other.id != location_id:
+            raise Conflict(f"robot_dest {robot_dest} is already used by location {other.id}", code="location_robot_dest_duplicate")
 
     def _validate_map(self, location: Location) -> None:
         """변경이 반영된 최종 상태로 맵을 검사: map_id가 있으면 존재해야 하고, 좌표가 있으면 맵이 있어야 한다.

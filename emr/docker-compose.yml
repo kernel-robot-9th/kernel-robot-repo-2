@@ -32,6 +32,8 @@ services:
       JWT_EXPIRE_MINUTES: 480
       CORS_ORIGINS: '["http://localhost:5173"]'
       SEED: ${SEED:-0}
+      AUTH_DISABLED: ${AUTH_DISABLED:-0}   # 1이면 로그인(JWT) 끔 — 누구나 관리자(N001)로 (2026-10-22, 시연·시험용)
+      ROBOT_KEY_DISABLED: ${ROBOT_KEY_DISABLED:-0}   # 1이면 로봇 API 키 끔 — 키 없으면 로봇 1호로 (2026-10-22, 시연·시험용)
     ports:
       - "8000:8000"
     volumes:

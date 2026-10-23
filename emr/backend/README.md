@@ -20,7 +20,7 @@ uvicorn app.main:app --reload          # http://localhost:8000/docs  (N001 / nur
 - `GET/POST /api/v1/maps`, `GET/PATCH/DELETE /api/v1/maps/{id}` — 맵 파일 이름·맵 정보(resolution·origin)
 - `GET/POST /api/v1/locations`, `GET/PATCH/DELETE /api/v1/locations/{id}` — 장소(배송 위치·맵 좌표) 조회·등록·편집·삭제
 - `GET/POST /api/v1/robots`, `GET/PATCH/DELETE /api/v1/robots/{id}` — 로봇 등록·조회·수정·삭제, 종류(manipulator·amr)·이름·상태 (`?robot_type=`, `?status=`로 필터)
-- `GET/POST /api/v1/deliveries`, `GET/PATCH /api/v1/deliveries/{id}`, `POST .../{id}/cancel` — 배송 일정 예약 (로그인 필요, 본인 예약만)
+- `GET/POST /api/v1/deliveries`, `GET/PATCH /api/v1/deliveries/{id}`, `POST .../{id}/cancel` — 배송 일정 예약 (로그인 필요, 본인 예약만), `POST .../{id}/receipt` — "받았습니다" 수령 (arrived, 2026-10-22 — 설정 `NURSE_RECEIPT_METHOD=button`)
 - `GET/POST /api/v1/bedside-devices`, `PATCH/DELETE …/{id}`, `POST/DELETE …/{id}/api-key` — 병상 단말 등록·병실·키 (관리자, 2026-10-22)
 - `GET /api/v1/bedside/me`·`/supplies`·`/deliveries`, `POST /bedside/requests`, `POST /bedside/deliveries/{id}/receipt` — 병상 단말(`X-Bedside-Api-Key`): 환자 비품 요청·"받았습니다"
 - `GET /api/v1/deliveries/{id}/events` — 배송 한 건의 기록(예약·변경·취소·출발·도착·수령·실패, 본인·관리자), `GET /api/v1/delivery-events` — 관리자 배송 기록(거르기·최근 순) (2026-10-21)
@@ -39,3 +39,4 @@ TEST_DATABASE_URL=postgresql+psycopg://emr:emr@localhost:5432/emr_test pytest   
 - 클래스 docstring 3줄 이내, 메서드 1줄 + `[입력]` `[출력]`
 - 결정이 필요한 지점은 `# [검토 필요] 사유` — `python -m scripts.review` 로 `REVIEW.md` 재생성
 - `/docs`(OpenAPI)는 라우터 `summary/description/responses` + 스키마 `Field(description=)`로 별도 관리
+- `scripts/import_pinky_dests.py` — 팀원 Pinky API 목적지(`GET /dests`)를 맵 "Pinky 아레나"·장소(`robot_dest`)로 가져온다(다시 돌리면 갱신, 2026-10-22). `EMR_PASSWORD=... python3 backend/scripts/import_pinky_dests.py --pinky http://192.168.129.122:8080 --home START_A --robot-id 1`

@@ -6,12 +6,14 @@
 #   - robot_me          GET  /robot/me                          — 로봇·복귀 장소·맡은 배송 (2026-10-20)
 #   - claim_delivery    POST /robot/deliveries/claim            — 배송 하나 맡기 (멱등, 없으면 204) (2026-10-20)
 #   - report_progress   POST /robot/deliveries/{id}/progress    — 도착·실패 보고 (2026-10-20)
+#   - list_deliveries   GET  /robot/deliveries                  — 맡지 않은 예약 목록 (로봇 배정 없이 조회만) (2026-10-22)
+#   - report_arrived    POST /robot/arrived                     — "지금 도착했습니다" (배송 id 없이, 맡은 배송) (2026-10-22)
 #   - confirm_receipt   POST /robot/deliveries/{id}/receipt     — 일회용 마커로 수령 확인
 # 계약: docs/api_contract_delivery_2026-10-20.md. 로봇용 응답(RobotDeliveryOut)에는 일회용 마커·간호사 정보가 없다
 # =============================================================================
 from __future__ import annotations
 
-from fastapi import APIRouter, Response, status
+from fastapi import APIRouter, Query, Response, status
 
 from app.core.deps import DB, ROBOT_RESPONSES, CurrentRobot
 from app.schemas.delivery import DeliveryProgressIn, DeliveryReceiptIn, RobotDeliveryOut, RobotMeOut
@@ -78,6 +80,37 @@ def report_progress(db: DB, robot: CurrentRobot, delivery_id: int, data: Deliver
     """
     delivery = DispatchService(db).report_progress(delivery_id, robot.id, data.stage, data.failure_reason)
     return RobotDeliveryOut.model_validate(delivery)
+
+
+@router.get(
+    "/deliveries", response_model=list[RobotDeliveryOut], summary="예약된 배송 목록 (맡지 않음)",
+    description="로봇이 아직 맡지 않은(reserved) 배송을 예약 시각 순으로. 로봇 배정·상태 변경 없이 보기만 한다 — 어느 로봇이 갈지는 "
+                "로봇 쪽(팀원 FMS)이 정한다. 목적지 destination.robot_dest가 Pinky 목적지 이름. 2026-10-22",
+)
+def list_deliveries(
+    db: DB, robot: CurrentRobot,
+    due_only: bool = Query(True, description="예약 시각이 지난 것만 (false면 앞으로 예정된 것까지)"),
+    limit: int = Query(50, ge=1, le=200),
+) -> list[RobotDeliveryOut]:
+    """
+    [입력] robot / due_only / limit
+    [출력] list[RobotDeliveryOut]
+    """
+    return [RobotDeliveryOut.model_validate(delivery) for delivery in DispatchService(db).list_waiting(due_only, limit)]
+
+
+@router.post(
+    "/arrived", response_model=RobotDeliveryOut, summary="지금 도착했습니다",
+    description="이 로봇이 맡은 배송(dispatched)을 도착(arrived)으로. 배송 id가 필요 없다 — 팀원 Pinky FMS 등 로봇 쪽이 도착하면 한 번 부른다. "
+                "본문 없음, 멱등(이미 arrived면 200 그대로). progress {stage: arrived}와 같은 처리(알림·배송 기록). 2026-10-22",
+    responses={409: {"description": "맡은 배송 없음 (robot_no_active_delivery)"}},
+)
+def report_arrived(db: DB, robot: CurrentRobot) -> RobotDeliveryOut:
+    """
+    [입력] robot: 키로 확인된 로봇
+    [출력] RobotDeliveryOut: arrived
+    """
+    return RobotDeliveryOut.model_validate(DispatchService(db).report_arrived_now(robot.id))
 
 
 @router.post(

@@ -7,9 +7,9 @@ vla_executor:
     direct_speed_deg_s: 15.0
     direct_min_time: 2.0
     # board surface as the arm's FK sees it (top_homography.yaml plane_z: tool touching the board)
-    surface_plane: [-0.0354, 0.1254, -0.0132]
+    surface_plane: [-0.0354, 0.1254, -0.0132]   # 2026-10-22 touch plane (calib/top_homography.yaml plane_z)
     safe_z_min: -0.04                 # base frame; the board surface is at about -0.01
-    grasp_z: 0.015                    # tool above the surface when grasping (2026-10-22 green grasp 0.010, +5 mm)
+    grasp_z: 0.0113                   # base z ~0.0025 at the blocks (x 0.21), as in the 2026-10-22 successful teleop grasp
     place_z: 0.018                    # release ~8 mm above the surface
     stack_clearance: 0.006
     approach_height: 0.06             # 0.08 put stacking above blocks past 0.22 m out of reach

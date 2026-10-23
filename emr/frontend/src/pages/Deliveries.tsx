@@ -4,7 +4,8 @@
 // 작성일 : 2026-10-14
 // 구성   :
 //   - Deliveries   목록 테이블. 장소·비품 id를 이름으로 치환. 로봇이 상태를 바꾸므로 다시 불러온다
-//                  (진행 중 5초·평소 30초 — hooks.ts). 도착한 배송은 '수령 마커'로 일회용 마커 창을 다시 연다 (2026-10-20)
+//                  (진행 중 5초·평소 30초 — hooks.ts). 도착한 배송은 '받았습니다'로 수령(2026-10-22 기본),
+//                  마커 방식(receipt_method=marker)이면 '수령 마커'로 일회용 마커 창을 다시 연다 (2026-10-20)
 //                  창 자체는 Layout의 ReceiptMarkerWatcher가 띄운다(도착하면 어느 화면에서든 자동)
 //                  행마다 '기록'으로 그 배송의 예약·변경·취소·출발·도착·수령·실패 기록 창 (2026-10-21)
 // =============================================================================
@@ -22,7 +23,7 @@ export function Deliveries() {
   const deliveries = useDeliveries()
   const locations = useLocations()
   const supplies = useSupplies()
-  const { cancel } = useDeliveryMutations()
+  const { cancel, confirmReceipt } = useDeliveryMutations()
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<number | null>(null)
   const [historyId, setHistoryId] = useState<number | null>(null)
@@ -77,7 +78,10 @@ export function Deliveries() {
                         <Button variant="danger" onClick={() => cancelDelivery(d.id)} disabled={cancel.isPending}>취소</Button>
                       </>
                     )}
-                    {d.status === 'arrived' && d.receipt_marker_id != null && (
+                    {d.status === 'arrived' && d.receipt_method === 'button' && (
+                      <Button onClick={() => confirmReceipt.mutate(d.id)} disabled={confirmReceipt.isPending}>받았습니다</Button>
+                    )}
+                    {d.status === 'arrived' && d.receipt_method === 'marker' && d.receipt_marker_id != null && (
                       <Button onClick={() => openReceiptMarker(d.id)}>수령 마커</Button>
                     )}
                     <Button variant="secondary" onClick={() => setHistoryId(d.id)}>기록</Button>

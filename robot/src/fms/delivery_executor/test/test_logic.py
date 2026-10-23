@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from delivery_executor.emr_client import EmrResponse, EmrUnavailable
-from delivery_executor.logic import DeliveryWorker, WorkerSettings, compare_maps
+from delivery_executor.logic import DeliveryWorker, NoMarkers, WorkerSettings, compare_maps
 
 HOME = {"id": 2, "name": "간호사스테이션", "map_id": 4, "map_x_m": -0.6, "map_y_m": -1.55, "map_yaw_rad": 0.0}
 ROOM_301 = {"id": 3, "name": "301호", "map_id": 4, "map_x_m": 0.26, "map_y_m": -0.92, "map_yaw_rad": 0.0}
@@ -92,14 +92,27 @@ class FakeEmr:
 
 
 class FakeNavigator:
-    def __init__(self, results=None, robot_map=ROBOT_MAP):
+    """start()에서 목표를 기록하고, poll()은 polls_needed번째에 결과를 준다(그 전엔 None = 가는 중)."""
+
+    def __init__(self, results=None, robot_map=ROBOT_MAP, polls_needed=1):
         self.results = list(results or [])
         self.goals: list[tuple] = []
         self.map = robot_map
+        self.polls_needed = polls_needed
+        self.polls = 0
+        self.canceled = 0
 
-    def navigate(self, x_m, y_m, yaw_rad, timeout_s):
-        self.goals.append((x_m, y_m, yaw_rad))
-        return self.results.pop(0) if self.results else "succeeded"
+    def start(self, place):
+        self.goals.append((place["map_x_m"], place["map_y_m"], place["map_yaw_rad"]))
+        return {"polls": 0, "result": self.results.pop(0) if self.results else "succeeded"}
+
+    def poll(self, handle):
+        self.polls += 1
+        handle["polls"] += 1
+        return handle["result"] if handle["polls"] >= self.polls_needed else None
+
+    def cancel(self, handle):
+        self.canceled += 1
 
     def robot_map(self, wait_s):
         return self.map
@@ -136,12 +149,21 @@ def stages(emr):
 
 # ---- 정상·실패 흐름 -------------------------------------------------------------
 
+def test_supply_room_is_not_blocked_by_default():
+    """2026-10-22 비품실 금지 해제 — 설정에 금지 장소가 없으면 비품실로도 간다."""
+    clock = Clock()
+    emr = FakeEmr(clock, claims=[delivery(destination=SUPPLY_ROOM)])
+    navigator = FakeNavigator()
+    make_worker(emr, navigator, FakeMarkers(clock, [137]), clock, blocked_location_ids=frozenset()).run(max_cycles=6)
+    assert navigator.goals[0] == (0.44, -1.55, 1.65) and (12, "arrived", None) in stages(emr)
+
+
 def test_full_delivery_received_then_home():
     clock = Clock()
     emr = FakeEmr(clock, claims=[delivery()])
     navigator = FakeNavigator()
     worker = make_worker(emr, navigator, FakeMarkers(clock, [None, 99, 137]), clock)
-    state = worker.run(max_cycles=3)   # 준비 → 배송 1건 → 204
+    state = worker.run(max_cycles=6)   # 준비 → claim·주행 보냄 → 도착 확인·수령·복귀 보냄 → 복귀 확인 → 204
     assert stages(emr) == [(12, "arrived", None), (12, 99), (12, 137)]
     assert navigator.goals == [(0.26, -0.92, 0.0), (-0.6, -1.55, 0.0)]   # 301호 → 간호사스테이션
     assert state.finished == [(12, "received")] and state.phase == "stopped"
@@ -152,7 +174,7 @@ def test_bedside_button_receipt_is_noticed_through_robot_me():
     clock = Clock()
     emr = FakeEmr(clock, claims=[delivery()], button_received_after_s=10)
     navigator = FakeNavigator()
-    state = make_worker(emr, navigator, FakeMarkers(clock), clock).run(max_cycles=3)
+    state = make_worker(emr, navigator, FakeMarkers(clock), clock).run(max_cycles=6)
     assert stages(emr) == [(12, "arrived", None)]                      # 마커 보고도, 실패 보고도 없다
     assert state.finished == [(12, "received")]
     assert navigator.goals[-1] == (-0.6, -1.55, 0.0)                   # 복귀
@@ -163,7 +185,7 @@ def test_not_received_after_deadline_fails_and_returns_home():
     clock = Clock()
     emr = FakeEmr(clock, claims=[delivery()])
     navigator = FakeNavigator()
-    state = make_worker(emr, navigator, FakeMarkers(clock), clock).run(max_cycles=2)
+    state = make_worker(emr, navigator, FakeMarkers(clock), clock).run(max_cycles=6)
     assert stages(emr) == [(12, "arrived", None), (12, "failed", "not_received")]
     assert navigator.goals[-1] == (-0.6, -1.55, 0.0)
     assert state.finished == [(12, "failed:not_received")]
@@ -173,7 +195,7 @@ def test_navigation_failure_reports_and_returns_home():
     clock = Clock()
     emr = FakeEmr(clock, claims=[delivery()])
     navigator = FakeNavigator(results=["aborted", "succeeded"])
-    state = make_worker(emr, navigator, FakeMarkers(clock), clock).run(max_cycles=2)
+    state = make_worker(emr, navigator, FakeMarkers(clock), clock).run(max_cycles=6)
     assert stages(emr) == [(12, "failed", "navigation_failed")]
     assert len(navigator.goals) == 2 and state.phase == "stopped"
 
@@ -182,7 +204,7 @@ def test_blocked_destination_fails_without_moving():
     clock = Clock()
     emr = FakeEmr(clock, claims=[delivery(destination=SUPPLY_ROOM)])
     navigator = FakeNavigator()
-    state = make_worker(emr, navigator, FakeMarkers(clock), clock).run(max_cycles=2)
+    state = make_worker(emr, navigator, FakeMarkers(clock), clock).run(max_cycles=6)
     assert stages(emr) == [(12, "failed", "destination_blocked")]
     assert navigator.goals == []   # 비품실(모방학습 중)로는 한 발짝도 움직이지 않는다
     assert state.finished == [(12, "failed:destination_blocked")]
@@ -191,7 +213,7 @@ def test_blocked_destination_fails_without_moving():
 def test_failed_report_after_receipt_counts_as_received():
     clock = Clock()
     emr = FakeEmr(clock, claims=[delivery()], receipt_after_failed_code="delivery_already_received")
-    state = make_worker(emr, FakeNavigator(), FakeMarkers(clock), clock).run(max_cycles=2)
+    state = make_worker(emr, FakeNavigator(), FakeMarkers(clock), clock).run(max_cycles=6)
     assert state.finished == [(12, "received")]
 
 
@@ -200,7 +222,7 @@ def test_same_marker_is_sent_at_most_once_per_debounce_window():
     emr = FakeEmr(clock, claims=[delivery()], marker=137)
     # 틀린 99를 카메라가 연달아 읽어도 3초에 한 번만 보낸다
     markers = FakeMarkers(clock, [99, 99, 99, None, None, None, 99, 137])
-    make_worker(emr, FakeNavigator(), markers, clock).run(max_cycles=2)
+    make_worker(emr, FakeNavigator(), markers, clock).run(max_cycles=6)
     assert [call for call in stages(emr) if call[1] == 99] == [(12, 99), (12, 99)]
     assert markers.cleared == 1   # 도착 직전에 쌓인 번호를 버렸다
 
@@ -209,7 +231,7 @@ def test_home_navigation_failure_halts():
     clock = Clock()
     emr = FakeEmr(clock, claims=[delivery(), delivery(delivery_id=13)])
     navigator = FakeNavigator(results=["succeeded", "aborted"])   # 301호 OK, 복귀 실패
-    state = make_worker(emr, navigator, FakeMarkers(clock, [137]), clock).run(max_cycles=5)
+    state = make_worker(emr, navigator, FakeMarkers(clock, [137]), clock).run(max_cycles=10)
     assert state.phase == "halted" and "복귀 주행 실패" in state.halted_reason
     assert [call for call in emr.calls if call[0] == "claim"] == [("claim",)]   # 멈춘 뒤 다음 배송을 맡지 않는다
 
@@ -231,14 +253,14 @@ def test_resume_dispatched_delivery_drives_again():
     clock = Clock()
     emr = FakeEmr(clock, active=delivery("dispatched"))
     navigator = FakeNavigator()
-    make_worker(emr, navigator, FakeMarkers(clock, [137]), clock).run(max_cycles=1)
+    make_worker(emr, navigator, FakeMarkers(clock, [137]), clock).run(max_cycles=3)
     assert navigator.goals[0] == (0.26, -0.92, 0.0) and (12, 137) in stages(emr)
 
 
 def test_waits_while_home_is_not_set():
     clock = Clock()
     emr = FakeEmr(clock, home=None, claims=[delivery()])
-    state = make_worker(emr, FakeNavigator(), FakeMarkers(clock), clock).run(max_cycles=3)
+    state = make_worker(emr, FakeNavigator(), FakeMarkers(clock), clock).run(max_cycles=6)
     assert ("claim",) not in emr.calls and state.phase == "stopped"
 
 
@@ -246,13 +268,13 @@ def test_map_mismatch_blocks_claims():
     clock = Clock()
     emr = FakeEmr(clock, claims=[delivery()])
     other_map = {"width": 82, "height": 63, "resolution": 0.05, "origin": {"x": -2.05, "y": -1.62, "yaw": 0.0}}
-    make_worker(emr, FakeNavigator(robot_map=other_map), FakeMarkers(clock), clock).run(max_cycles=3)
+    make_worker(emr, FakeNavigator(robot_map=other_map), FakeMarkers(clock), clock).run(max_cycles=6)
     assert ("claim",) not in emr.calls
 
 
 def test_key_for_other_robot_halts():
     clock = Clock()
-    state = make_worker(FakeEmr(clock, robot_id=3), FakeNavigator(), FakeMarkers(clock), clock).run(max_cycles=3)
+    state = make_worker(FakeEmr(clock, robot_id=3), FakeNavigator(), FakeMarkers(clock), clock).run(max_cycles=6)
     assert state.phase == "halted" and "다른 로봇" in state.halted_reason
 
 
@@ -268,7 +290,7 @@ def test_emr_unavailable_is_retried():
             raise EmrUnavailable("connection refused")
         return original_me()
     emr.me = flaky_me
-    state = make_worker(emr, FakeNavigator(), FakeMarkers(clock), clock).run(max_cycles=3)
+    state = make_worker(emr, FakeNavigator(), FakeMarkers(clock), clock).run(max_cycles=6)
     assert attempts["count"] == 2 and state.phase == "stopped"
 
 
@@ -289,11 +311,88 @@ def test_stop_during_navigation_does_not_report_failure():
     worker = make_worker(emr, None, FakeMarkers(clock), clock)
 
     class StoppingNavigator(FakeNavigator):
-        def navigate(self, x_m, y_m, yaw_rad, timeout_s):
-            self.goals.append((x_m, y_m, yaw_rad))
+        def start(self, place):
+            handle = super().start(place)
             worker.stop_event.set()   # 주행 중 Ctrl+C
-            return "canceled"
+            return handle
     navigator = StoppingNavigator()
     worker.navigator = navigator
-    state = worker.run(max_cycles=5)
+    state = worker.run(max_cycles=10)
     assert stages(emr) == [] and len(navigator.goals) == 1 and state.phase == "stopped"
+
+
+# ---- Pinky API 주행·마커 끔 (2026-10-22) ----------------------------------------------
+
+def test_no_route_reports_blocked_without_moving_or_returning():
+    """Pinky 목적지 표에 없는 장소(또는 Pinky가 못 간다고 함) — 움직이지 않았으니 복귀도 없다."""
+    clock = Clock()
+    emr = FakeEmr(clock, claims=[delivery()])
+    navigator = FakeNavigator(results=["no_route"])
+    state = make_worker(emr, navigator, FakeMarkers(clock), clock).run(max_cycles=6)
+    assert stages(emr) == [(12, "failed", "destination_blocked")]
+    assert len(navigator.goals) == 1 and state.phase == "stopped"   # 복귀 주행을 하지 않았다
+
+
+def test_busy_robot_reports_robot_error():
+    clock = Clock()
+    emr = FakeEmr(clock, claims=[delivery()])
+    state = make_worker(emr, FakeNavigator(results=["busy"]), FakeMarkers(clock), clock).run(max_cycles=6)
+    assert stages(emr) == [(12, "failed", "robot_error")] and state.finished == [(12, "failed:robot_error")]
+
+
+def test_not_ready_robot_does_not_claim():
+    clock = Clock()
+    emr = FakeEmr(clock, claims=[delivery()])
+
+    class NotReady(FakeNavigator):
+        reason = "로봇 위치 모름"
+
+        def not_ready_reason(self):
+            return self.reason
+    navigator = NotReady()
+    worker = make_worker(emr, navigator, FakeMarkers(clock), clock)
+    worker.run(max_cycles=6)
+    assert ("claim",) not in emr.calls
+    navigator.reason = None                     # 위치를 넣으면 다시 맡는다
+    worker.run(max_cycles=6)
+    assert ("claim",) in emr.calls
+
+
+def test_check_map_off_skips_map_comparison():
+    """Pinky API는 맵 정보가 없다 — check_map: false면 비교 없이 준비 완료."""
+    clock = Clock()
+    emr = FakeEmr(clock, claims=[delivery()])
+    make_worker(emr, FakeNavigator(robot_map=None), FakeMarkers(clock, [137]), clock, check_map=False).run(max_cycles=6)
+    assert ("get_map", 4) not in emr.calls and ("claim",) in emr.calls
+
+
+def test_markers_off_nurse_button_receipt():
+    """마커 끔(NoMarkers) + 간호사 "받았습니다": 마커 보고 없이 /robot/me로 수령을 알아차리고 복귀."""
+    clock = Clock()
+    emr = FakeEmr(clock, claims=[delivery()], button_received_after_s=30)
+    navigator = FakeNavigator()
+    state = make_worker(emr, navigator, NoMarkers(sleep=clock.sleep), clock).run(max_cycles=6)
+    assert stages(emr) == [(12, "arrived", None)] and state.finished == [(12, "received")]
+    assert navigator.goals[-1] == (-0.6, -1.55, 0.0)
+
+
+def test_navigation_does_not_block_and_has_no_time_limit():
+    """주행은 비동기 (2026-10-22): 보내 놓고 반복마다 확인한다. 제한 시간이 없으면(None) 오래 걸려도 취소하지 않는다."""
+    clock = Clock()
+    emr = FakeEmr(clock, claims=[delivery()], button_received_after_s=5)
+    navigator = FakeNavigator(polls_needed=400)          # 1초 간격으로 400초 걸리는 주행
+    worker = make_worker(emr, navigator, NoMarkers(sleep=clock.sleep), clock, navigation_poll_s=1.0)
+    worker.run(max_cycles=50)
+    assert worker.state.phase == "stopped" and worker.state.navigation is not None   # 아직 가는 중 — 반복은 계속 돈다
+    assert navigator.polls >= 40 and stages(emr) == []                               # 도착 전이라 보고 없음
+    worker.run(max_cycles=1000)
+    assert navigator.canceled == 0 and (12, "arrived", None) in stages(emr) and worker.state.finished == [(12, "received")]
+
+
+def test_navigation_time_limit_cancels_and_reports_failure():
+    clock = Clock()
+    emr = FakeEmr(clock, claims=[delivery()])
+    navigator = FakeNavigator(polls_needed=10_000)
+    state = make_worker(emr, navigator, FakeMarkers(clock), clock, navigation_timeout_s=30.0).run(max_cycles=200)
+    assert navigator.canceled >= 1 and (12, "failed", "navigation_failed") in stages(emr)
+    assert state.phase == "halted"   # 복귀도 30초 안에 못 끝나 멈춤 (사람 확인)

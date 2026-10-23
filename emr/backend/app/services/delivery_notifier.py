@@ -52,6 +52,7 @@ class DeliveryNotifier:
             **self._base(delivery, NotificationEvent.DELIVERY_ARRIVED),
             "receipt_marker_id": delivery.receipt_marker_id,
             "receipt_deadline_at": deadline.isoformat() if deadline else None,
+            "receipt_method": delivery.receipt_method,   # button이면 화면의 "받았습니다" (2026-10-22)
         })
 
     def notify_failed(self, delivery: Delivery) -> None:

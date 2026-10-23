@@ -35,6 +35,10 @@ class LocationRepository(BaseRepository[Location]):
         """
         return self.db.scalar(select(Location).where(Location.name == name))
 
+    def get_by_robot_dest(self, robot_dest: str) -> Location | None:
+        """로봇 목적지 이름으로 한 건 (2026-10-22). [입력] robot_dest [출력] Location | None"""
+        return self.db.scalar(select(Location).where(Location.robot_dest == robot_dest))
+
     def is_used_by_delivery(self, location_id: int) -> bool:
         """이 장소를 배송 위치로 쓰는 예약이 있는가 (상태 무관).
         [입력] location_id

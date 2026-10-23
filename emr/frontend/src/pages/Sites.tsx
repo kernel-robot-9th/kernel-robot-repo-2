@@ -28,7 +28,7 @@ function LocationsTab() {
   const maps = useMaps()
   const { create, remove } = useLocationMutations()
   const isAdmin = useIsAdmin()
-  const [form, setForm] = useState<Omit<Location, 'id'>>({ name: '', map_id: null, map_x_m: null, map_y_m: null, map_yaw_rad: 0 })
+  const [form, setForm] = useState<Omit<Location, 'id'>>({ name: '', map_id: null, map_x_m: null, map_y_m: null, map_yaw_rad: 0, robot_dest: null })
 
   // 좌표 세 값은 함께 있거나 함께 없어야 한다 (백엔드 CHECK)
   const hasCoords = form.map_x_m != null && form.map_y_m != null && form.map_yaw_rad != null
@@ -41,7 +41,7 @@ function LocationsTab() {
     <div className="space-y-4">
       {isAdmin && (
         <div className="space-y-3 rounded border border-slate-200 bg-white p-4">
-          <div className="grid grid-cols-5 gap-3">
+          <div className="grid grid-cols-6 gap-3">
             <Label text="이름"><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="301호" /></Label>
             <Label text="맵">
               <Select value={form.map_id ?? ''} onChange={e => setForm(f => ({ ...f, map_id: num(e.target.value) }))}>
@@ -52,6 +52,7 @@ function LocationsTab() {
             <Label text="x (m)"><Input type="number" step="0.01" value={form.map_x_m ?? ''} onChange={e => setForm(f => ({ ...f, map_x_m: num(e.target.value) }))} /></Label>
             <Label text="y (m)"><Input type="number" step="0.01" value={form.map_y_m ?? ''} onChange={e => setForm(f => ({ ...f, map_y_m: num(e.target.value) }))} /></Label>
             <Label text="yaw (rad)"><Input type="number" step="0.01" value={form.map_yaw_rad ?? ''} onChange={e => setForm(f => ({ ...f, map_yaw_rad: num(e.target.value) }))} /></Label>
+            <Label text="로봇 목적지"><Input value={form.robot_dest ?? ''} onChange={e => setForm(f => ({ ...f, robot_dest: e.target.value.trim() || null }))} placeholder="PHARMACY" /></Label>
           </div>
           <div className="flex items-center gap-3">
             <Button disabled={!valid || create.isPending} onClick={() => create.mutate(form, { onSuccess: () => setForm(f => ({ ...f, name: '' })) })}>
@@ -65,7 +66,7 @@ function LocationsTab() {
         <LoadError what="장소 목록" error={locations.error} onRetry={() => void locations.refetch()} />
       ) : (
         <Table>
-          <thead><tr><Th>이름</Th><Th>맵</Th><Th>x (m)</Th><Th>y (m)</Th><Th>yaw (rad)</Th>{isAdmin && <Th>{' '}</Th>}</tr></thead>
+          <thead><tr><Th>이름</Th><Th>맵</Th><Th>x (m)</Th><Th>y (m)</Th><Th>yaw (rad)</Th><Th>로봇 목적지</Th>{isAdmin && <Th>{' '}</Th>}</tr></thead>
           <tbody>
             {(locations.data ?? []).map(l => (
               <tr key={l.id}>
@@ -74,6 +75,7 @@ function LocationsTab() {
                 <Td>{l.map_x_m ?? <span className="text-amber-600">좌표 없음</span>}</Td>
                 <Td>{l.map_y_m ?? ''}</Td>
                 <Td>{l.map_yaw_rad ?? ''}</Td>
+                <Td>{l.robot_dest ? <code className="text-xs">{l.robot_dest}</code> : <span className="text-slate-400">—</span>}</Td>
                 {isAdmin && <Td><Button variant="danger" onClick={() => { if (confirm(`'${l.name}' 장소를 삭제할까요?`)) remove.mutate(l.id) }}>삭제</Button></Td>}
               </tr>
             ))}

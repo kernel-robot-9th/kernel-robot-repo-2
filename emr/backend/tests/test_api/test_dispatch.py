@@ -261,3 +261,42 @@ def test_rejected_progress_sends_no_notification(client, make_robot, home_locati
     other = make_robot("배송로봇 2호", home_location_id=home_location.id)
     assert _progress(client, other, reserved["id"], "arrived").status_code == 403
     assert _events(published) == []
+
+
+@requires_db
+def test_location_robot_dest_reaches_robot(client, auth_headers, robot_with_key, reserve_overdue, seed):
+    """장소의 로봇 목적지 이름(Pinky /dests, 2026-10-22)이 로봇용 응답 destination·home_location에 실린다. 이름은 장소 하나에만."""
+    set_dest = client.patch(f"/api/v1/locations/{seed['room_301'].id}", headers=auth_headers, json={"robot_dest": "ROOM1_CUL"})
+    assert set_dest.status_code == 200 and set_dest.json()["robot_dest"] == "ROOM1_CUL"
+    duplicate = client.patch(f"/api/v1/locations/{seed['room_302'].id}", headers=auth_headers, json={"robot_dest": "ROOM1_CUL"})
+    assert duplicate.status_code == 409 and duplicate.json()["code"] == "location_robot_dest_duplicate"
+    reserve_overdue()
+    claimed = client.post("/api/v1/robot/deliveries/claim", headers=robot_with_key["headers"]).json()
+    assert claimed["destination"]["robot_dest"] == "ROOM1_CUL"
+    me = client.get("/api/v1/robot/me", headers=robot_with_key["headers"]).json()
+    assert "robot_dest" in me["home_location"]
+
+
+@requires_db
+def test_robot_arrived_now_without_delivery_id(client, auth_headers, robot_with_key, reserve_overdue, published):
+    """POST /robot/arrived (2026-10-22): 배송 id 없이 맡은 배송을 도착으로. 멱등, 맡은 것이 없으면 409."""
+    nothing = client.post("/api/v1/robot/arrived", headers=robot_with_key["headers"])
+    assert nothing.status_code == 409 and nothing.json()["code"] == "robot_no_active_delivery"
+    assert client.post("/api/v1/robot/arrived").status_code == 401   # 로봇 키 필요
+    reserved = reserve_overdue()
+    assert client.post("/api/v1/robot/deliveries/claim", headers=robot_with_key["headers"]).json()["id"] == reserved["id"]
+    arrived = client.post("/api/v1/robot/arrived", headers=robot_with_key["headers"])
+    assert arrived.status_code == 200 and arrived.json()["id"] == reserved["id"] and arrived.json()["status"] == "arrived"
+    assert client.post("/api/v1/robot/arrived", headers=robot_with_key["headers"]).json()["status"] == "arrived"   # 멱등
+    assert [m["event"] for m in published if m["event"] == "delivery_arrived"] == ["delivery_arrived"]
+
+
+@requires_db
+def test_robot_lists_waiting_deliveries_without_claiming(client, robot_with_key, reserve_overdue):
+    """GET /robot/deliveries (2026-10-22): 맡지 않은 예약을 보기만 — 로봇 배정·상태 변경 없음."""
+    overdue = reserve_overdue()
+    listed = client.get("/api/v1/robot/deliveries", headers=robot_with_key["headers"])
+    assert listed.status_code == 200 and [d["id"] for d in listed.json()] == [overdue["id"]]
+    assert listed.json()[0]["status"] == "reserved" and "receipt_marker_id" not in listed.json()[0]
+    assert client.get("/api/v1/robot/me", headers=robot_with_key["headers"]).json()["active_delivery"] is None   # 맡지 않았다
+    assert client.get("/api/v1/robot/deliveries").status_code == 401   # 로봇 키 필요(켜져 있을 때)

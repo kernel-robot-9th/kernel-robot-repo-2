@@ -4,7 +4,7 @@
 # 작성일 : 2026-10-20
 # 구성   :
 #   - RobotRos      Context(domain_id)·노드·실행기 스레드. close()로 정리
-#   - RosNavigator  navigate_to_pose 액션 (수락·결과·제한 시간·취소), /map 1회 수신 → logic.Navigator
+#   - RosNavigator  navigate_to_pose 액션 — start(목표 보냄)·poll(결과 확인)·cancel, /map 1회 수신 → logic.Navigator (비동기, 2026-10-22)
 #                   cancel_current(): 실행기를 멈출 때 진행 중 목표를 취소해 로봇을 세운다
 #   - RosMarkers    receipt_marker(std_msgs/Int32) 구독 → logic.MarkerSource (카메라 마커 노드가 발행, 없으면 사람이 ros2 topic pub)
 # 작업 스레드(logic.DeliveryWorker)는 future에 done 콜백 + threading.Event로 기다린다 — 스핀은 전용 스레드가 한다
@@ -38,8 +38,8 @@ MAP_QOS = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL, relia
 log = logging.getLogger("delivery_executor")
 
 
-def _wait_future(future, timeout_s: float):
-    """future가 끝날 때까지(스핀은 다른 스레드) 기다린다. [출력] 결과 (시간 초과면 None)"""
+def _wait_future(future, timeout_s: float | None):
+    """future가 끝날 때까지(스핀은 다른 스레드) 기다린다. timeout_s None = 제한 없음. [출력] 결과 (시간 초과면 None)"""
     done = threading.Event()
     future.add_done_callback(lambda _: done.set())
     if not done.wait(timeout_s):
@@ -88,7 +88,7 @@ class RobotRos:
 
 
 class RosNavigator:
-    """Nav2 navigate_to_pose로 주행 (map 프레임)."""
+    """Nav2 navigate_to_pose로 주행 (map 프레임). start()로 보내고 poll()로 결과 확인 (비동기, 2026-10-22)."""
 
     def __init__(self, ros: RobotRos) -> None:
         self.ros = ros
@@ -112,11 +112,16 @@ class RosNavigator:
                 "origin": {"x": info.origin.position.x, "y": info.origin.position.y,
                            "yaw": _yaw_from_quaternion(orientation.z, orientation.w, orientation.x, orientation.y)}}
 
-    def navigate(self, x_m: float, y_m: float, yaw_rad: float, timeout_s: float) -> str:
-        """[출력] succeeded | aborted | canceled | rejected | timeout | unavailable"""
+    def start(self, place: dict[str, Any]) -> dict[str, Any]:
+        """EMR 장소 좌표(map 프레임)로 목표를 보낸다(받아들여졌는지만 짧게 기다림, 결과는 poll).
+        [입력] place: map_x_m·map_y_m·map_yaw_rad [출력] 핸들 {goal, result_future, result}
+        """
+        handle: dict[str, Any] = {"goal": None, "result_future": None, "result": None}
         if not self.client.wait_for_server(timeout_sec=SERVER_WAIT_S):
             log.error("navigate_to_pose 액션 서버 없음 (로봇 Nav2·도메인 확인)")
-            return "unavailable"
+            handle["result"] = "unavailable"
+            return handle
+        x_m, y_m, yaw_rad = place["map_x_m"], place["map_y_m"], place["map_yaw_rad"]
         goal = NavigateToPose.Goal()
         goal.pose.header.frame_id = "map"
         goal.pose.header.stamp = self.ros.node.get_clock().now().to_msg()
@@ -124,20 +129,30 @@ class RosNavigator:
         goal.pose.pose.position.y = float(y_m)
         goal.pose.pose.orientation.z = math.sin(yaw_rad / 2.0)
         goal.pose.pose.orientation.w = math.cos(yaw_rad / 2.0)
-        handle = _wait_future(self.client.send_goal_async(goal), ACCEPT_WAIT_S)
-        if handle is None or not handle.accepted:
+        goal_handle = _wait_future(self.client.send_goal_async(goal), ACCEPT_WAIT_S)
+        if goal_handle is None or not goal_handle.accepted:
             log.warning("Nav2가 목표를 거부했습니다 (%.2f, %.2f)", x_m, y_m)
-            return "rejected"
-        self._current_goal = handle
-        try:
-            result = _wait_future(handle.get_result_async(), timeout_s)
-        finally:
+            handle["result"] = "rejected"
+            return handle
+        handle["goal"] = goal_handle
+        handle["result_future"] = goal_handle.get_result_async()
+        self._current_goal = goal_handle
+        return handle
+
+    def poll(self, handle: dict[str, Any]) -> str | None:
+        """[출력] None = 가는 중 / succeeded | aborted | canceled | rejected | unavailable"""
+        if handle["result"] is None and handle["result_future"] is not None and handle["result_future"].done():
+            result = handle["result_future"].result()
+            handle["result"] = RESULT_NAMES.get(result.status, f"status_{result.status}")
+        if handle["result"] is not None and self._current_goal is handle["goal"]:
             self._current_goal = None
-        if result is None:
-            log.warning("주행 시간 초과 %.0f초 — 목표 취소", timeout_s)
-            _wait_future(handle.cancel_goal_async(), ACCEPT_WAIT_S)
-            return "timeout"
-        return RESULT_NAMES.get(result.status, f"status_{result.status}")
+        return handle["result"]
+
+    def cancel(self, handle: dict[str, Any]) -> None:
+        """그 목표를 취소한다 (제한 시간 초과)."""
+        if handle["goal"] is not None and handle["result"] is None:
+            _wait_future(handle["goal"].cancel_goal_async(), ACCEPT_WAIT_S)
+            handle["result"] = "canceled"
 
     def cancel_current(self) -> None:
         """진행 중 목표가 있으면 취소한다 (실행기 종료 때 로봇을 세운다)."""

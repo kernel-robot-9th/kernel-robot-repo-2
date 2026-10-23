@@ -3,11 +3,11 @@
 // 역할   : react-router 8 data mode — 로그인 가드(loader) + 페이지 매핑
 // 작성일 : 2026-10-14
 // 구성   :
-//   - requireAuth   토큰 없으면 /login 으로 redirect
+//   - requireAuth   토큰 없으면 /login 으로 redirect. 단 서버가 로그인을 꺼 두었으면(AUTH_DISABLED, /auth/me가 200) 그대로 들어간다 (2026-10-22)
 //   - router        createBrowserRouter
 // =============================================================================
 import { createBrowserRouter, redirect } from 'react-router'
-import { auth } from './api/client'
+import { api, auth } from './api/client'
 import { Layout } from './components/Layout'
 import { Bedside } from './pages/Bedside'
 import { Deliveries } from './pages/Deliveries'
@@ -19,7 +19,15 @@ import { Password } from './pages/Password'
 import { Sites } from './pages/Sites'
 import { Supplies } from './pages/Supplies'
 
-const requireAuth = () => (auth.get() ? null : redirect('/login'))
+const requireAuth = async () => {
+  if (auth.get()) return null
+  try {
+    await api.get('/auth/me')   // 서버가 로그인을 꺼 두었으면 토큰 없이도 200
+    return null
+  } catch {
+    return redirect('/login')
+  }
+}
 
 export const router = createBrowserRouter([
   { path: '/login', Component: Login },

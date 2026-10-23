@@ -123,8 +123,12 @@ class DispatchService:
         if stage == STAGE_ARRIVED:
             if delivery.status == DeliveryStatus.ARRIVED:
                 return delivery
+            if delivery.status == DeliveryStatus.RECEIVED and delivery.receipt_method == "none":
+                return delivery   # 로봇 전용 장소 이동의 같은 도착 보고 (멱등)
             if delivery.status != DeliveryStatus.DISPATCHED:
                 return self._reject_transition(attempt, delivery, stage)
+            if delivery.receipt_method == "none":
+                return self._complete_robot_move(attempt, delivery, now)
             # 마커를 먼저 고른다 — 고르는 조회가 자동 flush를 일으켜, 상태부터 바꾸면 마커 없는 arrived가 CHECK에 걸린다
             receipt_marker_id = self._pick_receipt_marker_id()
             delivery.status = DeliveryStatus.ARRIVED
@@ -153,6 +157,24 @@ class DispatchService:
             delivery, DeliveryEventType.FAILED, delivery.assigned_robot, now, {"failure_reason": failure_reason},
         )
         return delivery
+
+    def list_waiting(self, due_only: bool, limit: int) -> list[Delivery]:
+        """맡지 않은 예약 목록 — 로봇 배정 없이 배송 정보만 넘긴다 (2026-10-22, 팀원 FMS가 어느 로봇이 갈지 정한다).
+        [입력] due_only: 예약 시각이 지난 것만 / limit [출력] list[Delivery]
+        """
+        return self.repo.list_waiting(datetime.now(UTC) if due_only else None, limit)
+
+    def report_arrived_now(self, robot_id: int) -> Delivery:
+        """"지금 도착했습니다" — 이 로봇이 맡은 배송을 도착으로 (2026-10-22, 팀원 FMS가 배송 id 없이 부른다).
+        report_progress(arrived)와 같다: 멱등, 일회용 마커·알림·배송 기록.
+        [입력] robot_id: 키로 확인된 로봇
+        [출력] Delivery: arrived (로봇 전용 장소 이동이면 received). 맡은 배송이 없으면 Conflict robot_no_active_delivery
+        """
+        active = self.repo.get_active_for_robot(robot_id)
+        if active is None:
+            log.warning("progress_rejected", robot_id=robot_id, stage=STAGE_ARRIVED, code="robot_no_active_delivery")
+            raise Conflict(f"robot {robot_id} has no dispatched or arrived delivery", code="robot_no_active_delivery")
+        return self.report_progress(active.id, robot_id, STAGE_ARRIVED, None)
 
     def confirm_receipt(self, delivery_id: int, aruco_marker_id: int, robot_id: int) -> Delivery:
         """수령 확인. 도착해 있고 이 로봇이 맡은 배송이며, 읽은 번호가 그 배송의 일회용 마커일 때만 received.
@@ -187,6 +209,21 @@ class DispatchService:
         return delivery
 
     # ---- 내부 ----------------------------------------------------------------
+
+    def _complete_robot_move(self, attempt, delivery: Delivery, now: datetime) -> Delivery:
+        """로봇 전용 장소(충전 등)로의 품목 없는 이동 — 도착 보고가 곧 완료 (2026-10-22). 마커·수령 대기 없음.
+        [입력] attempt: 로그 / delivery: dispatched / now [출력] Delivery: received (받은 간호사 = 요청 간호사)
+        """
+        delivery.status = DeliveryStatus.RECEIVED
+        delivery.arrived_at = now
+        delivery.received_at = now
+        delivery.received_by_nurse_id = delivery.nurse_id
+        delivery.received_by_robot_id = delivery.assigned_robot_id
+        attempt.info("robot_move_completed")
+        self.notifier.notify_received(delivery)
+        self.events.record_by_robot(delivery, DeliveryEventType.ARRIVED, delivery.assigned_robot, now)
+        self.events.record_by_robot(delivery, DeliveryEventType.RECEIVED, delivery.assigned_robot, now)
+        return delivery
 
     @staticmethod
     def _usable_home(robot: Robot) -> Location | None:

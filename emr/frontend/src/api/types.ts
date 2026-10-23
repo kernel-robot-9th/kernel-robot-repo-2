@@ -105,6 +105,7 @@ export interface Location {
   map_x_m: number | null
   map_y_m: number | null
   map_yaw_rad: number | null
+  robot_dest: string | null   // 로봇 목적지 이름 (팀원 Pinky API /dests, 예 PHARMACY). 실행기가 이 이름으로 주행 (2026-10-22)
 }
 
 export type RobotType = 'amr' | 'manipulator'
@@ -203,8 +204,8 @@ export interface Delivery {
   items: DeliveryItem[]
   created_at: string
   received_at: string | null           // 수령 확인 시각
-  received_by_nurse_id: number | null  // 마커로 확인된 간호사 (예약한 간호사)
-  received_by_robot_id: number | null  // 마커를 읽은 로봇. 로봇을 지웠으면 null
+  received_by_nurse_id: number | null  // 받은 간호사 (예약한 간호사 — 마커 또는 버튼)
+  received_by_robot_id: number | null  // 가져다준 로봇. 로봇을 지웠으면 null
   destination_location: Location       // 목적지 상세 (맵 좌표 — 없으면 로봇이 맡지 않는다)
   assigned_robot_id: number | null     // 맡은 로봇 (2026-10-20)
   assigned_robot_name: string | null
@@ -214,7 +215,10 @@ export interface Delivery {
   failure_reason: DeliveryFailureReason | null
   receipt_marker_id: number | null     // 일회용 수령 마커 (DICT_4X4_250, 50~249). 도착 때 생긴다 — 본인 예약에만
   receipt_deadline_at: string | null   // 수령 마감 (arrived일 때만). 지나면 로봇이 미수령으로 실패 처리
+  receipt_method: ReceiptMethod        // button = 도착하면 "받았습니다" / marker = 마커를 로봇 카메라에 (2026-10-22, 서버 설정)
 }
+/** 수령 방법 (2026-10-22): button = 화면의 "받았습니다" / marker = 일회용 마커를 로봇 카메라에 보여 줌 */
+export type ReceiptMethod = 'button' | 'marker'
 export interface DeliveryCreate {
   destination_location_id: number
   scheduled_at: string
@@ -339,6 +343,7 @@ export interface DeliveryStageEvent {
   dispatched_at?: string | null      // delivery_dispatched
   receipt_marker_id?: number | null  // delivery_arrived — 일회용 수령 마커 (예약자에게만)
   receipt_deadline_at?: string | null
+  receipt_method?: ReceiptMethod     // delivery_arrived — button이면 "받았습니다" (2026-10-22)
   received_at?: string | null        // delivery_received
   failure_reason?: DeliveryFailureReason | null   // delivery_failed
 }

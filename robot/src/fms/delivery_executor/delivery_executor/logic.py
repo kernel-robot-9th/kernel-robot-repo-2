@@ -4,9 +4,11 @@
 # 작성일 : 2026-10-20
 # 구성   :
 #   - compare_maps()      EMR 맵과 로봇 /map이 같은지 (test_waypoint/test_waypoint.py에서 옮김)
-#   - Navigator / MarkerSource / Emr   주입 인터페이스 (Protocol)
+#   - Navigator / MarkerSource / Emr   주입 인터페이스 (Protocol). 주행기는 ROS Nav2(ros_io) 또는 Pinky API(pinky_api, 2026-10-22)
+#   - NoMarkers           마커를 읽지 않는 MarkerSource — 마커는 일단 끔(2026-10-22), 수령은 "받았습니다" 버튼 → /robot/me
 #   - WorkerSettings      설정값
-#   - DeliveryWorker      로봇 한 대의 반복: 복구 → claim → 주행 → 도착 → 마커 대기 → 수령/미수령 → 복귀
+#   - DeliveryWorker      로봇 한 대의 반복: 복구 → claim → 주행 → 도착 → 수령 대기 → 수령/미수령 → 복귀
+#                         주행은 비동기(2026-10-22): start()로 보내고 반복마다 poll() — 기다리느라 반복을 막지 않는다
 # 계약: dev_ws/docs/api_contract_delivery_2026-10-20.md 4장
 # =============================================================================
 from __future__ import annotations
@@ -22,6 +24,8 @@ from typing import Any, Callable, Protocol
 from delivery_executor.emr_client import EmrResponse, EmrUnavailable
 
 NAV_SUCCEEDED = "succeeded"
+NAV_NO_ROUTE = "no_route"   # 갈 수 없는 목적지 (Pinky 목적지 표에 없음·Pinky가 거부) — 움직이지 않았다
+NAV_BUSY = "busy"           # 로봇이 다른 작업 중 (Pinky 409) — 움직이지 않았다
 
 MAP_RESOLUTION_TOLERANCE = 1e-6
 MAP_ORIGIN_TOLERANCE_M = 0.005
@@ -58,11 +62,22 @@ def compare_maps(emr_map: dict[str, Any], robot_map: dict[str, Any] | None) -> l
 
 
 class Navigator(Protocol):
-    def navigate(self, x_m: float, y_m: float, yaw_rad: float, timeout_s: float) -> str:
-        """목표까지 주행. [출력] 'succeeded' | 'aborted' | 'canceled' | 'rejected' | 'timeout' | 'unavailable'"""
+    """주행기 — 보내고(start) 반복마다 확인(poll)한다. 기다리느라 실행기 반복을 막지 않는다 (2026-10-22)."""
+
+    def start(self, place: dict[str, Any]) -> Any:
+        """EMR 장소(id·name·map_x_m·map_y_m·map_yaw_rad)로 주행을 보낸다. [출력] 핸들 (poll·cancel에 넘김)"""
+
+    def poll(self, handle: Any) -> str | None:
+        """[출력] None = 아직 가는 중 / 'succeeded' | 'aborted' | 'canceled' | 'rejected' | 'unavailable' | 'no_route' | 'busy'"""
+
+    def cancel(self, handle: Any) -> None:
+        """그 주행을 멈춘다 (제한 시간을 넘겼을 때)."""
 
     def robot_map(self, wait_s: float) -> dict[str, Any] | None:
         """로봇 /map 정보 {width, height, resolution, origin{x,y,yaw}} (없으면 None)"""
+
+    # 선택: not_ready_reason() -> str | None — 있으면 claim 전에 불러, 이유가 있으면 배송을 맡지 않는다 (Pinky API)
+    # 실행기 종료 때 main이 cancel_current()로 진행 중 주행을 멈춘다
 
 
 class MarkerSource(Protocol):
@@ -71,6 +86,20 @@ class MarkerSource(Protocol):
 
     def clear(self) -> None:
         """쌓인 번호를 버린다 (도착 전 것을 쓰지 않게)"""
+
+
+class NoMarkers:
+    """마커를 읽지 않는다 (2026-10-22, 사용자 결정: 마커는 일단 끔). 수령은 간호사·환자의 "받았습니다" → /robot/me 확인."""
+
+    def __init__(self, sleep: Callable[[float], None] = time.sleep) -> None:
+        self.sleep = sleep
+
+    def wait_marker(self, timeout_s: float) -> int | None:
+        self.sleep(max(0.0, timeout_s))
+        return None
+
+    def clear(self) -> None:
+        return None
 
 
 class Emr(Protocol):
@@ -86,11 +115,23 @@ class WorkerSettings:
     emr_robot_id: int
     blocked_location_ids: frozenset[int] = frozenset()
     claim_period_s: float = 3.0
-    navigation_timeout_s: float = 180.0
+    navigation_timeout_s: float | None = None   # 주행 한 번의 제한 시간. None = 없음(로봇 작업이 끝날 때까지, 2026-10-22 사용자 결정)
+    navigation_poll_s: float = 1.0    # 주행 중 확인 주기 (Pinky: GET /jobs/{id})
     map_wait_s: float = 10.0
     receipt_debounce_s: float = 3.0
-    receipt_poll_s: float = 2.0       # 수령 대기 중 /robot/me를 확인하는 주기 — 병상 배송 버튼 수령을 알아차림 (2026-10-22)
+    receipt_poll_s: float = 2.0       # 수령 대기 중 /robot/me를 확인하는 주기 — "받았습니다" 버튼 수령을 알아차림 (2026-10-22)
+    check_map: bool = True            # 로봇 /map과 EMR 맵 비교 (Pinky API는 맵 정보가 없어 False)
     retry_after_error_s: float = 5.0
+
+
+@dataclass
+class PendingNavigation:
+    """보내 놓고 아직 끝나지 않은 주행 하나."""
+    purpose: str                      # destination | home
+    place: dict[str, Any]
+    handle: Any
+    started_at: float
+    delivery_id: int | None = None
 
 
 @dataclass
@@ -100,6 +141,7 @@ class WorkerState:
     home: dict[str, Any] | None = None
     map_ok: bool = False
     halted_reason: str | None = None
+    navigation: PendingNavigation | None = None   # 가는 중인 주행 (비동기 — 반복마다 poll)
     finished: list[tuple[int, str]] = field(default_factory=list)   # (배송 id, received|failed:사유)
 
 
@@ -124,6 +166,7 @@ class DeliveryWorker:
         self.stop_event = stop_event or threading.Event()
         self.state = WorkerState()
         self.log = logging.LoggerAdapter(logging.getLogger("delivery_executor"), {"robot": name})
+        self._last_not_ready: str | None = None   # 같은 '못 맡는 이유'를 3초마다 로그에 찍지 않으려고
 
     # ---- 바깥 반복 ------------------------------------------------------------
 
@@ -144,13 +187,22 @@ class DeliveryWorker:
         return self.state
 
     def step(self) -> None:
-        """한 번: (처음이면 준비·복구) → claim → 배송 처리. 맡을 것이 없으면 claim 주기만큼 쉰다."""
+        """한 번: (처음이면 준비·복구) → 가는 중인 주행이 있으면 확인만 → 없으면 claim → 배송 처리.
+        맡을 것이 없으면 claim 주기만큼, 가는 중이면 navigation_poll_s만큼 쉰다.
+        """
         if self.state.phase == "starting":
             if not self._prepare():
                 self.sleep(self.settings.claim_period_s)
                 return
             if self.state.phase == "starting":   # 이어서 처리한 배송이 멈춤(halted)을 남겼으면 덮어쓰지 않는다
                 self.state.phase = "idle"
+            return
+        if self.state.navigation is not None:
+            self._poll_navigation()
+            return
+        reason = self._not_ready_reason()
+        if reason is not None:
+            self.sleep(self.settings.claim_period_s)
             return
         response = self.emr.claim()
         if response.status == 204:
@@ -185,6 +237,9 @@ class DeliveryWorker:
             self.log.warning("복귀 장소가 없습니다 — EMR 로봇 탭에서 좌표 있는 장소를 고르세요. 기다립니다")
             return False
         self.state.home = home
+        if not self.settings.check_map and not self.state.map_ok:
+            self.state.map_ok = True
+            self.log.info("준비 완료: 복귀 장소 %s (맵 비교 안 함 — check_map: false)", home["name"])
         if not self.state.map_ok:
             map_response = self.emr.get_map(home["map_id"])
             if map_response.status != 200:
@@ -206,48 +261,83 @@ class DeliveryWorker:
     # ---- 배송 한 건 -------------------------------------------------------------
 
     def handle_delivery(self, delivery: dict[str, Any]) -> None:
-        """dispatched면 주행부터, arrived면 수령 대기부터. 끝나면 복귀.
+        """dispatched면 주행을 보내고(끝은 _poll_navigation에서), arrived면 수령 대기부터.
         [입력] delivery: 로봇용 배송 JSON (RobotDeliveryOut)
         """
         delivery_id = delivery["id"]
         destination = delivery["destination"]
         self.log.info("배송 %s → %s (%s)", delivery_id, destination["name"], delivery["status"])
-
         if delivery["status"] == "dispatched":
             if destination["id"] in self.settings.blocked_location_ids:
                 self.log.warning("배송 %s: %s은(는) 금지 장소 — 움직이지 않고 실패 보고", delivery_id, destination["name"])
                 self._report_failed(delivery_id, "destination_blocked")
                 return   # 움직이지 않았으니 복귀도 없다
-            self.state.phase = "navigating"
-            result = self.navigator.navigate(destination["map_x_m"], destination["map_y_m"], destination["map_yaw_rad"],
-                                             self.settings.navigation_timeout_s)
-            if self.stop_event.is_set():
-                # 실행기를 멈추느라 취소된 주행 — 실패로 보고하지 않는다. EMR에 dispatched로 남아 다음 시작 때 이어서 한다
-                self.log.info("배송 %s: 실행기 종료로 주행을 멈췄습니다 (다음 시작 때 이어서)", delivery_id)
-                return
-            if result != NAV_SUCCEEDED:
-                self.log.warning("배송 %s: 목적지 주행 실패(%s)", delivery_id, result)
-                self._report_failed(delivery_id, "navigation_failed")
-                self._go_home()
-                return
-            self.markers.clear()   # 도착 전에 읽힌 번호는 쓰지 않는다
-            response = self.emr.progress(delivery_id, "arrived")
-            if response.status != 200:
-                self.log.error("배송 %s: 도착 보고 거부 HTTP %s %s", delivery_id, response.status, response.body)
-                self._go_home()
-                return
-            delivery = response.body
+            self._start_navigation("destination", destination, delivery_id)
+        elif delivery["status"] == "arrived":
+            self._handle_arrived(delivery)
 
-        if delivery["status"] == "arrived":
-            received = self._wait_for_receipt(delivery_id, delivery.get("receipt_deadline_at"))
-            if self.stop_event.is_set() and not received:
-                self.log.info("배송 %s: 실행기 종료 — 수령 대기를 멈춥니다 (다음 시작 때 남은 시간만큼 이어서)", delivery_id)
+    def _start_navigation(self, purpose: str, place: dict[str, Any], delivery_id: int | None = None) -> None:
+        """주행을 보내고 바로 돌아온다 — 끝났는지는 다음 반복부터 _poll_navigation이 본다.
+        [입력] purpose: destination | home / place: EMR 장소 / delivery_id
+        """
+        self.state.phase = "navigating" if purpose == "destination" else "returning"
+        handle = self.navigator.start(place)
+        self.state.navigation = PendingNavigation(purpose, place, handle, self.clock(), delivery_id)
+
+    def _poll_navigation(self) -> None:
+        """가는 중인 주행을 한 번 확인. 끝났으면 다음 단계(도착 보고·복귀 결과)로, 아니면 navigation_poll_s 쉼.
+        제한 시간(navigation_timeout_s)이 있고 넘었으면 멈추고 timeout으로 본다.
+        """
+        navigation = self.state.navigation
+        result = self.navigator.poll(navigation.handle)
+        if result is None:
+            limit = self.settings.navigation_timeout_s
+            if limit is None or self.clock() - navigation.started_at < limit:
+                self.sleep(self.settings.navigation_poll_s)
                 return
-            if received:
-                self.state.finished.append((delivery_id, "received"))
-                self.log.info("배송 %s 수령 완료", delivery_id)
-            else:
-                self._report_failed(delivery_id, "not_received")
+            self.log.warning("%s 주행 시간 초과 %.0f초 — 멈춤", navigation.place["name"], limit)
+            self.navigator.cancel(navigation.handle)
+            result = "timeout"
+        self.state.navigation = None
+        if navigation.purpose == "destination":
+            self._on_destination_result(navigation, result)
+        else:
+            self._on_home_result(result)
+
+    def _on_destination_result(self, navigation: PendingNavigation, result: str) -> None:
+        """목적지 주행 결과 → 도착 보고 + 수령 대기, 또는 실패 보고 + 복귀."""
+        delivery_id = navigation.delivery_id
+        if result in (NAV_NO_ROUTE, NAV_BUSY):
+            # 움직이지 않았으니 복귀도 없다. 갈 수 없는 곳은 금지 장소와 같은 사유로
+            self.log.warning("배송 %s: %s(으)로 출발하지 못했습니다(%s)", delivery_id, navigation.place["name"], result)
+            self._report_failed(delivery_id, "destination_blocked" if result == NAV_NO_ROUTE else "robot_error")
+            self.state.phase = "idle"
+            return
+        if result != NAV_SUCCEEDED:
+            self.log.warning("배송 %s: 목적지 주행 실패(%s)", delivery_id, result)
+            self._report_failed(delivery_id, "navigation_failed")
+            self._go_home()
+            return
+        self.markers.clear()   # 도착 전에 읽힌 번호는 쓰지 않는다
+        response = self.emr.progress(delivery_id, "arrived")
+        if response.status != 200:
+            self.log.error("배송 %s: 도착 보고 거부 HTTP %s %s", delivery_id, response.status, response.body)
+            self._go_home()
+            return
+        self._handle_arrived(response.body)
+
+    def _handle_arrived(self, delivery: dict[str, Any]) -> None:
+        """도착한 배송: 수령을 기다리고(받았습니다·마커·마감) 복귀를 보낸다."""
+        delivery_id = delivery["id"]
+        received = self._wait_for_receipt(delivery_id, delivery.get("receipt_deadline_at"))
+        if self.stop_event.is_set() and not received:
+            self.log.info("배송 %s: 실행기 종료 — 수령 대기를 멈춥니다 (다음 시작 때 남은 시간만큼 이어서)", delivery_id)
+            return
+        if received:
+            self.state.finished.append((delivery_id, "received"))
+            self.log.info("배송 %s 수령 완료", delivery_id)
+        else:
+            self._report_failed(delivery_id, "not_received")
         self._go_home()
 
     def _wait_for_receipt(self, delivery_id: int, deadline_iso: str | None) -> bool:
@@ -315,21 +405,34 @@ class DeliveryWorker:
         self.state.finished.append((delivery_id, f"failed:{failure_reason}"))
 
     def _go_home(self) -> None:
-        """복귀 장소로. 실패하면 멈춘다(사람 확인 필요 — 다음 배송을 맡지 않는다)."""
+        """복귀 장소로 주행을 보낸다 (결과는 _on_home_result)."""
         home = self.state.home
         if home is None:
             self._halt("복귀 장소를 모릅니다")
             return
-        self.state.phase = "returning"
-        result = self.navigator.navigate(home["map_x_m"], home["map_y_m"], home["map_yaw_rad"], self.settings.navigation_timeout_s)
-        if self.stop_event.is_set():
-            self.log.info("실행기 종료로 복귀 주행을 멈췄습니다")
-            return
+        self._start_navigation("home", home)
+
+    def _on_home_result(self, result: str) -> None:
+        """복귀 결과. 실패하면 멈춘다(사람 확인 필요 — 다음 배송을 맡지 않는다)."""
         if result != NAV_SUCCEEDED:
             self._halt(f"복귀 주행 실패({result}) — 로봇 위치를 확인하고 실행기를 다시 시작하세요")
             return
         self.state.phase = "idle"
-        self.log.info("복귀 완료: %s", home["name"])
+        self.log.info("복귀 완료: %s", self.state.home["name"])
+
+    def _not_ready_reason(self) -> str | None:
+        """주행기가 지금 배송을 맡으면 안 되는 이유 (Pinky API: 위치 모름·Nav2 안 됨·다른 작업 중). 같은 이유는 한 번만 로그.
+        [출력] str | None
+        """
+        check = getattr(self.navigator, "not_ready_reason", None)
+        reason = check() if check is not None else None
+        if reason != self._last_not_ready:
+            if reason is not None:
+                self.log.warning("배송을 맡지 않고 기다립니다: %s", reason)
+            else:
+                self.log.info("로봇 준비됨 — 배송을 다시 맡습니다")
+            self._last_not_ready = reason
+        return reason
 
     def _halt(self, reason: str) -> None:
         self.state.phase = "halted"

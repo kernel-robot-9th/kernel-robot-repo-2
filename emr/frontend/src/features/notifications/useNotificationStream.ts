@@ -35,9 +35,12 @@ function showDeliveryToast(event: string, stage: DeliveryStageEvent, myNurseId: 
   if (event === 'delivery_dispatched') {
     showToast('로봇 출발', `${robot}이(가) ${what}을 가지고 출발했습니다.`, 'info')
   } else if (event === 'delivery_arrived') {
-    showToast('로봇 도착', `${robot}이(가) ${stage.destination_location_name}에 도착했습니다. 화면에 뜬 수령 마커를 로봇 카메라에 보여 주세요.`, 'info')
+    const howToReceive = stage.receipt_method === 'marker'
+      ? '화면에 뜬 수령 마커를 로봇 카메라에 보여 주세요.'
+      : "물건을 받은 뒤 화면의 '받았습니다'를 눌러 주세요."   // 2026-10-22 기본
+    showToast('로봇 도착', `${robot}이(가) ${stage.destination_location_name}에 도착했습니다. ${howToReceive}`, 'info')
   } else if (event === 'delivery_received') {
-    showToast('배송 수령 완료', `${robot}이(가) ${what}의 수령을 확인했습니다.`, 'success')
+    showToast('배송 수령 완료', `${what} 수령이 확인되었습니다. ${robot}이(가) 돌아갑니다.`, 'success')
   } else if (event === 'delivery_failed') {
     const reason = stage.failure_reason ? DELIVERY_FAILURE_REASON_LABEL[stage.failure_reason] : '로봇이 실패를 보고했습니다'
     if (stage.bedside_name) {   // 병상(환자) 요청 배송 — 관리자에게만 온다 (2026-10-22)

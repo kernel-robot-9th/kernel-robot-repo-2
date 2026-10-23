@@ -5,6 +5,7 @@
 # 구성   :
 #   - create/list/get/update/cancel  
 #   - events  배송 한 건의 기록 — 예약 간호사 본인·관리자 (2026-10-21, 로드맵 4단계)
+#   - receipt "받았습니다" 버튼 수령 — 도착한 본인 배송 (2026-10-22, 마커 대신)
 # =============================================================================
 from __future__ import annotations
 
@@ -115,3 +116,18 @@ def cancel_delivery(db: DB, nurse: CurrentNurse, delivery_id: int) -> DeliveryOu
     [출력] DeliveryOut: cancelled
     """
     return DeliveryOut.model_validate(DeliveryService(db).cancel(delivery_id, nurse.id))
+
+
+@router.post(
+    "/{delivery_id}/receipt", response_model=DeliveryOut,
+    summary='"받았습니다" (수령 확인)',
+    description="arrived → received. 도착한 본인 배송만. 로봇(배송 실행기)은 대기 중 /robot/me로 알아차리고 돌아간다. "
+                "NURSE_RECEIPT_METHOD=marker로 마커를 되살리면 409 delivery_receipt_by_marker (2026-10-22)",
+    responses={**OWNERSHIP_RESPONSES, 409: {"description": "도착 전이거나 끝난 배송 (delivery_not_arrived) · 마커 방식 (delivery_receipt_by_marker)"}},
+)
+def confirm_delivery_receipt(db: DB, nurse: CurrentNurse, delivery_id: int) -> DeliveryOut:
+    """
+    [입력] delivery_id / nurse
+    [출력] DeliveryOut: received
+    """
+    return DeliveryOut.model_validate(DeliveryService(db).confirm_receipt(delivery_id, nurse.id))

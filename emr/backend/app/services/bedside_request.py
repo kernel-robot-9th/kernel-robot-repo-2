@@ -68,6 +68,8 @@ class BedsideRequestService:
         room = device.location
         if room.map_id is None or room.map_x_m is None:
             raise Conflict(f"room {room.name} has no map position", code="bedside_room_has_no_position")
+        if room.robot_only:   # 병실을 나중에 로봇 전용으로 바꾼 경우 (2026-10-22)
+            raise BadRequest(f"location {room.id} is robot-only", code="location_robot_only")
         if self.repo.get_active_for_bedside(device.id) is not None:
             raise Conflict(f"bedside {device.name} already has a delivery in progress", code="bedside_request_in_progress")
         self._validate_items(items)

@@ -64,6 +64,16 @@ class DeliveryRepository(BaseRepository[Delivery]):
         statement = statement.order_by(Delivery.scheduled_at, Delivery.id).limit(limit).offset(offset)
         return list(self.db.scalars(statement))
 
+    def list_waiting(self, due_before: datetime | None, limit: int = 100) -> list[Delivery]:
+        """로봇이 아직 맡지 않은(reserved) 배송, 예약 시각이 이른 순 — 로봇 쪽이 조회만 한다 (2026-10-22).
+        [입력] due_before: 있으면 예약 시각이 이 시각 이전인 것만 / limit
+        [출력] list[Delivery]
+        """
+        statement = select(Delivery).options(*_with_details()).where(Delivery.status == DeliveryStatus.RESERVED)
+        if due_before is not None:
+            statement = statement.where(Delivery.scheduled_at <= due_before)
+        return list(self.db.scalars(statement.order_by(Delivery.scheduled_at, Delivery.id).limit(limit)))
+
     def get_active_for_robot(self, robot_id: int) -> Delivery | None:
         """로봇이 지금 맡고 있는(dispatched·arrived) 배송. 부분 유일 인덱스로 많아야 하나.
         [입력] robot_id

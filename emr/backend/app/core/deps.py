@@ -20,6 +20,7 @@ from fastapi import Depends
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.exceptions import Forbidden, Unauthorized
 from app.core.security import decode_token, hash_robot_api_key
@@ -28,6 +29,7 @@ from app.models.enums import NurseRole
 from app.models.nurse import Nurse
 from app.models.robot import Robot
 from app.repositories.bedside_device import BedsideDeviceRepository
+from app.repositories.nurse import NurseRepository
 from app.repositories.robot import RobotRepository
 from app.services.auth import AuthService
 
@@ -48,6 +50,14 @@ def get_current_nurse(
     [입력] db: 세션 / credentials: Authorization 헤더 (없으면 None)
     [출력] Nurse: 활성 상태인 간호사
     """
+    if settings.AUTH_DISABLED:   # 로그인 잠시 끔 (2026-10-22) — 토큰이 맞으면 그 사람, 아니면 AUTH_DISABLED_AS 관리자
+        nurse_id = decode_token(credentials.credentials) if credentials else None
+        nurse = AuthService(db).get_active_nurse(nurse_id) if nurse_id is not None else None
+        if nurse is None:
+            nurse = NurseRepository(db).get_by_employee_no(settings.AUTH_DISABLED_AS)
+        if nurse is None or not nurse.is_active:
+            raise Unauthorized(f"AUTH_DISABLED but {settings.AUTH_DISABLED_AS} is not an active nurse", code="user_inactive")
+        return nurse
     if credentials is None:
         raise Unauthorized("missing bearer token", code="token_missing")
     nurse_id = decode_token(credentials.credentials)
@@ -90,9 +100,16 @@ def get_current_robot(db: DB, raw_api_key: Annotated[str | None, Depends(robot_a
     [입력] db / raw_api_key: 헤더 값 (없으면 None)
     [출력] Robot: 키가 지금 유효한 로봇 (재발급·폐기된 키는 해시가 없어 실패)
     """
+    repository = RobotRepository(db)
+    if settings.ROBOT_KEY_DISABLED:   # 로봇 키 잠시 끔 (2026-10-22) — 맞는 키면 그 로봇, 아니면 ROBOT_KEY_DISABLED_AS
+        robot = repository.get_by_api_key_hash(hash_robot_api_key(raw_api_key)) if raw_api_key else None
+        robot = robot or repository.get(settings.ROBOT_KEY_DISABLED_AS)
+        if robot is None:
+            raise Unauthorized(f"ROBOT_KEY_DISABLED but robot {settings.ROBOT_KEY_DISABLED_AS} does not exist", code="robot_key_invalid")
+        return robot
     if not raw_api_key:
         raise Unauthorized("missing robot api key", code="robot_key_missing")
-    robot = RobotRepository(db).get_by_api_key_hash(hash_robot_api_key(raw_api_key))
+    robot = repository.get_by_api_key_hash(hash_robot_api_key(raw_api_key))
     if robot is None:
         raise Unauthorized("invalid or revoked robot api key", code="robot_key_invalid")
     return robot

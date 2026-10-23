@@ -157,7 +157,7 @@ export function useLocationMutations() {
   const qc = useQueryClient()
   const invalidate = () => qc.invalidateQueries({ queryKey: keys.locations })
   return {
-    create: useMutation({ mutationFn: (b: Omit<Location, 'id'>) => api.post<Location>('/locations', b), onSuccess: invalidate, meta: { action: '장소 등록' } }),
+    create: useMutation({ mutationFn: (b: Omit<Location, 'id' | 'robot_dest'> & { robot_dest?: string | null }) => api.post<Location>('/locations', b), onSuccess: invalidate, meta: { action: '장소 등록' } }),
     update: useMutation({
       mutationFn: ({ id, body }: { id: number; body: Partial<Omit<Location, 'id'>> }) =>
         api.patch<Location>(`/locations/${id}`, body),
@@ -223,6 +223,12 @@ export function useDeliveryMutations() {
       mutationFn: (id: number) => api.post<Delivery>(`/deliveries/${id}/cancel`),
       onSettled: invalidate,
       meta: { action: '배송 예약 취소' },
+    }),
+    // "받았습니다" — 도착한 본인 배송 수령 (2026-10-22, 마커 대신). 실패(409 이미 끝남)해도 목록을 서버 상태에 맞춘다
+    confirmReceipt: useMutation({
+      mutationFn: (id: number) => api.post<Delivery>(`/deliveries/${id}/receipt`),
+      onSettled: invalidate,
+      meta: { action: '수령 확인' },
     }),
   }
 }

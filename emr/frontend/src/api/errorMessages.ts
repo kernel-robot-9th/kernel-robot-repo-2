@@ -90,6 +90,9 @@ const ERROR_GUIDES: Record<string, ErrorGuide> = {
   delivery_invalid_transition: { message: '지금 배송 단계에서는 할 수 없는 보고입니다.', hint: '배송 목록에서 현재 단계를 확인해 주세요.' },
   delivery_already_received: { message: '이미 수령된 배송입니다.' },
   delivery_not_arrived: { message: '로봇이 아직 도착하지 않았거나 이미 끝난 배송입니다.', hint: '도착한 배송만 수령 확인할 수 있습니다.' },
+  location_robot_dest_duplicate: { message: '이 로봇 목적지는 이미 다른 장소에 연결돼 있습니다.', hint: '로봇 목적지 이름은 장소 하나에만 붙일 수 있습니다.' },
+  robot_no_active_delivery: { message: '로봇이 맡고 있는 배송이 없습니다.', hint: '배송을 가져간(claim) 뒤에 도착을 알려 주세요.' },
+  delivery_receipt_by_marker: { message: '이 배송은 마커로 수령합니다.', hint: '도착 창의 마커를 로봇 카메라에 보여 주세요.' },
   receipt_marker_not_for_delivery: { message: '이 배송의 수령 마커가 아닙니다.', hint: '도착 알림에 뜬 마커를 로봇 카메라에 보여 주세요. 신분증 마커로는 받을 수 없습니다.' },
   receipt_marker_exhausted: { message: '수령 마커를 더 만들 수 없습니다.', hint: `도착해 기다리는 배송이 너무 많습니다. ${REPORT_HINT}` },
   // 배송 예약

@@ -111,4 +111,6 @@ class BedsideDeviceService:
         room = self.locations.get(location_id)
         if room is None:
             raise BadRequest(f"location {location_id} not found", code="location_not_found")
+        if room.robot_only:   # 충전·출발점 등은 병실이 아니다 (2026-10-22)
+            raise BadRequest(f"location {location_id} is robot-only", code="location_robot_only")
         return room

@@ -41,7 +41,7 @@ docker compose down -v     # DB까지 초기화
 - `requirements.txt`에 `psycopg[binary]` 포함 (DB 대기 체크에 사용)
 - `alembic.ini`가 `backend/` 바로 아래
 - `scripts/seed.py`가 두 번 실행돼도 죽지만 않으면 됨 (실패해도 서버는 뜸)
-- 설정은 환경변수 `DATABASE_URL` `JWT_SECRET` `JWT_EXPIRE_MINUTES` `CORS_ORIGINS`로 읽음 (pydantic-settings)
+- 설정은 환경변수 `DATABASE_URL` `JWT_SECRET` `JWT_EXPIRE_MINUTES` `CORS_ORIGINS` `NURSE_RECEIPT_METHOD`(button|marker, 2026-10-22)로 읽음 (pydantic-settings)
 
 ## 프론트 타입 재생성
 ```bash

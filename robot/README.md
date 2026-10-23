@@ -350,33 +350,45 @@ python3 test_waypoint.py 비품실 301호 302호 간호사스테이션 --robot h
 - 웹서버 `/api/goal`은 성공·실패를 알려 주지 않아 위치로 판정합니다. Nav2가 목표를 거부하면 제한 시간까지 기다린 뒤 정지합니다.
 - 옵션: `--emr`(기본 `http://localhost:8000/api/v1`), `--robot`(기본 `http://192.168.4.1:8080`), `--arrive-tolerance-m`, `--timeout-s`, `--wait-s`, `--skip-map-check`(위험).
 
-## 8-1-2. EMR 배송 실행기 (`src/fms/delivery_executor`, 2026-10-20)
+## 8-1-2. EMR 배송 실행기 (`src/fms/delivery_executor`, 2026-10-20 · 주행·수령 변경 2026-10-22)
 
-EMR 웹 예약을 로봇에 전달하는 관제 PC 프로그램입니다(EMR 로드맵 2단계). 예약 시각이 지난 배송을 EMR에서 가져와(claim) Nav2로 보내고,
-도착하면 예약 간호사 화면에 뜨는 **일회용 수령 마커**를 로봇 카메라가 읽어 수령을 알립니다. 계약: `dev_ws/docs/api_contract_delivery_2026-10-20.md`.
+EMR 웹 예약을 로봇에 전달하는 관제 PC 프로그램입니다(EMR 로드맵 2단계). 예약 시각이 지난 배송을 EMR에서 가져와(claim) 로봇을 보내고,
+도착을 알린 뒤 수령을 기다렸다가 복귀시킵니다. 계약: `dev_ws/docs/api_contract_delivery_2026-10-20.md` 4장.
+
+**2026-10-22부터 (사용자 결정)**
+- 주행은 **팀원 Pinky API**(로봇 `:8080`, `POST /goto {dest}` → `GET /jobs/{id}`)로 합니다(`navigation: pinky_api`). ROS가 필요 없고, **인증 없이** 진행합니다(운영 전에 넣기). 분석: `dev_ws/docs/pinky_fms_api_review_2026-10-22.md`.
+- 주행은 **비동기**입니다: 보내 놓고 반복마다 확인하며, **제한 시간이 없습니다**(`navigation_timeout_s: null`). **비품실 금지를 풀었습니다**(비품실 → `PHARMACY`, 복귀 간호사스테이션 → `START_A`).
+- **수령 마커는 꺼 둡니다**(`receipt_markers: false`). 간호사·환자가 EMR 화면에서 "받았습니다"를 누르면, 실행기가 대기 중 2초마다 `/robot/me`를 보고 알아차립니다.
+- 예전 방식(Nav2 직접 `navigation: ros`, 마커 `receipt_markers: true` + EMR `NURSE_RECEIPT_METHOD=marker`)은 설정으로 되살립니다.
 
 ```bash
 # 1) EMR 장소·맵·로봇 화면 → 로봇 탭: 로봇 1호의 복귀 장소(예: 간호사스테이션) 지정, 키 발급 → 파일로 저장
 mkdir -p ~/.config/delivery_executor && chmod 700 ~/.config/delivery_executor
 nano ~/.config/delivery_executor/pinky_1.key && chmod 600 ~/.config/delivery_executor/pinky_1.key   # 키 한 줄
-# 2) 설정 확인: src/fms/delivery_executor/config/executor.yaml (emr_robot_id, ros_domain_id(지금 Pinky는 0), 금지 장소)
-# 3) 실행 (로봇에서 bringup + Nav2(bringup_launch.xml map:=...map_rev2.yaml), 초기 위치 설정 후)
+# 2) 설정 확인: src/fms/delivery_executor/config/executor.yaml
+#    emr_robot_id, pinky_api 주소. 목적지는 EMR 장소의 '로봇 목적지'(robot_dest)를 쓴다 — 아래로 Pinky 목적지를 EMR 맵·장소로 가져오기
+#    (팀원이 목적지를 바꾸면 다시 실행. 관리자 비밀번호는 EMR_PASSWORD 또는 입력)
+python3 ~/dev_ws/emr/backend/scripts/import_pinky_dests.py --pinky http://192.168.129.122:8080 --home START_A --robot-id 1
+curl http://192.168.129.122:8080/status      # 로봇 위치 추정(localized)·nav2_ready·idle 확인 (읽기만)
+curl http://192.168.129.122:8080/dests       # 목적지 이름 (2026-10-22 /stops에서 바뀜)
+# 3) 연결 점검 — 로봇을 움직이지 않음 (EMR 키·복귀 장소, Pinky 상태, 목적지 이름, 목적지별 경로 계산)
 colcon build --symlink-install --packages-select delivery_executor && source install/setup.bash
+ros2 run delivery_executor executor --check    # 끝에 "→ 배송을 맡을 수 있습니다"면 준비 완료
+# 4) 실행 — ⚠️ 배송이 있으면 로봇이 실제로 움직입니다
 ros2 run delivery_executor executor            # --config 다른.yaml, --robot pinky_1
-# 4) 도착하면 간호사 화면의 마커 번호를 로봇이 읽은 것처럼 보내기 (카메라 마커 노드가 생기기 전)
-ROS_DOMAIN_ID=0 ros2 topic pub --once /receipt_marker std_msgs/msg/Int32 "{data: 137}"
+# 5) 도착하면 간호사 화면의 도착 창(또는 배송 목록)에서 "받았습니다" → 실행기가 알아차리고 복귀
 ```
 
 | 상황 | 동작 |
 |---|---|
-| 시작 | `/robot/me`로 키가 설정의 로봇 것인지, 복귀 장소, **로봇 /map이 EMR 맵과 같은지** 확인. 맡고 있던 배송이 있으면 그 단계부터 이어서 |
-| 배송 | 3초마다 claim → 목적지 주행 → 도착 보고 → 마커 대기(같은 번호는 3초에 한 번) → 수령 → 복귀 |
-| 환자(병상) 배송 | `receipt_method: button` — 마커 대신 환자가 EMR 병상 화면에서 "받았습니다"를 누른다. 실행기는 대기 중 `receipt_poll_s`(2초)마다 `/robot/me`를 보고 맡은 배송이 없어지면 수령으로 보고 복귀(2026-10-22) |
-| 실패 | 주행 실패 → `navigation_failed`, 5분 미수령 → `not_received`, 금지 장소(비품실) → `destination_blocked`(움직이지 않음). 모두 EMR이 재고를 되돌리고 알림 |
+| 시작 | `/robot/me`로 키가 설정의 로봇 것인지, 복귀 장소 확인. 맡고 있던 배송이 있으면 그 단계부터 이어서. (`ros`면 로봇 /map = EMR 맵도 확인) |
+| claim 전 | (`pinky_api`) `GET /status` — 위치 모름·Nav2 안 됨·다른 작업 중이면 맡지 않고 기다림 |
+| 배송 | 3초마다 claim → 목적지 이름으로 `/goto` → **기다리지 않고** 반복마다 `/jobs/{id}` 확인(비동기, 제한 시간 없음) → 끝나면 도착 보고 → "받았습니다" 대기(2초마다 `/robot/me`) → 복귀도 같은 방식 |
+| 실패 | Pinky 작업 실패(제한 시간을 정했으면 시간 초과도) → `navigation_failed`, 5분 미수령 → `not_received`, 금지 장소(2026-10-22 비품실 해제 — 지금 없음)·`dests`에 없는 장소·Pinky가 못 가는 곳 → `destination_blocked`(움직이지 않음), Pinky가 30초 넘게 다른 작업 중 → `robot_error`. 모두 EMR이 재고를 되돌리고 알림 |
 | 복귀 실패 | 멈춤(다음 배송을 맡지 않음) — 로봇 위치 확인 후 다시 시작 |
-| Ctrl+C | 진행 중 Nav2 목표를 취소해 로봇을 세움. 배송은 EMR에 남아 다음 시작 때 이어서(실패로 보고하지 않음) |
+| Ctrl+C | 실행기가 시작한 Pinky 작업을 `POST /cancel`로 멈춤(`ros`면 Nav2 목표 취소). 배송은 EMR에 남아 다음 시작 때 이어서(실패로 보고하지 않음) |
 
-로봇 없이 시험: EMR `backend/scripts/simulate_robot.py`(로봇 흉내), 또는 도메인 77에 가짜 Nav2(`/map` + `navigate_to_pose`)를 띄워 실행기 전체를 확인(2026-10-20 수행).
+로봇 없이 시험: 가짜 Pinky API(단위 테스트 `test/test_pinky_api.py`와 같은 흉내 서버)에 `pinky_api` 주소를 돌려 실행기 전체를 확인(2026-10-22 수행 — 실제 EMR, 간호사 화면 "받았습니다"까지). 예전 방식은 EMR `backend/scripts/simulate_robot.py` 또는 도메인 77 가짜 Nav2(2026-10-20).
 
 ## 8-1-3. 간호사 따라가기 (선택 기능, `src/pinky_onboard/pinky_marker`, 2026-10-20)
 

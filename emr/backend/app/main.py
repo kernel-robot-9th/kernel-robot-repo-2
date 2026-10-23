@@ -39,6 +39,12 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
         conn.execute(text("SELECT 1"))
     notification_hub.start()
     log.info("startup", env=settings.ENV, db=settings.db_host_for_log())
+    if settings.AUTH_DISABLED:
+        log.warning("auth_disabled", acting_as=settings.AUTH_DISABLED_AS,
+                    detail="JWT login is OFF — anyone on the network acts as this admin (AUTH_DISABLED=1)")
+    if settings.ROBOT_KEY_DISABLED:
+        log.warning("robot_key_disabled", acting_as_robot_id=settings.ROBOT_KEY_DISABLED_AS,
+                    detail="robot API key check is OFF — calls without a key act as this robot (ROBOT_KEY_DISABLED=1)")
     yield
     await notification_hub.stop()
     engine.dispose()
