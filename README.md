@@ -2,7 +2,7 @@
 커널아카데미 : 로보틱스 심화 캠프 9기 2팀 저장소. 지능형 의료서비스로봇 헬퍼 시스템
 
 병동 간호사가 웹에서 비품 배송을 예약하면, 자율주행 로봇(Pinky Pro)이 병실까지 가져다주고 간호사 확인을 받아 수령을 끝내는 시스템입니다.
-로봇팔(ROBOTIS OMX-F)은 자연어 명령으로 물건을 집어 옮기며, 이후 배송 로봇에 비품을 싣는 단계를 맡습니다.
+약제실에서 로봇팔(ROBOTIS OMX-F)이 배송 로봇에 비품을 싣는 단계는 팀원이 맡습니다.
 
 ## 시스템 구성
 
@@ -11,25 +11,34 @@ flowchart LR
   N["간호사<br/>웹 브라우저"] -->|예약·확인| W["EMR 웹<br/>React"]
   W --> A["EMR API<br/>FastAPI"]
   A --> D[("PostgreSQL")]
-  X["팀원 FMS"] -->|배송 가져가기·상태·도착 보고<br/>로봇별 키| A
+  A <-->|"배송 가져가기·도착·실패 보고<br/>⇄ 배정 때 로봇 상태 조회"| X["팀원 FMS<br/>(Pinky API)"]
   X -->|주행 명령| P["Pinky Pro<br/>AMR"]
-  V["VLA 플래너"] -->|자연어 → 작업| O["OMX-F<br/>로봇팔"]
-  V --> L["Ollama<br/>로컬 LLM"]
+  A <-->|"적재 명령·상태<br/>⇄ 완료 신호"| O["팀원 OMX<br/>로봇팔"]
 ```
 
 | 구성 | 하는 일 |
 |---|---|
-| **EMR 웹** (`emr/`) | 간호사 로그인, 비품 재고, 배송 예약·단계 표시, 병원 맵과 장소 등록, 로봇 등록과 로봇별 API 키, 실시간 알림 |
-| **팀원 FMS** (이 저장소 밖) | EMR에서 배송을 가져가 Pinky를 주행시키고, 로봇 상태·도착을 EMR에 보고 |
-| **VLA 로봇팔** (`robot/src/vla_planner_robot`) | 탑뷰 카메라와 ArUco 마커로 물체 위치를 구하고, 로컬 LLM이 고른 작업을 MoveIt 2로 수행 (1팔·2팔) |
+| **EMR 웹** (`emr/`) | 간호사 로그인, 비품 재고, 배송 예약·단계 표시, 병원 맵과 장소 등록, 로봇 등록과 로봇별 API 키, 병상 단말(환자 요청), 실시간 알림 |
+| **팀원 FMS** (이 저장소 밖) | 어느 로봇이 어떤 길로 갈지 정하고 Pinky를 주행시킨다. EMR과 **양방향**으로 주고받는다(아래) |
+| **팀원 OMX 로봇팔** (이 저장소 밖) | 약제실에서 Pinky 위에 비품을 싣는다(모방학습). EMR이 명령을 보내고 완료 신호를 받는다 |
+
+**EMR ⇄ 팀원 FMS**
+
+| 방향 | 내용 |
+|---|---|
+| FMS → EMR | 배송 가져가기(`POST /api/v1/robot/deliveries/claim`), 예약 목록 보기(`GET /robot/deliveries`), 도착(`POST /robot/arrived` — Pinky가 약제실 정밀 주차를 마치면 직접 부름), 실패 보고(`POST /robot/deliveries/{id}/progress`) |
+| EMR → FMS | 배정할 때 로봇 서버의 `GET /status`로 배터리·오염도·주행 준비를 확인(로봇별 `robot_server_url`) |
+| (예정) EMR → FMS | 예약 시각에 배송을 묶어 FMS로 보내기 — 별도 브랜치 `fms-order-2026-10-26`에 보관, 팀원 FMS가 준비되면 다시 시작 |
+
+**EMR ⇄ 팀원 OMX**: EMR → OMX 적재 명령·상태(`POST /api/v1/omx/command`, `GET /api/v1/omx/status`, 관리자), OMX → EMR 완료 신호(`GET /api/v1/robot/{request_id}/end-point`). 명세는 [OMX 완료 신호](docs/omx_end_point_spec_2026-10-26.md).
 
 ## 배송 흐름
 
-1. 간호사가 EMR에서 목적지(병실)·비품·시각을 정해 예약합니다. 재고는 예약할 때 빠집니다.
-2. 예약 시각이 지나면 팀원 FMS가 EMR에서 배송을 가져가고, Pinky가 출발합니다.
-3. 도착하면 예약한 간호사(병상 요청이면 환자) 화면에 **"받았습니다" 버튼**이 뜹니다.
-4. 물건을 받고 버튼을 누르면 수령이 끝나고, 로봇은 복귀 장소로 돌아갑니다. (일회용 ArUco 마커 수령도 EMR에 있지만 지금은 꺼 두었습니다.)
-5. 길을 못 찾거나 5분 안에 수령하지 않으면 실패로 처리되어 재고가 되돌아갑니다.
+1. 간호사가 EMR에서 목적지(병실)·비품·시각을 정해 예약합니다. 재고는 예약할 때 빠집니다. 병상 태블릿에서 환자가 직접 요청할 수도 있습니다.
+2. 예약 시각이 지나면 팀원 FMS가 EMR에서 배송을 가져갑니다. EMR은 이때 로봇 상태(배터리·오염도)를 확인합니다.
+3. 약제실에서 OMX가 비품을 싣고, Pinky가 병실로 갑니다.
+4. 도착하면 예약한 간호사(병상 요청이면 환자) 화면에 **"받았습니다" 버튼**이 뜹니다. 누르면 수령이 끝납니다. (일회용 ArUco 마커 수령도 EMR에 있지만 지금은 꺼 두었습니다.)
+5. 로봇 쪽이 실패를 보고하면 재고가 되돌아갑니다.
 
 단계마다 예약한 간호사에게 실시간 알림이 가고, 실패는 관리자에게도 갑니다. 자세한 규칙은 [API 계약 문서](docs/api_contract_delivery_2026-10-20.md)에 있습니다.
 
@@ -37,30 +46,27 @@ flowchart LR
 
 | 영역 | 사용 기술 |
 |---|---|
-| 웹 백엔드 | Python 3.12, FastAPI, SQLAlchemy 2, Alembic, PostgreSQL 16, PostgreSQL LISTEN/NOTIFY + SSE |
+| 웹 백엔드 | Python 3.12, FastAPI, SQLAlchemy 2, Alembic, PostgreSQL 16, PostgreSQL LISTEN/NOTIFY + SSE, httpx |
 | 웹 프론트엔드 | React 19, TypeScript, Vite 8, TanStack Query 5, Tailwind CSS 4 |
 | 실행 환경 | Docker Compose (db · api · web) |
-| 로봇 | ROS 2 Jazzy, Nav2, MoveIt 2, Gazebo Harmonic, OpenCV ArUco |
+| 로봇 | ROS 2 Jazzy, Nav2, MoveIt 2, Gazebo Harmonic |
 | 하드웨어 | Pinky Pro (AMR, Raspberry Pi, 라이다·카메라), ROBOTIS OMX-F |
-| LLM | Ollama (`gemma4:e2b`, 로컬) |
 
 ## 저장소 구조
 
 ```
 kernel-robot-repo-2/
 ├─ emr/                         EMR 웹 (docker compose 한 번에 실행)
-│  ├─ backend/                  FastAPI · 마이그레이션 · 테스트
+│  ├─ backend/                  FastAPI · 마이그레이션 · 테스트 · scripts(Pinky 목적지 가져오기 등)
 │  └─ frontend/                 React · TypeScript
-├─ robot/                       ROS 2 colcon 워크스페이스
-│  └─ src/
-│     └─ vla_planner_robot/     OMX-F 자연어 pick & place
-├─ ollama_ws/                   로컬 LLM 준비 (Ollama + gemma4:e2b) — setup_ollama.sh, check_ollama.py
+├─ robot/                       ROS 2 colcon 워크스페이스 (외부 패키지는 부록 A로 받음)
+├─ tools/ws_interface_test/     WebSocket·MQTT 인터페이스 시험 도구
 └─ docs/                        설계·분석·계약 문서
 ```
 
 ## 시작하기
 
-준비물은 Ubuntu 24.04, Docker, ROS 2 Jazzy입니다. 로봇팔 시뮬레이션에는 MoveIt 2, Gazebo Harmonic, Ollama가 추가로 필요합니다.
+준비물은 Ubuntu 24.04, Docker, ROS 2 Jazzy입니다.
 
 ```bash
 git clone <이 저장소 주소> ~/dev_ws && cd ~/dev_ws
@@ -75,9 +81,6 @@ cd ~/dev_ws/robot
 source /opt/ros/jazzy/setup.bash
 rosdep install --from-paths src --ignore-src -r -y
 MAKEFLAGS=-j4 colcon build --symlink-install --parallel-workers 2 --cmake-args -DPython3_EXECUTABLE=/usr/bin/python3
-
-# 3) 로봇팔 플래너용 로컬 LLM (Ollama + gemma4:e2b, 4.6 GB)
-cd ~/dev_ws/ollama_ws && ./setup_ollama.sh        # Ollama가 없으면 ./setup_ollama.sh --install
 ```
 
 > **주의**: conda(anaconda)가 PATH에 있으면 CMake가 conda의 protobuf를 잡아 `pinky_gz_sim` 빌드가 실패합니다(2026-10-20 확인).
@@ -86,29 +89,32 @@ cd ~/dev_ws/ollama_ws && ./setup_ollama.sh        # Ollama가 없으면 ./setup_
 | 하려는 것 | 안내 |
 |---|---|
 | EMR 실행·계정·다른 PC 접속 | [emr/README.md](emr/README.md) |
-| 로봇 빌드, 시뮬레이션, 실물 로봇팔 | [robot/README.md](robot/README.md) |
-| 로컬 LLM 설치·확인·설정 | [ollama_ws/README.md](ollama_ws/README.md) |
+| 로봇 워크스페이스 빌드 | [robot/README.md](robot/README.md) |
 | 서버 한 대 전체 구성(포트·실행 순서·문제 해결) | [docs/server_guide.md](docs/server_guide.md) |
+| 팀원 FMS가 EMR을 부르는 방법 | [팀원 연동 안내](docs/emr_robot_api_for_teammate_2026-10-22.md) |
 
-## 현재 상태 (2026-10-20)
+## 현재 상태 (2026-10-26)
 
 | 기능 | 상태 |
 |---|---|
-| EMR 비품·예약·맵·장소·로봇·알림 | 완료, 백엔드 테스트 101개 통과 |
-| 배송 배정·진행·수령 | EMR 쪽 완료. 로봇 쪽은 팀원 FMS가 EMR 로봇 API로 연동 (2026-10-23~) |
-| Pinky 실물 주행 | EMR 장소 좌표로 이동 확인. **배송 전체 흐름의 실물 시험은 예정** |
-| OMX-F 로봇팔 | 시뮬레이션 1팔·2팔 검증, 실물 1팔 집기·옮기기 시험 중 |
-| 로봇 상태 화면, Pinky 여러 대 | 계획 ([여러 대 운영 구조](docs/pinky_multi_robot_2026-10-20.md)) |
+| EMR 비품·예약·맵·장소·로봇·알림·배송 기록 | 완료, 백엔드 테스트 169개 |
+| 병상 단말 환자 요청·"받았습니다" 수령 | 완료 |
+| EMR ⇄ 팀원 FMS | 로봇 쪽이 가져가기·도착·실패 보고, EMR이 배정 때 로봇 상태 확인. Pinky가 약제실 도착을 EMR에 직접 알리는 것 확인(10-23) |
+| EMR → FMS 묶음 보내기 | 예정 — 브랜치 `fms-order-2026-10-26`에 보관 |
+| EMR ⇄ 팀원 OMX | 적재 명령·상태·완료 신호 API 완료(10-26) |
+| Pinky 실물 주행 | 복도·협로·약제실 정밀 주차 확인. 병실 칸 진입 구간은 팀원 쪽 Nav2 조정 필요 |
+| 시험용 설정 | 로그인·로봇 키 검사를 잠시 꺼 둠 — 운영 전에 켜기 ([EMR 이슈 정리](docs/emr_dev_issues_2026-10-23.md) 3장) |
 
 ## 문서
 
-- [배송 API 계약](docs/api_contract_delivery_2026-10-20.md): EMR과 로봇 쪽 사이의 상태·API·오류 코드
-- [Pinky 여러 대 운영 구조](docs/pinky_multi_robot_2026-10-20.md): 관제 PC 구조, ROS 도메인 분리, 맵 공유
+- [배송 API 계약](docs/api_contract_delivery_2026-10-20.md): EMR과 로봇 쪽 사이의 상태·API·오류 코드, OMX 완료 신호(9장)
+- [팀원 연동 안내](docs/emr_robot_api_for_teammate_2026-10-22.md): 팀원 FMS가 EMR을 부르는 순서와 예시
+- [OMX 완료 신호 명세](docs/omx_end_point_spec_2026-10-26.md)
+- [Pinky API 분석](docs/pinky_fms_api_review_2026-10-22.md): 팀원 Pinky API 실측과 연동 제안
+- [EMR 개발 이슈·문제 해결](docs/emr_dev_issues_2026-10-23.md): 진행도, 해결한 문제, 남은 문제 전체 표
+- [EMR 화면](docs/emr_screens/README.md) · [EMR 데이터 형식·화면](docs/emr_robot_data_format/README.md)
 - [Pinky 분석](docs/pinky_analysis_2026-10-20.md): 실측 상태와 남은 과제
-- [모방학습 데이터셋 점검](docs/il_dataset_review/README.md): 같은 문장·다른 시작 환경에서 정책이 출발·멈추는 문제, 데이터·실행 쪽 제안
-- [OMX 스킬 인터페이스 설계](docs/omx_skill_interface_2026-10-21.md): LLM 플래너가 고전 IK와 모방학습 정책을 같은 규격으로 부르는 구조(초안)
-- [서버 현황 보고서](docs/server_report_2026-10-19.md)
-- [올리기 전 검증 보고서](docs/verification_report_2026-10-20.md): 영역별로 어디까지 확인했는지, 남은 시험
+- [서버 현황 보고서](docs/server_report_2026-10-19.md) · [올리기 전 검증 보고서](docs/verification_report_2026-10-20.md)
 
 ## 라이선스
 
@@ -160,6 +166,6 @@ rosdep install --from-paths src --ignore-src -r -y       # 나머지 의존 패�
 MAKEFLAGS=-j4 colcon build --symlink-install --parallel-workers 2
 ```
 
-- 외부 패키지는 **고치지 않습니다.** 바꿀 것은 우리 패키지에서 덮어씁니다. 예를 들어 `vla_sim`은 ROBOTIS URDF를 읽어 바꿔 쓰고, 2팔 설명은 ROBOTIS xacro 매크로를 불러 씁니다.
+- 외부 패키지는 **고치지 않습니다.** 바꿀 것은 우리 패키지에서 덮어씁니다(예: ROBOTIS URDF·xacro를 불러 와 바꿔 쓰기).
 - PC에서는 `pinky_pro` 중 시뮬레이션용 패키지만 빌드됩니다. `pinky_lamp_control`, `pinky_imu_bno055`, `pinky_sensor_adc`는 Raspberry Pi 하드웨어 라이브러리가 필요해서 PC에서는 빌드되지 않습니다.
 - 고정 버전을 올릴 때는 새 커밋으로 빌드·시험한 뒤 이 부록의 표와 `checkout` 커밋을 함께 바꿉니다.
