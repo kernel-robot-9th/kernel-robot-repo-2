@@ -8,6 +8,7 @@
 // 수령 완료(delivery_received)는 서버가 예약한 간호사에게만 보낸다 — 오면 배송 목록을 다시 불러오고 초록 토스트 (2026-10-19)
 // 서버는 10분마다 연결을 닫는다(토큰·계정 재검사) — 그때와 끊겼을 때 RECONNECT_DELAYS_MS 간격으로 다시 붙는다
 // 401이면 다시 붙지 않고 내 정보를 다시 불러 main.tsx의 401 처리(로그인 화면으로)를 태운다
+// 안내 음성(2026-10-26): 켜 두면 출발·도착·내 배송 실패를 소리로도 읽는다(features/voice/speech.ts)
 // =============================================================================
 import { useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
@@ -15,6 +16,7 @@ import { ApiRequestError, streamServerSentEvents } from '../../api/client'
 import { keys } from '../../api/hooks'
 import type { DeliveryReceivedEvent, DeliveryStageEvent, LowStockEvent, Nurse } from '../../api/types'
 import { DELIVERY_FAILURE_REASON_LABEL } from '../../api/types'
+import { speak } from '../voice/speech'
 import { showToast } from './toastStore'
 
 const RECONNECT_DELAYS_MS = [1_000, 3_000, 10_000, 30_000]   // 연속으로 실패할수록 길게. 마지막 값을 계속 쓴다
@@ -34,11 +36,13 @@ function showDeliveryToast(event: string, stage: DeliveryStageEvent, myNurseId: 
   const robot = stage.robot_name ?? '로봇'
   if (event === 'delivery_dispatched') {
     showToast('로봇 출발', `${robot}이(가) ${what}을 가지고 출발했습니다.`, 'info')
+    speak(`${stage.destination_location_name} 배송 로봇이 출발했습니다.`)
   } else if (event === 'delivery_arrived') {
     const howToReceive = stage.receipt_method === 'marker'
       ? '화면에 뜬 수령 마커를 로봇 카메라에 보여 주세요.'
       : "물건을 받은 뒤 화면의 '받았습니다'를 눌러 주세요."   // 2026-10-22 기본
     showToast('로봇 도착', `${robot}이(가) ${stage.destination_location_name}에 도착했습니다. ${howToReceive}`, 'info')
+    speak(`${stage.destination_location_name}에 배송 로봇이 도착했습니다. ${stage.receipt_method === 'marker' ? '수령 마커를 로봇 카메라에 보여 주세요.' : '물건을 받은 뒤 받았습니다를 눌러 주세요.'}`)
   } else if (event === 'delivery_received') {
     showToast('배송 수령 완료', `${what} 수령이 확인되었습니다. ${robot}이(가) 돌아갑니다.`, 'success')
   } else if (event === 'delivery_failed') {
@@ -49,6 +53,7 @@ function showDeliveryToast(event: string, stage: DeliveryStageEvent, myNurseId: 
     }
     const mine = myNurseId === undefined || myNurseId === stage.recipient_nurse_id
     showToast(mine ? '배송 실패' : '배송 실패 (관리자 알림)', `#${stage.delivery_id} ${what}: ${reason}. 재고는 되돌렸습니다.`, 'error')
+    if (mine) speak(`${stage.destination_location_name} 배송이 실패했습니다. ${reason}.`)
   }
 }
 

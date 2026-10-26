@@ -49,5 +49,17 @@ docker compose exec -e OPENAPI_URL=http://api:8000/openapi.json web npm run gen 
 ```
 `gen`의 기본 주소는 `localhost:8000`이라 컨테이너 안에서는 닿지 않는다 — 위처럼 `OPENAPI_URL`로 컨테이너 내부 주소를 넘긴다.
 
+## 음성 배송 예약 (2026-10-26)
+새 예약 폼 위 '말로 예약'(🎤 말하기 또는 문장)으로 목적지·품목을 채운다. 예약은 간호사가 확인하고 '예약'을 눌러야 생긴다. 기본은 꺼져 있다.
+```bash
+# emr/.env에 넣고(키는 커밋·문서에 넣지 않는다) api만 다시 띄운다
+VOICE_PARSER=gemini
+GEMINI_API_KEY=<발급받은 키>
+docker compose up -d api
+```
+- 켜면 녹음·문장이 **Google 클라우드(Gemini)로 나간다** — 시연·시험 동안만.
+- 브라우저 마이크는 **localhost나 HTTPS에서만** 된다. 다른 PC(`http://<IP>:5173`)는 문장 입력만 된다.
+- 상단 '🔇 안내 음성'을 켜면 배송 출발·도착·실패를 브라우저가 읽어 준다(서버 설정 없음).
+
 ## 다른 PC에서 접속
 브라우저는 같은 주소의 `/api/v1`을 부르고 Vite 개발 서버가 api 컨테이너로 넘긴다(`frontend/vite.config.ts` proxy). 그래서 `http://<이 PC의 IP>:5173`으로 접속하면 된다. `.env`의 `VITE_API_URL`은 `/api/v1`로 둔다 — `http://localhost:8000/...`이면 다른 PC의 브라우저가 자기 자신을 불러 '서버에 연결할 수 없습니다'가 뜬다.

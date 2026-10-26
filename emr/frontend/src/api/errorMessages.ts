@@ -89,6 +89,10 @@ const ERROR_GUIDES: Record<string, ErrorGuide> = {
   // OMX(로봇팔) — 관리자 명령·상태 (2026-10-26)
   omx_unavailable: { message: '로봇팔(OMX) 서버가 응답하지 않습니다.', hint: 'OMX PC와 OMX API(8000번 포트)가 켜져 있는지 확인해 주세요.' },
   omx_rejected: { message: '로봇팔(OMX)이 명령을 받지 않았습니다.', hint: '다른 작업을 하고 있을 수 있습니다. OMX 상태를 확인한 뒤 다시 보내 주세요.' },
+  // 음성 배송 예약 초안 (2026-10-26)
+  voice_disabled: { message: '음성 예약 기능이 꺼져 있습니다.', hint: '목적지·품목을 직접 골라 예약해 주세요. 켜려면 관리자가 서버 설정(VOICE_PARSER·GEMINI_API_KEY)을 바꿔야 합니다.' },
+  voice_unavailable: { message: '음성을 알아듣지 못했습니다(음성 분석 서버 응답 없음).', hint: `잠시 뒤 다시 말해 보거나, 목적지·품목을 직접 골라 주세요. ${REPORT_HINT}` },
+  voice_audio_invalid: { message: '녹음 파일을 쓸 수 없습니다.', hint: '녹음이 비었거나 너무 깁니다. 30초 안으로 다시 말해 주세요.' },
   delivery_not_assigned_to_robot: { message: '이 로봇이 맡은 배송이 아닙니다.', hint: '로봇 설정의 키가 맞는지 확인해 주세요.' },
   delivery_invalid_transition: { message: '지금 배송 단계에서는 할 수 없는 보고입니다.', hint: '배송 목록에서 현재 단계를 확인해 주세요.' },
   delivery_already_received: { message: '이미 수령된 배송입니다.' },

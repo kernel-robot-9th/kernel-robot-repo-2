@@ -55,6 +55,17 @@ class Settings(BaseSettings):
     OMX_BASE_URL: str = "http://192.168.129.86:8000"
     OMX_TIMEOUT_SECONDS: float = 3.0     # 이 안에 답하지 않으면 omx_unavailable(503)
 
+    # 음성 배송 예약 초안 (2026-10-26, app/services/voice_request.py). 사용자 결정: Gemini로 시작, 로컬 모델은 나중에 같은 인터페이스로.
+    # gemini면 녹음·문장이 Google 클라우드로 나간다 — 시연·시험 동안만. 키는 .env에만(문서·로그에 넣지 않는다)
+    VOICE_PARSER: Literal["gemini", "disabled"] = "disabled"   # disabled면 /voice/* 503 voice_disabled
+    GEMINI_API_KEY: str = ""
+    VOICE_MODEL: str = "gemini-3.8-flash"   # [검토 필요] ~/voice_module(10-14)에서 동작한 모델명 — 바뀌면 .env로
+    VOICE_TIMEOUT_SECONDS: float = 20.0     # 이 안에 답하지 않으면 voice_unavailable(503)
+    # 안내 음성 POST /voice/speak (2026-10-26) — 켜고 끄기·키는 위와 같다
+    VOICE_TTS_MODEL: str = "gemini-3.8-flash-tts"   # 10-26 이 서버에서 동작 확인
+    VOICE_TTS_VOICE: str = "Kore"                   # [검토 필요] 기본 목소리 — 요청마다 voice로 바꿀 수 있다
+    VOICE_TTS_STYLE: str = "병원 안내 방송처럼 차분하고 또박또박, 자연스러운 속도로"
+
     def db_host_for_log(self) -> str:
         """로그용 DB 주소 — 비밀번호 제거.
         [입력] 없음

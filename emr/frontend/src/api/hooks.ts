@@ -15,14 +15,15 @@
 //   - useLowStock                              재고 부족 비품 (알림창). 실시간 갱신은 features/notifications
 //   - useBedsideDevices / useBedsideDeviceMutations   관리자 병상 단말 (2026-10-22)
 //   - useBedsideMe / useBedsideSupplies / useBedsideMutations   병상 화면 — 병상 단말 키로 (bedsideApi)
+//   - useVoiceDraftMutations                   음성·문장 → 배송 예약 초안 (2026-10-26, /api/v2 — 예약은 만들지 않음)
 // =============================================================================
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, bedsideApi } from './client'
+import { api, apiV2, bedsideApi } from './client'
 import type {
   AdminDeliveryEvent, BedsideApiKey, BedsideDelivery, BedsideDevice, BedsideDeviceCreate, BedsideDeviceUpdate,
   BedsideMe, BedsideRequest, BedsideSupply, Delivery, DeliveryCreate, DeliveryEvent, DeliveryEventFilters, DeliveryUpdate,
   Location, MapInfo, Nurse, NurseCreate, NurseUpdate, PasswordChange, PasswordReset,
-  Robot, RobotApiKey, Supply, SupplyCreate, SupplyUpdate,
+  Robot, RobotApiKey, Supply, SupplyCreate, SupplyUpdate, VoiceDraft,
 } from './types'
 import { ACTIVE_DELIVERY_STATUSES } from './types'
 
@@ -319,6 +320,25 @@ export function useBedsideMutations() {
       mutationFn: (deliveryId: number) => bedsideApi.post<BedsideDelivery>(`/bedside/deliveries/${deliveryId}/receipt`),
       onSettled: invalidate,
       meta: { action: '수령 확인', inline: true },
+    }),
+  }
+}
+
+/** 음성·문장 → 배송 예약 초안. 서버는 예약을 만들지 않으므로 다시 불러올 목록이 없다 (2026-10-26) */
+export function useVoiceDraftMutations() {
+  return {
+    fromAudio: useMutation({
+      mutationFn: (audio: Blob) => {
+        const form = new FormData()
+        const extension = audio.type.includes('ogg') ? 'ogg' : audio.type.includes('mp4') ? 'm4a' : 'webm'
+        form.append('audio', audio, `request.${extension}`)
+        return apiV2.post<VoiceDraft>('/voice/parse', form)
+      },
+      meta: { action: '음성 알아듣기' },
+    }),
+    fromText: useMutation({
+      mutationFn: (text: string) => apiV2.post<VoiceDraft>('/voice/parse-text', { text }),
+      meta: { action: '문장 알아듣기' },
     }),
   }
 }

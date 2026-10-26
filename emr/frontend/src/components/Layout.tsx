@@ -2,6 +2,7 @@
 // 파일   : src/components/Layout.tsx
 // 역할   : 로그인 후 공통 틀 — 좌측 메뉴 + 상단 알림 종·사용자(역할) + 비밀번호 변경 + 로그아웃
 //          실시간 알림 연결(useNotificationStream)과 토스트, 도착 수령 마커 창(ReceiptMarkerWatcher, 2026-10-20)도 여기서 한 번만 둔다
+//          상단 안내 음성 켜기·끄기(SpeechToggle, 2026-10-26)
 // 작성일 : 2026-10-14
 // 구성   :
 //   - NAV      메뉴 정의 (경로·라벨, adminOnly는 관리자에게만 보임 — 실제 차단은 백엔드 403)
@@ -16,6 +17,7 @@ import { ReceiptMarkerWatcher } from '../features/deliveries/ReceiptMarkerWatche
 import { NotificationBell } from '../features/notifications/NotificationBell'
 import { Toasts } from '../features/notifications/Toasts'
 import { useNotificationStream } from '../features/notifications/useNotificationStream'
+import { SpeechToggle } from '../features/voice/SpeechToggle'
 import { Badge, Button } from './ui'
 
 const NAV: { to: string; label: string; adminOnly?: boolean }[] = [
@@ -60,6 +62,7 @@ export function Layout() {
       </aside>
       <div className="flex flex-1 flex-col">
         <header className="flex items-center justify-end gap-3 border-b border-slate-200 bg-white px-6 py-2 text-sm">
+          <SpeechToggle />
           <NotificationBell connected={connected} />
           <span className="text-slate-600">
             {me.data ? `${me.data.name} (${me.data.employee_no})` : '…'}

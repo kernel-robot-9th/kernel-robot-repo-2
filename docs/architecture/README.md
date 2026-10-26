@@ -27,7 +27,7 @@
 | 팀원 담당 | 4 | Robot Task Manager(팀원 FMS), Navigation(Pinky Nav2), Manipulation(OMX 모방학습), 비품 식별/포즈 |
 | 없음 | 5 | Nurse Tracking, 사람 검출 + 트래커, Media Relay [O], 오브젝트 스토리지 [O], 응급 상황 감지 [O] |
 
-그림 밖으로 하나 더: **OMX 연동**(EMR → OMX 명령·상태, OMX → EMR 완료 신호) — 구현(10-26).
+그림 밖으로 둘 더: **OMX 연동**(EMR → OMX 명령·상태, OMX → EMR 완료 신호) — 구현(10-26). **음성 배송 예약**(음성 인식 → 예약 초안, 브라우저 안내 음성) — EMR에 구현(10-26, 4.14).
 
 EMR 쪽에서 비어 있는 것: **맵 위 로봇 위치**(Fleet State Manager의 위치 부분), **배송 진행 중 로봇 상태**(지금은 claim 순간에만 묻는다), **OMX 적재와 배송의 연결**(지금 OMX 명령은 관리자가 따로 보낸다).
 
@@ -81,6 +81,8 @@ EMR 쪽에서 비어 있는 것: **맵 위 로봇 위치**(Fleet State Manager�
 - `<features/deliveries/DeliveryForm.tsx, DeliveryForm>` : 예약 등록·변경 입력 폼
 - `<features/deliveries/DeliveryProgress.tsx, DeliveryProgress>` : 행마다 단계 표시(예약 → 출발 → 도착 → 수령/실패)
 - `<features/deliveries/ReceiptMarkerWatcher.tsx · ReceiptMarkerDialog.tsx · receiptMarkerStore.ts>` : 도착하면 어느 화면에서든 수령 창을 띄움 — "받았습니다" 버튼(기본) 또는 일회용 마커
+
+- 말로 예약: 새 예약 폼 위 '말로 예약'(4.14) — 초안으로 폼만 채우고 예약은 간호사가 누른다
 
 #### 4.1-2 병상 단말 환자 요청 `bedside` — Request Service(환자) · 구현 (2026-10-22)
 환자가 병상 태블릿에서 `requestable_by=patient` 품목을 요청(SR-02) → 간호사 승인 없이 바로 배송 → 로봇 도착 뒤 "받았습니다" 버튼으로 수령(SR-06). 병상당 진행 중 1건, 품목당 1–5. 계약 `docs/api_contract_delivery_2026-10-20.md` 8장.
@@ -194,6 +196,24 @@ EMR 쪽에서 비어 있는 것: **맵 위 로봇 위치**(Fleet State Manager�
 - 없음: 화면(지금은 `/docs`로 부름), 완료 신호와 배송의 연결(어느 배송의 적재인지)
 - 명세: [`../omx_end_point_spec_2026-10-26.md`](../omx_end_point_spec_2026-10-26.md)
 
+#### 4.14 음성 배송 예약 `voice` (중간 명칭: Voice Request) — 블록도 밖 · 구현 (2026-10-26)
+저장소 밖 단독 모듈 `~/voice_module`(10-14)을 EMR 계층에 맞춰 옮겼다(모듈은 그대로 둠). 사용자 결정(10-26): **Gemini로 시작**(로컬 모델은 같은 인터페이스로 나중에), **간호사 배송 예약 화면만**, **TTS는 브라우저 내장**, **약품도 받되 자동 확정 안 함**, 마이크를 못 쓰면 **문장 입력**.
+```
+🎤 녹음(또는 문장) → POST /api/v2/voice/parse(·parse-text) → Gemini(받아 적기 + 품목·수량·장소 JSON 1회)
+  → voice_matcher가 EMR 비품(간호사 품목)·장소(로봇 전용 제외)와 맞춤 → 초안 → 배송 예약 폼을 채움 → 간호사가 확인하고 '예약'(POST /deliveries)
+```
+- `<api/v2/voice.py, router>` (**`/api/v2`** — 10-26 사용자 결정으로 v1에서 옮김, 음성 고도화는 v2에서) : `POST /voice/parse`(multipart `audio`, webm·ogg·wav·mp3·m4a 15MB 이하) · `POST /voice/parse-text`(`{text}` 1~500자). 간호사 로그인 필요, **예약을 만들지 않는다**
+- `<services/voice_request.py, VoiceRequestService · get_voice_parser>` : 카탈로그(requestable_by=nurse 비품, robot_only 아닌 장소) → 파서 → 매칭, 같은 비품 두 번이면 수량 합침. 경고 코드 `medication_check`·`item_unmatched`·`no_items`·`location_missing`·`location_unmatched` → `needs_review`. 로그에 받아 적은 문장·품목을 남기지 않음(길이·처리 시간만)
+- `<services/voice_matcher.py, best_match · normalize · MatchTarget · MatchResult>` : 정확 일치 → 포함 → 유사도 0.75, 1·2위가 가까우면 확정하지 않고 후보 3개
+- `<clients/voice_parser.py, VoiceParser · GeminiVoiceParser · build_prompt · gemini_parser>` : Gemini Interactions API(google-genai). 로컬 모델은 `VoiceParser` 구현을 추가해 `get_voice_parser`에서 고른다
+- `<schemas/voice.py, VoiceDraft · VoiceDraftOut · VoiceItemOut · VoiceLocationOut>` : LLM 스키마와 응답
+- 설정 `VOICE_PARSER`(gemini | **disabled 기본** → 503 `voice_disabled`)·`GEMINI_API_KEY`(.env에만)·`VOICE_MODEL`·`VOICE_TIMEOUT_SECONDS`, 실패 503 `voice_unavailable`, 녹음 400 `voice_audio_invalid`
+- 프론트 `<features/voice/VoiceDraftBar.tsx>`(🎤 말하기·문장 입력·들은 말·경고) · `<useRecorder.ts>`(MediaRecorder 30초, http 주소면 마이크 없음 안내) · `<features/deliveries/DeliveryForm.tsx>`(초안으로 목적지·품목 채움, 후보 버튼, **음성으로 채운 약품 줄은 '확인함'을 표시해야 예약 가능**)
+- **안내 음성(TTS)** `<features/voice/speech.ts, speak · setSpeechEnabled>` · `<SpeechToggle.tsx>` : 상단 '🔇 안내 음성' 켜기(브라우저마다 기억, 기본 꺼짐) → 배송 출발·도착·내 배송 실패(`useNotificationStream.ts`)와 음성 초안 결과를 브라우저 `speechSynthesis`(ko-KR)로 읽음
+- **안내 음성 API** `POST /api/v2/voice/speak {text, voice?}` → `audio/wav` : `<services/voice_speech.py, SpeechService · get_speech_synthesizer>`(메모리 캐시 64개) → `<clients/speech_synth.py, SpeechSynthesizer · GeminiSpeechSynthesizer · pcm_to_wav>`(Gemini TTS). 10-26 실측 새 문장 5.7~7.9초, 캐시 0.007초
+- 테스트 `tests/test_api/test_voice.py`(가짜 파서) · `test_voice_speak.py`(가짜 TTS) · `tests/test_services/test_voice_matcher.py` 34개
+- 주의: `VOICE_PARSER=gemini`면 녹음·문장이 **Google 클라우드로 나간다** — 시연·시험 동안만. 남은 것: 로컬 STT, 비품 별칭 칼럼, HTTPS(다른 PC 녹음), 병상 단말 음성
+
 ### Robot Layer — 팀원 담당 (이 저장소 밖)
 
 #### 4.11 팀원 FMS · Pinky API — Robot Task Manager · Navigation · 팀원 담당
@@ -215,6 +235,7 @@ EMR 쪽에서 비어 있는 것: **맵 위 로봇 위치**(Fleet State Manager�
 ## 5. 이 구조 밖에 있는 것
 
 - **VLA 플래너**(`robot/src/vla_planner_robot` — LLM + IK 색 블록 pick & place): 배송 시스템과 별도인 기술 검증 과제. 로봇팔 자리는 팀원 OMX가 맡는다. 정리 [`../../robot/docs/vla_planner_tech_validation_2026-10-26.md`](../../robot/docs/vla_planner_tech_validation_2026-10-26.md)
+- **음성 단독 모듈 원본** `~/voice_module`(저장소 밖, 10-14): EMR로 옮긴 원본(4.14). Gemini TTS 스크립트 `voice_loop.py`는 옮기지 않았다(EMR은 브라우저 내장 음성)
 - **인터페이스 시험 도구** `tools/ws_interface_test`: 블록도 계획(WebSocket·MQTT)을 미리 맞춰 보는 독립 도구. EMR·로봇 코드와 연결 안 됨
 - **보관 브랜치** `fms-order-2026-10-26`: EMR이 예약 시각에 배송을 묶어 팀원 FMS로 보내는 작업(`POST /delivery-batches`, 3장 4번)
 

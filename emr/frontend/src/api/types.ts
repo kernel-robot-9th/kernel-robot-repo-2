@@ -10,6 +10,7 @@
 //   - 배송 기록 DeliveryEvent, AdminDeliveryEvent, DeliveryEventFilters, DELIVERY_EVENT_LABEL (2026-10-21, 로드맵 4단계)
 //   - 병상 단말 BedsideDevice, BedsideApiKey (관리자), BedsideMe·BedsideSupply·BedsideDelivery·BedsideRequest (환자 화면, 2026-10-22)
 //   - 알림      NotificationEventType, LowStockEvent, DeliveryReceivedEvent (SSE /notifications/stream)
+//   - 음성 초안 VoiceDraft, VoiceItem, VoiceLocation, VoiceCandidate, VoiceWarning (POST /api/v2/voice/parse·parse-text, 2026-10-26)
 // =============================================================================
 // [검토 필요] 손으로 옮긴 타입이다. 백엔드 기동 후 `npm run gen`으로 src/api/schema.d.ts를 만들고
 //   필드명이 다르면 이 파일을 schema.d.ts 기준으로 고친다. (components['schemas'][...] 로 교체 가능)
@@ -359,3 +360,43 @@ export interface DeliveryStageEvent {
 }
 /** 예전 이름 (수령 완료 알림) */
 export type DeliveryReceivedEvent = DeliveryStageEvent
+
+// ---------- 음성 배송 예약 초안 (2026-10-26) ----------
+/** 매칭 후보 — supplies.id 또는 locations.id */
+export interface VoiceCandidate {
+  id: number
+  name: string
+}
+/** 말한 품목과 EMR 비품의 매칭. supply_id가 null이면 확정 못 함 → candidates에서 고른다 */
+export interface VoiceItem {
+  spoken_name: string
+  quantity: number
+  supply_id: number | null
+  supply_name: string | null
+  score: number
+  is_medication: boolean   // 약품이면 자동 확정하지 않는다 — 간호사가 확인 표시
+  candidates: VoiceCandidate[]
+}
+export interface VoiceLocation {
+  spoken_name: string | null
+  location_id: number | null
+  location_name: string | null
+  score: number
+  candidates: VoiceCandidate[]
+}
+export type VoiceWarning = 'medication_check' | 'item_unmatched' | 'location_missing' | 'location_unmatched' | 'no_items'
+/** 초안 — 예약은 만들지 않는다. 화면이 이 값으로 배송 예약 폼을 채운다 */
+export interface VoiceDraft {
+  transcript: string
+  location: VoiceLocation
+  items: VoiceItem[]
+  needs_review: boolean
+  warnings: VoiceWarning[]
+}
+export const VOICE_WARNING_LABEL: Record<VoiceWarning, string> = {
+  medication_check: '약품이 있습니다 — 품목·수량을 확인하고 "확인함"을 표시해 주세요',
+  item_unmatched: '확정하지 못한 품목이 있습니다 — 후보에서 고르거나 직접 선택해 주세요',
+  location_missing: '배송 장소를 말하지 않았습니다 — 목적지를 골라 주세요',
+  location_unmatched: '배송 장소를 확정하지 못했습니다 — 후보에서 고르거나 직접 선택해 주세요',
+  no_items: '품목을 알아듣지 못했습니다 — 다시 말하거나 직접 골라 주세요',
+}

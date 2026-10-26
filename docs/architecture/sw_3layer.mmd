@@ -8,6 +8,7 @@ flowchart TB
     direction LR
     UI["간호사 관제 UI<br/>재고 · 배송 예약/단계/기록 · 받았습니다 버튼 · 알림 · 맵/장소 · 로봇 배터리·오염도<br/>없음: 맵 위 로봇 위치, 응급 알림, OMX 화면<br/>SR-01,04,05,06,07,08,09"]:::part
     BED["병상 단말 (환자)<br/>환자 품목 요청 · 받았습니다<br/>SR-02, SR-06"]:::ok
+    VOI["음성 배송 예약 (그림 밖)<br/>말로 예약 → 초안 → 폼 확인 후 예약 (Gemini)<br/>안내 음성: 브라우저 내장 TTS"]:::ok
   end
 
   subgraph A["Application Layer — 중앙 서버 · EMR FastAPI :8000"]

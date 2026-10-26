@@ -18,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-from app.api.router import api_router
+from app.api.router import api_router, api_v2_router
 from app.core.config import settings
 from app.core.database import engine
 from app.core.exceptions import DomainError
@@ -109,6 +109,7 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     app.include_router(api_router, prefix="/api/v1")
+    app.include_router(api_v2_router, prefix="/api/v2")   # 고도화 중인 기능 — 음성 (2026-10-26)
     return app
 
 
