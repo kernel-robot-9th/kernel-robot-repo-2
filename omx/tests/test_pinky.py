@@ -1,3 +1,5 @@
+import os
+os.environ["PINKY_NO_HARDWARE"] = "1"  # tests must never move the robot
 import json
 from pathlib import Path
 import tempfile
@@ -107,15 +109,15 @@ class SequenceTests(unittest.TestCase):
 
 
 class PinkyApiTests(unittest.TestCase):
-    def client(self, pinky=None, home=None, sender=None, runner=None):
+    def client(self, grab=None, release=None, home=None, runner=None):
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
-        self.pinky, self.home = pinky or Mock(), home or Mock()
-        self.sender = sender or Mock()
+        self.grab, self.release = grab or Mock(), release or Mock()
+        self.home, self.sender = home or Mock(), Mock()
         app = api.create_app("http://receiver.example/result", Mock(), self.sender,
                              lock_path=Path(folder.name) / "api.lock",
-                             policy_runner=runner or Mock(), pinky_motion=self.pinky,
-                             home_motion=self.home)
+                             policy_runner=runner or Mock(), pinky_motion=self.grab,
+                             home_motion=self.home, release_motion=self.release)
         client = TestClient(app)
         client.__enter__()
         self.addCleanup(client.__exit__, None, None, None)
@@ -134,44 +136,50 @@ class PinkyApiTests(unittest.TestCase):
     def payloads(self):
         return [c.args[1] for c in self.sender.call_args_list]
 
-    def test_pinky_alone_waits_and_does_not_move(self):
-        client = self.client()
-        response = client.post("/pinky", json={"pinky_arrive": True})
-        self.assertEqual(response.status_code, 202)
-        self.assertFalse(response.json()["accepted"])
-        self.assertTrue(response.json()["waiting"])
-        self.pinky.assert_not_called()
+    def blocking_runner(self):
+        entered, release = threading.Event(), threading.Event()
+        def runner(command, event):
+            entered.set()
+            release.wait(2)
+        return runner, entered, release
 
-    def test_end_point_then_pinky_runs_pick_then_return(self):
+    def test_grab_runs_right_after_end_point_then_waits_holding(self):
         client = self.client()
         client.post("/command", json={"command": "pick", "request_id": "c1"})
-        self.assertTrue(self.wait_done(client)["end_point"])
-        self.pinky.assert_not_called()  # end_point alone is not enough
+        result = self.wait_done(client)
+        self.grab.assert_called_once()  # no pinky_arrive needed for approach/close/lift
+        self.assertEqual(result["pinky"], "holding")
+        self.assertFalse(result["end_point"])
+        self.release.assert_not_called()
+        self.home.assert_not_called()
+        self.assertEqual(self.payloads(), [{"end_point": True}])
+
+    def test_pinky_arrive_releases_then_returns(self):
+        client = self.client()
+        client.post("/command", json={"command": "pick", "request_id": "c1"})
+        self.wait_done(client)
         self.assertFalse(client.post("/pinky", json={"pinky_arrive": False}).json()["accepted"])
         self.assertTrue(client.post("/pinky", json={"pinky_arrive": True}).json()["accepted"])
         result = self.wait_done(client)
         self.assertEqual(result["pinky"], "completed")
         self.assertTrue(result["end_point"])
-        self.pinky.assert_called_once()
+        self.release.assert_called_once()
         self.home.assert_called_once()
         self.assertEqual(self.payloads(), [{"end_point": True}, {"pinky_done": True}, {"end_point": True}])
-        # The sender keeps sending true: no second pick for the same cycle.
+        # A sender that keeps reporting true does not repeat anything this cycle.
         self.assertFalse(client.post("/pinky", json={"pinky_arrive": True}).json()["accepted"])
         self.wait_done(client)
-        self.pinky.assert_called_once()
+        self.release.assert_called_once()
+        self.grab.assert_called_once()
         self.assertEqual(client.post("/pinky", json={"pinky_arrive": "true"}).status_code, 422)
 
-    def test_pinky_during_imitation_starts_after_end_point(self):
-        entered, release = threading.Event(), threading.Event()
-        def runner(command, event):
-            entered.set()
-            release.wait(2)
-        client = self.client(runner=runner)
+    def test_early_pinky_releases_as_soon_as_lift_finishes(self):
+        run, entered, release = self.blocking_runner()
+        client = self.client(runner=run)
         try:
             client.post("/command", json={"command": "pick", "request_id": "c1"})
             self.assertTrue(entered.wait(1))
             self.assertFalse(client.post("/pinky", json={"pinky_arrive": True}).json()["accepted"])
-            self.pinky.assert_not_called()
         finally:
             release.set()
         deadline = time.monotonic() + 3
@@ -179,14 +187,12 @@ class PinkyApiTests(unittest.TestCase):
             time.sleep(.005)
         result = self.wait_done(client)
         self.assertEqual(result["pinky"], "completed")
-        self.pinky.assert_called_once()
+        self.assertEqual(self.grab.call_count, 1)
+        self.release.assert_called_once()
 
     def test_pinky_false_cancels_waiting(self):
-        entered, release = threading.Event(), threading.Event()
-        def runner(command, event):
-            entered.set()
-            release.wait(2)
-        client = self.client(runner=runner)
+        run, entered, release = self.blocking_runner()
+        client = self.client(runner=run)
         try:
             client.post("/command", json={"command": "pick", "request_id": "c1"})
             self.assertTrue(entered.wait(1))
@@ -194,27 +200,31 @@ class PinkyApiTests(unittest.TestCase):
             client.post("/pinky", json={"pinky_arrive": False})
         finally:
             release.set()
-        self.wait_done(client)
+        self.assertEqual(self.wait_done(client)["pinky"], "holding")
         time.sleep(.05)
-        self.pinky.assert_not_called()
+        self.release.assert_not_called()
 
-    def test_failed_imitation_blocks_pinky(self):
+    def test_pinky_alone_does_not_move(self):
+        client = self.client()
+        response = client.post("/pinky", json={"pinky_arrive": True})
+        self.assertFalse(response.json()["accepted"])
+        self.grab.assert_not_called()
+        self.release.assert_not_called()
+
+    def test_failed_imitation_skips_grab(self):
         client = self.client(runner=Mock(side_effect=TimeoutError("no return")))
         client.post("/command", json={"command": "pick", "request_id": "c1"})
         self.assertFalse(self.wait_done(client)["end_point"])
-        self.assertFalse(client.post("/pinky", json={"pinky_arrive": True}).json()["accepted"])
-        self.pinky.assert_not_called()
+        self.grab.assert_not_called()
 
-    def test_pick_failure_reports_false_and_skips_return(self):
-        client = self.client(pinky=Mock(side_effect=RuntimeError("tracking")))
+    def test_grab_failure_reports_false_and_never_releases(self):
+        client = self.client(grab=Mock(side_effect=RuntimeError("tracking")))
         client.post("/command", json={"command": "pick", "request_id": "c1"})
-        self.wait_done(client)
-        client.post("/pinky", json={"pinky_arrive": True})
         result = self.wait_done(client)
-        self.assertEqual(result["pinky"], "failed")
-        self.assertFalse(result["end_point"])
-        self.home.assert_not_called()
+        self.assertEqual(result["pinky"], "grab_failed")
         self.assertEqual(self.payloads()[-1], {"pinky_done": False})
+        self.assertFalse(client.post("/pinky", json={"pinky_arrive": True}).json()["accepted"])
+        self.release.assert_not_called()
 
     def test_return_failure_reports_end_point_false(self):
         client = self.client(home=Mock(side_effect=TimeoutError("via")))
@@ -224,6 +234,112 @@ class PinkyApiTests(unittest.TestCase):
         result = self.wait_done(client)
         self.assertEqual(result["pinky"], "return_failed")
         self.assertEqual(self.payloads()[-2:], [{"pinky_done": True}, {"end_point": False}])
+
+
+class ReturnOnTests(unittest.TestCase):
+    def client(self, runner, return_on):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        app = api.create_app(None, Mock(), Mock(), lock_path=Path(folder.name) / "api.lock",
+                             policy_runner=runner, pinky_motion=Mock(), home_motion=Mock(),
+                             return_on=return_on)
+        client = TestClient(app)
+        client.__enter__()
+        self.addCleanup(client.__exit__, None, None, None)
+        return client
+
+    def wait_done(self, client):
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            with client.app.state.controller.lock:
+                busy = client.app.state.controller.busy
+            if not busy:
+                return client.get("/status").json()
+            time.sleep(.005)
+        self.fail("worker did not finish")
+
+    def runner(self, finish_after):
+        entered = threading.Event()
+        def run(command, event):
+            entered.set()
+            event.wait(finish_after)  # like run_episode: stop on the signal or when time runs out
+        return run, entered
+
+    def test_time_mode_refuses_gripper_signal_and_returns_on_time(self):
+        run, entered = self.runner(0.3)
+        client = self.client(run, "time")
+        client.post("/command", json={"command": "pick", "request_id": "c1"})
+        self.assertTrue(entered.wait(1))
+        self.assertEqual(client.post("/return", json={"gripper_open": True, "request_id": "c1"}).status_code, 409)
+        result = self.wait_done(client)
+        self.assertEqual(result["state"], "completed")
+        self.assertEqual(result["return_reason"], "time")
+
+    def test_both_mode_records_gripper_signal(self):
+        run, entered = self.runner(2)
+        client = self.client(run, "both")
+        client.post("/command", json={"command": "pick", "request_id": "c1"})
+        self.assertTrue(entered.wait(1))
+        self.assertTrue(client.post("/return", json={"gripper_open": True}).json()["return_requested"])
+        self.assertEqual(self.wait_done(client)["return_reason"], "gripper_open")
+
+    def test_both_mode_time_runs_out(self):
+        run, _ = self.runner(0.1)
+        client = self.client(run, "both")
+        client.post("/command", json={"command": "pick", "request_id": "c1"})
+        self.assertEqual(self.wait_done(client)["return_reason"], "time")
+
+    def test_bad_mode_rejected(self):
+        with self.assertRaises(ValueError):
+            api.ReturnController(return_on="gripper")
+
+
+class StageTests(unittest.TestCase):
+    def test_gripper_rule_matches_label_rule(self):
+        import eval_bi as ev
+        g = ev.GripperStages(6)
+        seq = [50.4, 47.5, 48, 52.3, 53.8, 70, 75, 72, 64, 61, 60, 55]
+        counts = [g.update(v) for v in seq]
+        self.assertEqual(counts[:5], [0, 0, 0, 0, 1])  # opened past min 47.5 + 6 = 53.5
+        self.assertEqual(max(counts), 2)
+        self.assertEqual(counts.index(2), 9)           # below (47.5 + 75) / 2 = 61.25
+        self.assertEqual(g.update(58), 2)
+        self.assertEqual(g.update(63), 3)              # released again above 61.25
+
+    def test_grasp_is_not_cut_short(self):
+        import eval_bi as ev
+        g = ev.GripperStages(6, min_grasp_steps=10, hold_steps=3)
+        for v in (47, 47, 56):            # opens -> grasp
+            g.update(v)
+        self.assertEqual(g.count, 1)
+        for v in (50, 50, 50, 50):        # quick dip right after opening: too early
+            self.assertEqual(g.update(v), 1)
+        for v in (56,) * 5 + (48, 48):    # grasp time passed, but only 2 closed steps
+            g.update(v)
+        self.assertEqual(g.count, 1)
+        self.assertEqual(g.update(48), 2)  # 3rd closed step in a row
+
+    def test_next_stage_endpoint_counts_while_running(self):
+        entered, release = threading.Event(), threading.Event()
+        class Runner:
+            next_stage = on_stage = None
+            def __call__(self, command, event):
+                entered.set()
+                release.wait(2)
+        runner = Runner()
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        app = api.create_app(None, Mock(), Mock(), lock_path=Path(folder.name) / "l", policy_runner=runner,
+                             pinky_motion=Mock(), home_motion=Mock(), release_motion=Mock())
+        with TestClient(app) as client:
+            self.assertEqual(client.post("/next-stage").status_code, 409)
+            client.post("/command", json={"command": "a|b|c"})
+            self.assertTrue(entered.wait(1))
+            runner.on_stage(1, "b")
+            self.assertEqual(client.post("/next-stage").json()["next_stage_requested"], 1)
+            self.assertEqual(runner.next_stage(), 1)
+            self.assertEqual(client.get("/status").json()["stage_text"], "b")
+            release.set()
 
 
 if __name__ == "__main__":

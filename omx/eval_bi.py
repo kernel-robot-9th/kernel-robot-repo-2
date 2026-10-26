@@ -146,6 +146,20 @@ def parse_args(argv=None):
     p.add_argument("--stages", default=None,
                    help='stage sentences in order, separated by "|" (models trained on *_stages datasets); '
                         'press the space bar in this terminal to move to the next stage')
+    # Gripper switching is off for now (2026-10-23): stages move only on space / POST /next-stage.
+    p.add_argument("--stage-switch", choices=("space", "gripper", "both"), default="space",
+                   help="how --stages advance: space bar, the left gripper command (same rule as the "
+                        "stage labels: search -> grasp when it opens, grasp -> carry when it closes), or both")
+    p.add_argument("--stage-open-delta", type=float, default=6.0,
+                   help="gripper switch: opening counts once the command is this much above its start value")
+    p.add_argument("--stage-min-grasp-time", type=float, default=2.0,
+                   help="gripper switch: stay in the grasp stage at least this long (s); training grasps took 2.2-4.3 s")
+    p.add_argument("--stage-close-hold", type=int, default=5,
+                   help="gripper switch: steps in a row the command must stay closed before grasp -> carry")
+    p.add_argument("--no-end-on-release", dest="end_on_release", action="store_false",
+                   help="keep running after the gripper opens in the last stage (default: that ends the model)")
+    p.add_argument("--release-hold-steps", type=int, default=15,
+                   help="steps kept after the release before the model stops (training kept 15 = 0.5 s)")
     p.add_argument("--episode-time", type=float, default=60, help="seconds per episode")
     p.add_argument("--episodes", type=int, default=1)
     p.add_argument("--reset-time", type=float, default=10, help="pause between episodes (s)")
@@ -382,8 +396,41 @@ def fake_observation(robot):
     return obs
 
 
+class GripperStages:
+    """Advance stages from the left gripper command, like stages/find_stages.py labels them.
+
+    stage 0 -> 1 when the command opens past start + delta; 1 -> 2 when it falls back below
+    halfway between its start and the widest opening seen. Later stages need space / API.
+    """
+    def __init__(self, delta, min_grasp_steps=0, hold_steps=1):
+        self.delta, self.closed, self.peak, self.count = delta, None, None, 0
+        # grasp -> carry only after min_grasp_steps in grasp and hold_steps in a row below the line,
+        # so a small wobble right after opening cannot cut the grasp short.
+        self.min_grasp_steps, self.hold_steps = min_grasp_steps, hold_steps
+        self.grasp_steps = self.below = 0
+
+    def update(self, gripper):
+        if gripper is None:
+            return self.count
+        # Closed value = lowest command seen while searching: the first command can sit a few
+        # points high (50.4 then ~47.5 on the robot), which pushed the threshold out of reach.
+        if self.count == 0:
+            self.closed = gripper if self.closed is None else min(self.closed, gripper)
+        if self.count == 0 and gripper > self.closed + self.delta:
+            self.count, self.peak = 1, gripper
+        elif self.count == 1:
+            self.peak = max(self.peak, gripper)
+            self.grasp_steps += 1
+            self.below = self.below + 1 if gripper < (self.closed + self.peak) / 2 else 0
+            if self.grasp_steps >= self.min_grasp_steps and self.below >= self.hold_steps:
+                self.count = 2
+        elif self.count == 2 and gripper > (self.closed + self.peak) / 2:
+            self.count = 3  # released over the box (same "release" rule as the labels)
+        return self.count
+
+
 def run_episode(robot, policy, preprocessor, postprocessor, features, args, dry_run=False,
-                should_return=None):
+                should_return=None, next_stage=None, on_stage=None):
     """Evaluate then optionally return; preserve the (policy_steps, last_action) API.
 
     should_return(obs) is polled before and after inference. It must be non-blocking
@@ -397,11 +444,23 @@ def run_episode(robot, policy, preprocessor, postprocessor, features, args, dry_
     preprocessor.reset()
     postprocessor.reset()
     device = get_safe_torch_device(policy.config.device)
-    stages = args.stages.split("|") if args.stages else [args.task]
-    stage, keys = 0, (SpaceKey() if len(stages) > 1 else None)
+    stages = [t.strip() for t in args.stages.split("|")] if args.stages else [args.task]
+    switch = getattr(args, "stage_switch", "space")
+    multi = len(stages) > 1
+    keys = SpaceKey() if multi and switch in ("space", "both") else None
+    grip = GripperStages(getattr(args, "stage_open_delta", 6.0),
+                         int(getattr(args, "stage_min_grasp_time", 2.0) * args.fps),
+                         getattr(args, "stage_close_hold", 5)) if multi and switch in ("gripper", "both") else None
+    stage = 0
     logging.info(f"stage 1/{len(stages)}: {stages[0]!r}")
+    if on_stage is not None:
+        on_stage(0, stages[0])
     start = time.perf_counter()
-    steps = 0
+    steps = slow = 0
+    second_max = None
+    released_at = None  # step at which the gripper opened in the last stage
+    args.end_reason = "time"
+    end_on_release = getattr(args, "end_on_release", True)
     action = {}
     try:
         while time.perf_counter() - start < args.episode_time:
@@ -409,11 +468,30 @@ def run_episode(robot, policy, preprocessor, postprocessor, features, args, dry_
             obs = fake_observation(robot) if dry_run else robot.get_observation()
             if should_return is not None and should_return(obs):
                 logging.info("external return requested before inference")
+                args.end_reason = "gripper_open"
                 break
-            if keys is not None and keys.presses > stage and stage < len(stages) - 1:
+            if released_at is not None and steps - released_at >= getattr(args, "release_hold_steps", 15):
+                logging.info(">>> MODEL DONE: gripper opened in the last stage")
+                args.end_reason = "released"
+                break
+            # Any source may move on: space presses, API next-stage requests, the gripper rule.
+            sources = {"space": keys.presses if keys is not None else 0,
+                       "api": next_stage() if next_stage is not None else 0,
+                       "gripper": grip.count if grip is not None else 0}
+            wanted = max(sources.values())
+            if multi and stage == len(stages) - 1 and max(sources["space"], sources["api"]) > stage:
+                # One more space / next-stage in the last stage = the task is done.
+                logging.info(">>> MODEL DONE: next pressed in the last stage")
+                args.end_reason = "next_stage"
+                break
+            if wanted > stage and stage < len(stages) - 1:
                 stage += 1
                 policy.reset()  # drop the actions planned for the previous stage
-                logging.info(f"stage {stage + 1}/{len(stages)}: {stages[stage]!r}")
+                by = ", ".join(k for k, v in sources.items() if v >= stage)
+                logging.info(f">>> STAGE {stage + 1}/{len(stages)}: {stages[stage]!r}  (by {by}, "
+                             f"{time.perf_counter() - start:.1f}s)")
+                if on_stage is not None:
+                    on_stage(stage, stages[stage])
             observation_frame = build_dataset_frame(features, obs, prefix=OBS_STR)
             action_values = predict_action(
                 observation=observation_frame,
@@ -428,18 +506,49 @@ def run_episode(robot, policy, preprocessor, postprocessor, features, args, dry_
             # A request arriving during inference must not be followed by another policy write.
             if should_return is not None and should_return(obs):
                 logging.info("external return requested during inference")
+                args.end_reason = "gripper_open"
                 break
             action = make_robot_action(action_values, features)  # {"left_shoulder_pan.pos": ..., ...}
+            if grip is not None:
+                g = action.get("left_gripper.pos")
+                grip.update(g)
+                if (end_on_release and released_at is None and grip.count >= 3
+                        and stage == len(stages) - 1):
+                    released_at = steps
+                    logging.info(f">>> RELEASE detected in the last stage (command {g:.1f}); "
+                                 f"stopping after {getattr(args, 'release_hold_steps', 15)} more steps")
+                if g is not None:
+                    second_max = g if second_max is None else max(second_max, g)
+                if steps % args.fps == 0 and g is not None:  # about once a second
+                    if grip.count == 0:
+                        rule = f"opens past {grip.closed + grip.delta:.1f}"
+                    elif grip.count >= 2 and stage == len(stages) - 1:
+                        rule = (f"opens past {(grip.closed + grip.peak) / 2:.1f} (release ends the model)"
+                                if grip.count == 2 else "released")
+                    elif grip.count == 1:
+                        left = max(0.0, (grip.min_grasp_steps - grip.grasp_steps) / args.fps)
+                        rule = (f"closes below {(grip.closed + grip.peak) / 2:.1f} (peak {grip.peak:.1f}) "
+                                f"for {grip.hold_steps} steps" + (f", earliest in {left:.1f}s" if left else ""))
+                    else:
+                        rule = "done"
+                    logging.info(f"stage {stage + 1}/{len(stages)} | left gripper command {g:.1f} "
+                                 f"(max in last 1s {second_max:.1f}) | next switch when it {rule}")
+                    second_max = None
             if not dry_run:
                 robot.send_action(action)
             steps += 1
             dt = time.perf_counter() - t0
             if dt > 1 / args.fps:
+                slow += 1
                 logging.warning(f"loop {1 / dt:.1f} Hz is slower than target {args.fps} Hz")
             precise_sleep(max(1 / args.fps - dt, 0.0))
     finally:
         if keys is not None:
             keys.close()
+        elapsed = time.perf_counter() - start
+        if steps:
+            logging.info(f"episode: {steps} steps in {elapsed:.1f}s = average {steps / elapsed:.1f} Hz "
+                         f"(target {args.fps}), slow loops {slow} ({100 * slow / steps:.0f}%)")
     if return_poses is not None:
         action = return_to_start(robot, args, dry_run=dry_run)
     return steps, action

@@ -7,7 +7,8 @@ Poses come from pinky_sequence.json (LeRobot normalized joint values, same units
 left_start_pose_measured.json). While "placeholder" is true the robot is never moved.
 Both arms move at the same time, step by step; the next step starts only after both arrive.
 
-Run by hand (no API):   python pinky_move.py pick | return  [sequence.json]
+Run by hand (no API):   python pinky_move.py pick | grab | release | return  [sequence.json]
+                        (pick = grab + release; the API runs grab, waits for pinky_arrive, then release)
 Validate the file only: python pinky_move.py --check [sequence.json]
 
 Torque stays ON after each phase so the grasped object is held. On error or Ctrl+C the
@@ -17,6 +18,7 @@ from contextlib import contextmanager
 import json
 import logging
 import math
+import os
 import subprocess
 import sys
 import time
@@ -175,6 +177,8 @@ def connected_arms():
 
     Yields (read, write). Torque stays on after success; any error turns it off.
     """
+    if os.environ.get("PINKY_NO_HARDWARE"):
+        raise RuntimeError("PINKY_NO_HARDWARE is set; refusing to open robot ports")
     from lerobot.robots.omx_follower import OmxFollower, OmxFollowerConfig
 
     buses = {}
@@ -244,6 +248,32 @@ def _load_real(path):
     return pick, home
 
 
+RELEASE_STEP = "release_gripper"
+
+
+def split_pick(steps):
+    """(grab steps up to lift, release steps from release_gripper on)."""
+    names = [s["name"] for s in steps]
+    i = names.index(RELEASE_STEP) if RELEASE_STEP in names else len(steps)
+    return steps[:i], steps[i:]
+
+
+def grab(path=DEFAULT_SEQUENCE):
+    """Approach, close and lift; torque stays ON so the object is held until release()."""
+    steps, _ = split_pick(_load_real(path)[0])
+    with connected_arms() as (read, write):
+        run_sequence(read, write, steps)
+    logging.info("COMPLETED grab: object lifted and held; torque stays ON")
+
+
+def release(path=DEFAULT_SEQUENCE):
+    """Open the grippers (and any steps after release_gripper)."""
+    _, steps = split_pick(_load_real(path)[0])
+    with connected_arms() as (read, write):
+        run_sequence(read, write, steps)
+    logging.info("COMPLETED release: grippers open")
+
+
 def pick(path=DEFAULT_SEQUENCE):
     steps, _ = _load_real(path)
     with connected_arms() as (read, write):
@@ -270,7 +300,11 @@ if __name__ == "__main__":
         print("PLACEHOLDER: robot will not move" if placeholder else "ready")
     elif action == "pick":
         pick(path)
+    elif action == "grab":
+        grab(path)
+    elif action == "release":
+        release(path)
     elif action == "return":
         return_home(path)
     else:
-        sys.exit("usage: python pinky_move.py --check | pick | return [sequence.json]")
+        sys.exit("usage: python pinky_move.py --check | pick | grab | release | return [sequence.json]")
