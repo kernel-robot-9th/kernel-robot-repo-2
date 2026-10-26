@@ -7,8 +7,8 @@
 #   - verify_password()      해시 대조
 #   - create_access_token()  JWT 발급
 #   - decode_token()         JWT 검증 → 간호사 id
-#   - generate_robot_api_key() / hash_robot_api_key()   로봇별 API 키 발급·해시 (수령 확인용, 2026-10-19)
-#   - generate_bedside_api_key()   병상 단말 키 발급 (해시는 hash_robot_api_key와 같은 sha256, 2026-10-22)
+#   - generate_robot_api_key() / hash_api_key()   로봇별 API 키 발급 · 로봇·병상 단말 키 공용 해시 (2026-10-19, 이름 2026-10-23)
+#   - generate_bedside_api_key()   병상 단말 키 발급 (해시는 hash_api_key, 2026-10-22)
 # =============================================================================
 from __future__ import annotations
 
@@ -75,14 +75,14 @@ def generate_robot_api_key() -> str:
 
 
 def generate_bedside_api_key() -> str:
-    """병상 단말에 줄 무작위 API 키 (256비트, 2026-10-22). 해시는 hash_robot_api_key로 (같은 sha256).
+    """병상 단말에 줄 무작위 API 키 (256비트, 2026-10-22). 해시는 hash_api_key로 (로봇 키와 같은 sha256).
     [입력] 없음
     [출력] str: "emr_bk_..." 평문. 발급 응답에서 한 번만 보여 준다
     """
     return BEDSIDE_API_KEY_PREFIX + secrets.token_urlsafe(32)
 
 
-def hash_robot_api_key(raw_api_key: str) -> str:
+def hash_api_key(raw_api_key: str) -> str:
     """API 키 → DB 저장·조회용 sha256. 사람이 정한 비밀번호가 아니라 256비트 무작위 값이라 bcrypt 없이 바로 조회한다.
     [입력] raw_api_key: 평문 키
     [출력] str: 64자 hex

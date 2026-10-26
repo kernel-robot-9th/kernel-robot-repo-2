@@ -11,7 +11,8 @@ import { useDeliveryEventLog, useIsAdmin, useMe, useNurses, useRobots } from '..
 import type { DeliveryEventFilters, DeliveryEventType } from '../api/types'
 import { DELIVERY_EVENT_LABEL } from '../api/types'
 import { Badge, Button, Input, Label, LoadError, PageTitle, Select, Table, Td, Th } from '../components/ui'
-import { describeEvent, formatEventTime } from '../features/deliveries/deliveryEventText'
+import { describeEvent } from '../features/deliveries/deliveryEventText'
+import { formatDateTimeSeconds } from '../lib/dateFormat'
 
 const EVENT_TYPES = Object.keys(DELIVERY_EVENT_LABEL) as DeliveryEventType[]
 
@@ -117,7 +118,7 @@ export function DeliveryLog() {
             {log.isPending && <tr><td colSpan={7} className="px-3 py-2 text-slate-500">불러오는 중…</td></tr>}
             {rows.map(event => (
               <tr key={event.id}>
-                <Td className="whitespace-nowrap text-slate-500">{formatEventTime(event.occurred_at)}</Td>
+                <Td className="whitespace-nowrap text-slate-500">{formatDateTimeSeconds(event.occurred_at)}</Td>
                 <Td>#{event.delivery_id}</Td>
                 <Td>{event.destination_location_name}</Td>
                 <Td>{event.requester_name}{event.requester_type === 'bedside' && <span className="text-slate-500"> (병상)</span>}</Td>

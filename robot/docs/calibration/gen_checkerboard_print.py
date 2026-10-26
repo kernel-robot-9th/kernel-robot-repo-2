@@ -1,4 +1,4 @@
-"""Printable checkerboard for `vla_calibration intrinsics` (real top camera): A4 landscape, 300 dpi, exact size.
+"""Printable checkerboard for `vla_calibration top_camera --pattern chessboard` (real top camera): A4 landscape, 300 dpi, exact size.
   python3 gen_checkerboard_print.py [cols_inner rows_inner square_mm]     default 9 6 25
 Writes checkerboard_<c>x<r>_<s>mm_A4.png/.pdf. Print at 100 % ("actual size"), then check the 100 mm bar with a ruler.
 """
@@ -29,7 +29,7 @@ cv2.rectangle(img, (px(x0), px(by)), (px(x0 + 100), px(by + 1.5)), 0, -1)
 for k in range(11):
     cv2.rectangle(img, (px(x0 + 10 * k) - 2, px(by - 3)), (px(x0 + 10 * k) + 2, px(by + 1.5)), 0, -1)
 lines = (f'{cols}x{rows} inner corners, {square_mm:g} mm squares. Bar = 100 mm: print at 100 %.',
-         f'ros2 run vla_calibration intrinsics --board {cols}x{rows} --square {square_mm / 1000:g}')
+         f'ros2 run vla_calibration top_camera capture --pattern chessboard --board {cols}x{rows} --square {square_mm / 1000:g}')
 for k, line in enumerate(lines):
     cv2.putText(img, line, (px(x0 + 106), px(by - 1.5 + 5 * k)), cv2.FONT_HERSHEY_SIMPLEX, 1.1, 0, 3, cv2.LINE_AA)
 stem = f'checkerboard_{cols}x{rows}_{square_mm:g}mm_A4'

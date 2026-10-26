@@ -314,7 +314,7 @@ def cmd_board(args):
         print('warning: corners moved between frames (board not still?)')
     raw = np.median(np.stack(found), axis=0)
     und = undistort(raw, K, dist)
-    touch = {f'c0_0': 0, f'c{cols - 1}_0': cols - 1, f'c0_{rows - 1}': (rows - 1) * cols, f'c{cols - 1}_{rows - 1}': rows * cols - 1}
+    touch = {'c0_0': 0, f'c{cols - 1}_0': cols - 1, f'c0_{rows - 1}': (rows - 1) * cols, f'c{cols - 1}_{rows - 1}': rows * cols - 1}
     check = {f'c{cols // 2}_{rows // 2}': (rows // 2) * cols + cols // 2, f'c{cols // 2 - 2}_{rows // 2 - 1}': (rows // 2 - 1) * cols + cols // 2 - 2}
     vis = frame.copy()
     out_rows = []
@@ -395,7 +395,7 @@ def homography_from_board(args):
         outer = [k for k in labels if k in args.fit_corners]
     else:   # default: the board's four outer corners fix it, every other touched corner is a check
         mi = max(int(k[1:].split('_')[0]) for k in corners); mj = max(int(k.split('_')[1]) for k in corners)
-        outer = [k for k in labels if k in (f'c0_0', f'c{mi}_0', f'c0_{mj}', f'c{mi}_{mj}')]
+        outer = [k for k in labels if k in ('c0_0', f'c{mi}_0', f'c0_{mj}', f'c{mi}_{mj}')]
     checks = [k for k in labels if k not in outer]
     if len(outer) < 3:
         sys.exit(f'need at least 3 touched corners (teleop here c0_0 ...), have {labels}')

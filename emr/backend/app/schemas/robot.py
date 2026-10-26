@@ -7,6 +7,7 @@
 #   - RobotUpdate  이름·상태·복귀 장소 변경
 #   - RobotOut         키는 있는지·언제 발급했는지만 (해시 노출 안 함 — 로봇 조회는 무인증)
 #   - RobotApiKeyOut   키 발급 응답. 평문 키는 이 응답에만 한 번 나온다
+#   - RobotStatusReportOut   claim 때 로봇 서버에서 받은 마지막 배터리·오염도 (2026-10-23)
 # =============================================================================
 from __future__ import annotations
 
@@ -36,6 +37,19 @@ class RobotUpdate(BaseModel):
     home_location_id: int | None = Field(
         default=None, description="복귀 장소 locations.id — 배송을 마치거나 실패하면 돌아가는 곳. 좌표가 있어야 배송을 맡는다",
     )
+    robot_server_url: str | None = Field(
+        default=None, max_length=255, pattern=r"^https?://[^\s/]+(:\d+)?/?$",
+        description="로봇 서버(팀원 Pinky API) 주소 — claim 때 EMR이 GET {주소}/status로 배터리·오염도·주행 준비를 묻는다 (2026-10-23)",
+        examples=["http://192.168.129.107:8080"],
+    )
+
+
+class RobotStatusReportOut(OrmOut):
+    """claim 때 EMR이 로봇 서버에서 받은 마지막 상태 (2026-10-23)."""
+
+    battery_percent: float = Field(description="배터리 0~100 %")
+    contamination_percent: float = Field(description="오염도 0(깨끗)~100, 로봇이 잰 값")
+    reported_at: datetime = Field(description="EMR이 로봇 서버에서 받은 시각")
 
 
 class RobotOut(OrmOut):
@@ -49,6 +63,10 @@ class RobotOut(OrmOut):
     has_api_key: bool = Field(description="로봇 전용 API(/robot/...)용 키가 발급되어 있는지")
     api_key_issued_at: datetime | None = Field(description="지금 키를 발급한 시각. 키가 없으면 null")
     home_location_id: int | None = Field(description="복귀 장소. null이면 미지정 — 배송을 맡지 않는다")
+    robot_server_url: str | None = Field(description="로봇 서버(팀원 Pinky API) 주소. null이면 배송을 맡지 않는다 (2026-10-23)")
+    status_report: RobotStatusReportOut | None = Field(
+        description="claim 때 로봇 서버에서 받은 마지막 배터리·오염도. null이면 아직 받은 적 없음 (2026-10-23)",
+    )
 
 
 class RobotApiKeyOut(BaseModel):

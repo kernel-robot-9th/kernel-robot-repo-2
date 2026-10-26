@@ -124,17 +124,48 @@ def home_location(db: Session, seed: dict) -> Location:
     return station
 
 
+ROBOT_SERVER_URL = "http://robot.test:8080"
+
+
+@pytest.fixture(autouse=True)
+def robot_server(monkeypatch) -> dict:
+    """가짜 로봇 서버(팀원 Pinky API GET /status) — 테스트는 네트워크에 나가지 않는다 (2026-10-23).
+    돌려주는 dict를 고치면 응답이 바뀐다. robot_server["error"] = "..."이면 연결 실패(RobotServerError).
+    부른 주소는 robot_server["called"]에 쌓인다.
+    """
+    from app.clients.robot_server import RobotServerError
+
+    server: dict = {
+        "status": {"localized": True, "nav2_ready": True, "state": "idle", "battery_percent": 90, "contamination_percent": 10},
+        "error": None, "called": [],
+    }
+
+    def _fetch(robot_server_url: str, timeout_seconds: float) -> dict:
+        server["called"].append(robot_server_url)
+        if server["error"]:
+            raise RobotServerError(server["error"])
+        return dict(server["status"])
+
+    monkeypatch.setattr("app.services.robot_status.fetch_robot_status", _fetch)
+    return server
+
+
 @pytest.fixture
 def make_robot(client: TestClient, auth_headers: dict[str, str]):
-    """로봇 만들기: make_robot(name, robot_type="amr", home_location_id=None) → {"id", "api_key", "headers"}"""
-    def _make(name: str, robot_type: str = "amr", home_location_id: int | None = None) -> dict:
+    """로봇 만들기: make_robot(name, robot_type="amr", home_location_id=None, robot_server_url=ROBOT_SERVER_URL)
+    → {"id", "api_key", "headers"}. robot_server_url: claim 때 상태를 물을 로봇 서버(가짜, robot_server 픽스처) — None이면 넣지 않음
+    """
+    def _make(name: str, robot_type: str = "amr", home_location_id: int | None = None,
+              robot_server_url: str | None = ROBOT_SERVER_URL) -> dict:
         robot = client.post(ROBOTS_URL, headers=auth_headers, json={"name": name, "robot_type": robot_type})
         assert robot.status_code == 201, robot.text
         robot_id = robot.json()["id"]
         issued = client.post(f"{ROBOTS_URL}/{robot_id}/api-key", headers=auth_headers)
         assert issued.status_code == 201, issued.text
-        if home_location_id is not None:
-            patched = client.patch(f"{ROBOTS_URL}/{robot_id}", headers=auth_headers, json={"home_location_id": home_location_id})
+        changes = {"home_location_id": home_location_id, "robot_server_url": robot_server_url}
+        changes = {field: value for field, value in changes.items() if value is not None}
+        if changes:
+            patched = client.patch(f"{ROBOTS_URL}/{robot_id}", headers=auth_headers, json=changes)
             assert patched.status_code == 200, patched.text
         api_key = issued.json()["api_key"]
         return {"id": robot_id, "api_key": api_key, "headers": {"X-Robot-Api-Key": api_key}}

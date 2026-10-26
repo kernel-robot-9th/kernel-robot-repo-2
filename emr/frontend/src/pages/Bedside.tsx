@@ -17,8 +17,7 @@ import type { BedsideDelivery, BedsideSupply } from '../api/types'
 import { BEDSIDE_MAX_QUANTITY, DELIVERY_FAILURE_REASON_LABEL } from '../api/types'
 import { Button, Input } from '../components/ui'
 import { useNowMs } from '../features/deliveries/useNowMs'
-
-const time = (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : '')
+import { formatHourMinute } from '../lib/dateFormat'
 const RECENT_RESULT_MS = 10 * 60_000   // 끝난 요청의 결과(받음·실패)를 이 시간 동안 보여 준다
 
 function ErrorNote({ error }: { error: unknown }) {
@@ -108,7 +107,7 @@ function ProgressPanel({ delivery }: { delivery: BedsideDelivery }) {
   const items = delivery.items.map(item => `${item.name} ${item.quantity}개`).join(', ')
   const message = {
     reserved: '요청을 받았습니다. 로봇이 곧 출발합니다.',
-    dispatched: `${delivery.assigned_robot_name ?? '로봇'}이(가) 출발했습니다 (${time(delivery.dispatched_at)}).`,
+    dispatched: `${delivery.assigned_robot_name ?? '로봇'}이(가) 출발했습니다 (${formatHourMinute(delivery.dispatched_at)}).`,
     arrived: '로봇이 도착했습니다. 물건을 받으신 뒤 아래 버튼을 눌러 주세요.',
     received: '받으셨습니다. 감사합니다.',
     failed: `배송하지 못했습니다: ${delivery.failure_reason ? DELIVERY_FAILURE_REASON_LABEL[delivery.failure_reason] : ''}. 간호사에게 말씀해 주세요.`,
@@ -138,7 +137,7 @@ function ProgressPanel({ delivery }: { delivery: BedsideDelivery }) {
             받았습니다
           </button>
           {delivery.receipt_deadline_at && (
-            <p className="text-center text-sm text-slate-500">{time(delivery.receipt_deadline_at)}까지 누르지 않으면 로봇이 돌아갑니다.</p>
+            <p className="text-center text-sm text-slate-500">{formatHourMinute(delivery.receipt_deadline_at)}까지 누르지 않으면 로봇이 돌아갑니다.</p>
           )}
         </>
       )}

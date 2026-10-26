@@ -114,7 +114,8 @@ export const useMaps = () =>
 export const useLocations = () =>
   useQuery({ queryKey: keys.locations, queryFn: () => api.get<Location[]>('/locations') })
 export const useRobots = () =>
-  useQuery({ queryKey: keys.robots, queryFn: () => api.get<Robot[]>('/robots') })
+  // claim 때 로봇 서버에서 받은 배터리·오염도(status_report)가 바뀌므로 10초마다 다시 읽는다 (2026-10-23)
+  useQuery({ queryKey: keys.robots, queryFn: () => api.get<Robot[]>('/robots'), refetchInterval: 10_000 })
 
 /** 맵 파일 업로드 본문 — map_server yaml + 이미지(PGM·PNG) */
 export interface MapUpload {
@@ -174,7 +175,7 @@ export function useRobotMutations() {
   return {
     create: useMutation({ mutationFn: (b: Pick<Robot, 'name' | 'robot_type' | 'status'>) => api.post<Robot>('/robots', b), onSuccess: invalidate, meta: { action: '로봇 등록' } }),
     update: useMutation({
-      mutationFn: ({ id, body }: { id: number; body: Partial<Pick<Robot, 'name' | 'status' | 'home_location_id'>> }) =>
+      mutationFn: ({ id, body }: { id: number; body: Partial<Pick<Robot, 'name' | 'status' | 'home_location_id' | 'robot_server_url'>> }) =>
         api.patch<Robot>(`/robots/${id}`, body),
       onSuccess: invalidate,
       meta: { action: '로봇 수정' },

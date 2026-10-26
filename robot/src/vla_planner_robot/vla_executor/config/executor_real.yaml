@@ -15,7 +15,7 @@ vla_executor:
     approach_height: 0.06             # 0.08 put stacking above blocks past 0.22 m out of reach
     min_approach_height: 0.03         # past ~0.24 m the 6 cm approach is out of reach: go down to 3 cm
     block_height: 0.025
-    gripper_open: 0.68                # gripper_joint_1, config/arms.yaml of vla_teleop
+    gripper_open: 0.68                # gripper_joint_1 on the real follower (measured 2026-10-20)
     gripper_closed: -0.15             # current-limited: stops on the block
     gripper_release: 0.68
     min_reach: 0.12

@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from app.core.exceptions import BadRequest, Conflict, Forbidden, NotFound
 from app.models.bedside_device import BedsideDevice
 from app.models.delivery import Delivery, DeliveryItem
-from app.models.enums import DeliveryEventType, DeliveryRequester, DeliveryStatus, RequestableBy
+from app.models.enums import DeliveryEventType, DeliveryRequester, RequestableBy
 from app.models.supply import Supply
 from app.repositories.bedside_device import BedsideDeviceRepository
 from app.repositories.delivery import DeliveryRepository
@@ -104,12 +104,9 @@ class BedsideRequestService:
             raise NotFound(f"delivery {delivery_id} not found", code="delivery_not_found")
         if delivery.bedside_device_id != device.id:
             raise Forbidden(f"delivery {delivery_id} is not this bedside's", code="delivery_not_for_bedside")
-        if delivery.status != DeliveryStatus.ARRIVED:
-            raise Conflict(f"delivery {delivery_id} is {delivery.status}; only arrived can be received", code="delivery_not_arrived")
+        DeliveryService.require_arrived(delivery)
         now = datetime.now(UTC)
-        delivery.status = DeliveryStatus.RECEIVED
-        delivery.received_at = now
-        delivery.received_by_robot_id = delivery.assigned_robot_id   # 가져다준 로봇 (마커를 읽지는 않음)
+        DeliveryService.mark_received(delivery, now, nurse_id=None)   # 환자는 간호사가 아니다
         self.events.record_by_bedside(delivery, DeliveryEventType.RECEIVED, device.name, now)
         log.info("bedside_receipt_confirmed", bedside_device_id=device.id, delivery_id=delivery.id)
         return delivery

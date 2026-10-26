@@ -1,6 +1,8 @@
 # 배송 배정·진행 API 계약 — EMR ↔ 관제 PC 배송 실행기 (2026-10-20)
 
+- **역할 분담 (2026-10-23, 사용자 결정)**: 우리(EMR)는 배송을 **시퀀스·미션**으로 만들어 **누가 어떤 Task를 받는지**까지만 정한다. **주행·경로 계획은 팀원**(Pinky API `/goto`·`/plan`, OMX API)이 한다. **우리가 만든 시험용 배송 실행기 `robot/src/fms/delivery_executor`는 쓰지 않는다**(띄우지도, 고치지도 않음 — 코드만 남김). 4장(실행기 동작)은 참고용으로만 남긴다. 팀원 쪽 연동 안내: `docs/emr_robot_api_for_teammate_2026-10-22.md`.
 - 환자(병상 단말) 배송 추가(2026-10-22): 8장.
+- **로봇 상태(배터리·오염도)로 claim 검사 (2026-10-23, 사용자 결정)**: claim할 때마다 **EMR이 로봇 서버(팀원 Pinky API)의 `GET /status`를 물어** 기준 밖이면 새 배송을 주지 않는다(3.2·3.6). 오염도는 로봇이 재는 0~100. 같은 날 잠깐 있던 로봇 보고 방식(`POST /robot/status`)은 "팀원도 서버가 있으니 로봇에 정확한 정보를 요청해야"로 없앴다.
 - **2026-10-22 변경 (사용자 결정)**: ① 수령 마커는 **일단 끔** — 간호사 배송도 화면의 **"받았습니다" 버튼**으로 수령(EMR 설정 `NURSE_RECEIPT_METHOD=button`, 기본). 마커 코드는 남아 있어 `marker`로 되살린다(2·3.4·5장). ② 실행기 주행은 **팀원 Pinky API(로봇 `:8080`)**, **인증 없이** 진행 — 운영 전에 인증을 넣는다(4장, 분석 `docs/pinky_fms_api_review_2026-10-22.md`).
 - 구현(2026-10-20): EMR 마이그레이션 0008·`app/services/dispatch.py`·`delivery_notifier.py`·배송 화면, 관제 PC `robot/src/fms/delivery_executor`. 실제 EMR + 가짜 Nav2(도메인 77)로 확인, **실물 Pinky 종단 시험은 비품실 모방학습이 끝난 뒤**.
 - 범위: EMR 로드맵 2단계(배송 배정·진행) + 간호사 알림(5단계 일부). 양쪽(`emr/`, `robot/src/fms/delivery_executor`)이 이 문서를 기준으로 구현한다. 바꿀 때는 이 문서부터 고친다.
@@ -66,7 +68,10 @@ reserved ──(로봇 claim)──▶ dispatched ──(로봇 도착 보고)�
 - 없으면 다음 조건 중 `scheduled_at`이 가장 이른(같으면 id 작은) 한 건을 `dispatched`로 바꿔 200:
   `status = reserved`, `scheduled_at <= 지금`, 목적지에 맵 좌표가 있고, 목적지 맵 = 복귀 장소 맵.
   여러 로봇이 동시에 불러도 한 건은 한 로봇에만 간다(`FOR UPDATE SKIP LOCKED`).
-- 줄 것이 없으면 **204**(본문 없음).
+- 줄 배송이 있으면 그 전에 **EMR이 로봇 서버에 지금 상태를 묻는다**(3.6, 2026-10-23). 아래 중 하나면 배송을 주지 않고 **204** + 헤더 `X-Claim-Skip-Reason`:
+  `robot_server_not_set`(로봇 서버 주소 없음) · `robot_server_unreachable`(2초 안에 응답 없음·200 아님) · `robot_status_incomplete`(`battery_percent`·`contamination_percent` 0~100이 없음) · `robot_not_ready`(`localized`·`nav2_ready`가 true가 아니거나 `state`가 `idle`이 아님) · `robot_battery_low`(배터리 30 % 미만) · `robot_contamination_high`(오염도 70 초과).
+  줄 배송이 없으면 묻지 않는다. 이미 맡은 배송은 상태와 상관없이 그대로 돌려준다(멱등, 묻지 않음). 기준값은 EMR 설정 `CLAIM_MIN_BATTERY_PERCENT`·`CLAIM_MAX_CONTAMINATION_PERCENT`·`ROBOT_SERVER_TIMEOUT_SECONDS`(가정값).
+- 줄 것이 없으면 **204**(본문 없음, 상태 문제가 아니면 헤더 없음).
 
 | 오류 | 코드 |
 |---|---|
@@ -125,6 +130,23 @@ reserved ──(로봇 claim)──▶ dispatched ──(로봇 도착 보고)�
 | 403 | `delivery_not_assigned_to_robot` |
 | 403 | `receipt_marker_not_for_delivery` — 번호가 이 배송의 마커가 아님(간호사 고정 마커 포함) |
 | 422 | 번호가 0–249 밖 |
+
+### 3.6 EMR → 로봇 서버 `GET {robot_server_url}/status` — claim 때 상태 묻기 (2026-10-23)
+- 방향이 반대다: **EMR이 부른다.** 로봇 서버 = 팀원 Pinky API(로봇마다 `:8080`). 주소는 관리자가 EMR 로봇 탭 "로봇 서버"에 넣는다(`robots.robot_server_url`, 예: `http://192.168.129.107:8080`, 0014).
+- 언제: 로봇이 claim을 불렀고 줄 배송이 있을 때 한 번. 제한 시간 2초. GET만 부른다(로봇을 움직이지 않음).
+- EMR이 읽는 필드(나머지는 무시):
+
+| 필드 | 형식 | 지금 Pinky `/status` | 판정 |
+|---|---|---|---|
+| `battery_percent` | number 0~100 | **없음 — 팀원이 넣어야 함** | 30 미만이면 `robot_battery_low` |
+| `contamination_percent` | number 0~100, 0 = 깨끗 | **없음 — 팀원이 넣어야 함** | 70 초과면 `robot_contamination_high` |
+| `localized` | bool | 있음 | true가 아니면 `robot_not_ready` |
+| `nav2_ready` | bool | 있음 | true가 아니면 `robot_not_ready` |
+| `state` | string | 있음(`idle`·`running`) | `idle`이 아니면 `robot_not_ready` |
+
+- 예(팀원이 두 칸을 넣은 뒤): `{"localized": true, "nav2_ready": true, "state": "idle", "battery_percent": 82.5, "contamination_percent": 12, "pose": {...}, "job": {...}}`
+- 받은 배터리·오염도는 관리자 화면(로봇 탭, `GET /robots`의 `status_report`)에 마지막 값으로 남는다(`robot_status_reports`, 이력 없음).
+- 2026-10-23 실측: 팀원 서버 `.107` 응답 0.1초, 배터리·오염도 칸이 없어 `robot_status_incomplete` — **팀원이 두 칸을 넣기 전까지 claim은 배송을 주지 않는다.**
 
 ## 4. 실행기 동작 (관제 PC, 로봇마다)
 

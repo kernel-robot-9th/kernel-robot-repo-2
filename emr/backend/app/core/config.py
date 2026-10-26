@@ -43,6 +43,13 @@ class Settings(BaseSettings):
     ROBOT_KEY_DISABLED: bool = False
     ROBOT_KEY_DISABLED_AS: int = 1
 
+    # 배송 배정 때 로봇 상태 기준 (2026-10-23, 사용자 결정: "배터리, 오염도 넣어서 미션을 할당" — claim할 때마다 EMR이
+    # 로봇 서버(robots.robot_server_url, 팀원 Pinky API)의 GET /status를 물어 검사). 벗어나면 claim이 새 배송을 주지 않는다
+    # (204 + X-Claim-Skip-Reason). 이미 맡은 배송은 그대로 돌려준다. [검토 필요] 기준값은 가정값 — 팀원·로봇 부서와 맞춘다
+    CLAIM_MIN_BATTERY_PERCENT: float = 30.0         # 이 값 미만이면 robot_battery_low
+    CLAIM_MAX_CONTAMINATION_PERCENT: float = 70.0   # 이 값 초과면 robot_contamination_high
+    ROBOT_SERVER_TIMEOUT_SECONDS: float = 2.0       # 로봇 서버가 이 안에 답하지 않으면 robot_server_unreachable
+
     def db_host_for_log(self) -> str:
         """로그용 DB 주소 — 비밀번호 제거.
         [입력] 없음

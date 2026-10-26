@@ -6,7 +6,8 @@
 // 구성   :
 //   - LocationsTab   POST/PATCH/DELETE /locations
 //   - MapsTab        맵 파일(yaml + pgm/png) 업로드·교체·삭제 (관리자, 2026-10-19). 장소 찍기는 맵 화면
-//   - RobotsTab      POST/PATCH/DELETE /robots, 로봇 API 키 발급·폐기 (관리자, 2026-10-19), 복귀 장소 (2026-10-20)
+//   - RobotsTab      POST/PATCH/DELETE /robots, 로봇 API 키 발급·폐기 (관리자, 2026-10-19), 복귀 장소 (2026-10-20),
+//                    로봇 서버 주소 입력·claim 때 받은 배터리·오염도 보기 (2026-10-23)
 //   - BedsideTab     병상 단말 등록·병실·키 발급·폐기·삭제 (관리자만, 2026-10-22) — 환자가 /bedside 화면에서 비품 요청
 //   - Sites          탭 전환
 // =============================================================================
@@ -19,8 +20,7 @@ import type { BedsideApiKey, BedsideDevice, Location, Robot, RobotApiKey, RobotS
 import { ROBOT_STATUS_LABEL } from '../api/types'
 import { Badge, Button, Input, Label, LoadError, PageTitle, Select, Table, Td, Th } from '../components/ui'
 import { RobotApiKeyDialog } from '../features/robots/RobotApiKeyDialog'
-
-const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('ko-KR')
+import { formatDate, formatTime } from '../lib/dateFormat'
 
 // ---------- 장소 ----------
 function LocationsTab() {
@@ -221,13 +221,41 @@ function RobotsTab() {
         <LoadError what="로봇 목록" error={robots.error} onRetry={() => void robots.refetch()} />
       ) : (
         <Table>
-          <thead><tr><Th>이름</Th><Th>종류</Th><Th>상태</Th><Th>복귀 장소</Th><Th>로봇 API 키</Th>{isAdmin && <><Th>상태 변경</Th><Th>{' '}</Th></>}</tr></thead>
+          <thead><tr><Th>이름</Th><Th>종류</Th><Th>상태</Th><Th>로봇 서버</Th><Th>배터리·오염도 (claim 때 확인)</Th><Th>복귀 장소</Th><Th>로봇 API 키</Th>{isAdmin && <><Th>상태 변경</Th><Th>{' '}</Th></>}</tr></thead>
           <tbody>
             {(robots.data ?? []).map(r => (
               <tr key={r.id}>
                 <Td>{r.name}</Td>
                 <Td>{r.robot_type === 'amr' ? 'AMR' : '매니퓰레이터'}</Td>
                 <Td><Badge value={r.status} label={ROBOT_STATUS_LABEL[r.status]} /></Td>
+                <Td>
+                  {/* 팀원 Pinky API 주소 — claim 때 EMR이 GET {주소}/status로 배터리·오염도·주행 준비를 묻는다. 빈 칸 = 배송 안 맡음 (2026-10-23) */}
+                  {isAdmin && r.robot_type === 'amr' ? (
+                    <Input
+                      key={r.robot_server_url ?? ''} defaultValue={r.robot_server_url ?? ''} placeholder="http://192.168.129.107:8080"
+                      className="w-56" aria-label={`${r.name} 로봇 서버 주소`}
+                      onBlur={e => {
+                        const value = e.target.value.trim()
+                        if (value && value !== r.robot_server_url) update.mutate({ id: r.id, body: { robot_server_url: value } })
+                      }}
+                    />
+                  ) : (
+                    <span className={r.robot_server_url ? 'font-mono text-xs' : 'text-slate-400'}>
+                      {r.robot_server_url ?? (r.robot_type === 'amr' ? '없음 — 배송 안 맡음' : '—')}
+                    </span>
+                  )}
+                </Td>
+                <Td>
+                  {/* claim 때 로봇 서버에서 받은 마지막 값. 기준 밖이면 EMR이 새 배송을 주지 않는다 (2026-10-23) */}
+                  {r.status_report ? (
+                    <span>
+                      배터리 {r.status_report.battery_percent.toFixed(0)}% · 오염도 {r.status_report.contamination_percent.toFixed(0)}
+                      <span className="ml-1 text-xs text-slate-500">{formatTime(r.status_report.reported_at)}</span>
+                    </span>
+                  ) : (
+                    <span className="text-slate-400">{r.robot_type === 'amr' ? '아직 받은 적 없음' : '—'}</span>
+                  )}
+                </Td>
                 <Td>
                   {/* 배송을 마치거나 실패하면 돌아가는 곳. 좌표가 있어야 로봇이 배송을 맡는다 (2026-10-20) */}
                   {isAdmin && r.robot_type === 'amr' ? (
@@ -252,7 +280,7 @@ function RobotsTab() {
                 </Td>
                 <Td>
                   {r.has_api_key && r.api_key_issued_at
-                    ? <span className="text-green-700">발급됨 <span className="text-xs text-slate-500">{fmtDate(r.api_key_issued_at)}</span></span>
+                    ? <span className="text-green-700">발급됨 <span className="text-xs text-slate-500">{formatDate(r.api_key_issued_at)}</span></span>
                     : <span className="text-slate-400">없음</span>}
                   {isAdmin && (
                     <span className="ml-2 inline-flex gap-1">
@@ -342,7 +370,7 @@ function BedsideTab() {
                 </Td>
                 <Td>
                   {device.has_api_key && device.api_key_issued_at
-                    ? <span className="text-green-700">발급됨 <span className="text-xs text-slate-500">{fmtDate(device.api_key_issued_at)}</span></span>
+                    ? <span className="text-green-700">발급됨 <span className="text-xs text-slate-500">{formatDate(device.api_key_issued_at)}</span></span>
                     : <span className="text-slate-400">없음 (병상 화면을 쓸 수 없음)</span>}
                   <span className="ml-2 inline-flex gap-1">
                     <Button variant="secondary" disabled={issueApiKey.isPending} onClick={() => issueKey(device)}>{device.has_api_key ? '재발급' : '발급'}</Button>

@@ -18,7 +18,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.config import settings
 from app.models.base import Base, TimestampMixin
-from app.models.enums import DeliveryFailureReason, DeliveryRequester, DeliveryStatus, check_values
+from app.models.enums import DeliveryFailureReason, DeliveryRequester, DeliveryStatus, ReceiptMethod, check_values
 
 # received면 받은 시각이 있고, 간호사 배송이면 받은 간호사도 있다(병상 배송은 버튼 수령이라 간호사 없음 — 0010).
 # 아니면 수령 기록이 모두 비어 있다. 확인한 로봇은 로봇 행 삭제(ON DELETE SET NULL)로 received여도 비어 있을 수 있다
@@ -161,18 +161,18 @@ class Delivery(TimestampMixin, Base):
         return self.nurse.name if self.nurse else ""
 
     @property
-    def receipt_method(self) -> str:
+    def receipt_method(self) -> ReceiptMethod:
         """수령 방법: button = "받았습니다" 버튼(병상 배송은 항상, 간호사 배송은 NURSE_RECEIPT_METHOD=button일 때 — 2026-10-22 기본)
         / marker = 로봇이 일회용 마커를 읽음(간호사 배송, NURSE_RECEIPT_METHOD=marker)
         / none = 로봇 전용 장소(충전 등)로의 이동 — 도착 보고가 곧 완료(received).
         [입력] 없음
-        [출력] str
+        [출력] ReceiptMethod
         """
         if self.destination_location is not None and self.destination_location.robot_only:
-            return "none"   # 로봇 전용 장소(충전 등)로의 품목 없는 이동 — 도착하면 끝 (2026-10-22)
+            return ReceiptMethod.NONE   # 로봇 전용 장소(충전 등)로의 품목 없는 이동 — 도착하면 끝 (2026-10-22)
         if self.requester_type == DeliveryRequester.BEDSIDE:
-            return "button"
-        return settings.NURSE_RECEIPT_METHOD
+            return ReceiptMethod.BUTTON
+        return ReceiptMethod(settings.NURSE_RECEIPT_METHOD)
 
     @property
     def assigned_robot_name(self) -> str | None:

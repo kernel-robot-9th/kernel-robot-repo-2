@@ -153,13 +153,7 @@ executor는 목표를 `world`로 받아 TF로 각 팔 기준 좌표로 바꾼 �
 
 **캘리브레이션 (2팔)**: 마커는 고정하고 팔 베이스 위치를 구합니다. 결과는 `calib/arm_poses.yaml`이며, URDF 인자 `left_x/left_y/left_yaw/...`로 적용됩니다(`dual_sim.launch.py arm_poses:=...`, 실물용).
 
-```bash
-E=install/vla_executor/share/vla_executor/config/executor_dual.yaml
-P=install/vla_perception/share/vla_perception/config/perception_dual.yaml
-ros2 run vla_calibration table --arm left  --color red  --executor-config $E --perception-config $P
-ros2 run vla_calibration table --arm right --color blue --executor-config $E --perception-config $P
-ros2 run vla_calibration wrist --arm right --color blue --executor-config $E
-```
+그때 만든 도구(`vla_calibration table --arm`, `wrist`)는 2026-10-23에 지웠고(git `340a397`), 결과 파일 `calib_sim/arm_poses.yaml`·`wrist_dual.yaml`은 그대로 씁니다.
 
 **시뮬 결과 (2026-10-16)**
 
@@ -202,11 +196,12 @@ ros2 run vla_calibration wrist --arm right --color blue --executor-config $E
 
 ```bash
 cd ~/dev_ws/robot/src/vla_planner_robot
-(cd vla_planner && python3 -m pytest -q test)                                              # 계획 해석·검증, 2팔 (24)
+(cd vla_planner && python3 -m pytest -q test)                                              # 계획 해석·검증, 2팔 (26)
 PYTHONPATH=vla_perception:$PYTHONPATH python3 -m pytest -q vla_perception/test               # ArUco 딕셔너리·검출 (4)
-PYTHONPATH=vla_executor:vla_perception:$PYTHONPATH python3 -m pytest -q vla_executor/test   # 손목 집기 판정 (5)
+PYTHONPATH=vla_executor:vla_perception:$PYTHONPATH python3 -m pytest -q vla_executor/test   # 손목 집기 판정·정렬 (7)
 PYTHONPATH=vla_calibration:vla_executor:vla_perception:$PYTHONPATH \
-  python3 -m pytest -q vla_calibration/test                                                # 캘리브레이션 수학 (8)
+  python3 -m pytest -q vla_calibration/test                                                # top_camera·wrist_refine (8)
+(cd vla_teleop && PYTHONPATH=.:$PYTHONPATH python3 -m pytest -q test)                       # 텔레옵·카메라 고정 (6)
 ```
 
 ## 6. 현재 상태 (시뮬)
@@ -240,48 +235,20 @@ PYTHONPATH=vla_calibration:vla_executor:vla_perception:$PYTHONPATH \
 
 ## 7. 캘리브레이션 (`vla_calibration`)
 
-> **실물 탑뷰 카메라(2026-10-22)**: ChArUco 내부 캘리브레이션 + 테이블 9점 호모그래피(픽셀 → 오른팔 x, y)는 `ros2 run vla_calibration top_camera capture|intrinsics|points|homography`로 한다. 인쇄물·순서는 `docs/calibration/README.md`. 아래 표의 도구는 시뮬(ROS 토픽) 기준이다.
+실물 오른팔용 도구 두 개만 있습니다. 결과는 `~/dev_ws/robot/calib/`에 저장되고 `real_vla.launch.py`가 읽습니다.
 
-실물(또는 카메라·마커·조명이 바뀐 환경)에서 아래 순서로 실행합니다. 결과는 `~/dev_ws/robot/calib/`에 저장되고,
-`calib_dir`로 지정하면 launch가 기본 설정 위에 덮어씁니다.
+| 도구 | 하는 일 | 결과 |
+|---|---|---|
+| `top_camera capture\|intrinsics\|points\|board\|homography` | 탑뷰 카메라 내부 파라미터(체커보드 9x6 또는 ChArUco 7x5), 테이블 호모그래피(픽셀 → 팔 x, y)와 판 높이 | `top_intrinsics.yaml`, `top_homography.yaml` |
+| `wrist_refine measure\|fit` | 초록 2.5 cm 정육면체 위에서 손목 카메라로 실제 위치·높이를 재고(블록 크기 → 높이), 탑뷰 좌표(affine)와 판 높이(plane)를 다시 맞춤 | `wrist_points.csv` → `top_homography.yaml` (이전 파일은 날짜 붙여 보관) |
 
-| 순서 | 명령 | 준비 | 결과 파일 → 적용 대상 |
-|---|---|---|---|
-| 1 | `ros2 run vla_calibration intrinsics --board 9x6 --square 0.03` | 체커보드를 카메라 아래에서 기울이고 움직임 (자동 20장 수집) | `camera_info.yaml` → usb_cam `camera_info_url` |
-| 2 | `ros2 run vla_calibration colors --colors red green blue yellow` | 마커 안쪽에 색별 블록 1개씩, 팔은 관찰 자세 | `colors.yaml` → perception + executor `hsv.*` |
-| 3 | `ros2 run vla_calibration table --color red` | 빨간 블록 1개만 남김. 팔이 시작점 위에서 열리면 블록을 손가락 아래에 두고 Enter | `table.yaml` → perception `marker_positions` |
-| 4 | `ros2 run vla_calibration wrist --color red` | 빨간 블록 1개 | `wrist.yaml` → executor `wrist_roi`, `wrist_min_fill` (+ `wrist_calibration.png`) |
+인쇄물·순서는 `docs/calibration/README.md`, 2026-10-22 실물 시험과 남은 문제는 `docs/real_tests/2026-10-22_command/failures.md`에 있습니다.
+
+**시뮬:** 예전 ROS 토픽 기반 도구(`intrinsics`, `colors`, `table`, `wrist`)는 2026-10-23에 지웠습니다(git `340a397`). 그 결과 `calib_sim/`(camera_info·colors·table·wrist)는 그대로 쓸 수 있습니다.
 
 ```bash
-ros2 launch vla_bringup sim_vla.launch.py calib_dir:=~/dev_ws/robot/calib   # 결과 적용
+ros2 launch vla_bringup sim_vla.launch.py calib_dir:=~/dev_ws/robot/calib_sim   # 시뮬 결과 적용
 ```
-
-**각 도구가 하는 일**
-
-- **intrinsics**: 체커보드 자세가 기존 샘플과 충분히 다를 때만 자동 캡처 → `cv2.calibrateCamera` → ROS camera_info YAML.
-  perception은 `camera_info`의 K·D로 마커·블록 픽셀을 왜곡 보정합니다.
-- **colors**: 마커 사각형 안의 채도 높은 영역을 색 이름에 매칭(색상환 거리)해 15프레임 동안 픽셀을 모은 뒤,
-  hue는 1–99 백분위 ± 6, S·V 하한은 2 백분위에서 여유를 둡니다(빨강은 0/179 경계에서 2구간으로 나눔).
-- **table**: 마커끼리의 상대 배치(자로 잰 `marker_positions`)는 그대로 두고, 그 사각형이 로봇 기준으로 어디 있는지를 구합니다.
-  로봇이 블록을 12곳에 직접 놓고, 카메라가 본 위치와 명령 위치 사이의 **2D 강체 변환(회전+이동)**을 맞춥니다(이상치 제거, leave-one-out 오차 보고).
-  집기 실패 시 카메라로 다시 찾아 재시도합니다. `--fit-scale`은 마커 간 거리 측정이 부정확할 때 배율도 함께 맞춥니다.
-- **wrist**: 잡은 상태 / 빈 집게 / 블록 위에서 헛잡음 상태의 손목 영상을 찍어, 잡은 블록이 항상 덮는 영역을 ROI로,
-  잡음/놓침 비율의 중간값을 기준값으로 정합니다. 여유가 25% 미만이면 경고(종료 코드 2)합니다.
-
-**시뮬 검증 결과** (`calib_sim/`)
-
-| 도구 | 결과 |
-|---|---|
-| intrinsics | fx 1325.28 (실제 1324.90, **+0.03 %**), RMS 0.22 px, 20장 |
-| colors | 4색 모두 검출, 수집 픽셀 재현율 98–100 %, 색 범위 겹침 없음 |
-| table | 마커 배치를 일부러 2° 회전 + 14 mm 이동시켜 시작 → 회전 **−2.04°** 복원, 맞춤 잔차 3.1 mm, leave-one-out 3.8 mm |
-| wrist | 잡음 95–100 % / 빈 집게·헛잡음 5.7 % → 기준 50 %, 여유 89 % |
-
-> table 캘리브레이션은 카메라를 **로봇이 실제로 블록을 놓는 위치**에 맞춥니다. 시뮬에서는 로봇이 늘 약 9 mm 짧게 놓아서,
-> 적용 후 카메라↔로봇 일관성은 0–1 mm로 좋아지지만 Gazebo 절대 좌표와는 약 9 mm 차이가 납니다.
-> 블록 기준 작업(쌓기·옆에 놓기)에는 일관성이 중요하므로 이 방식을 택했습니다.
-
-시뮬에서 직접 해보기: 체커보드는 `ros2 run vla_sim checkerboard_sweep.py --poses 40`이 대신 움직여 줍니다(intrinsics 실행 중에 별도 터미널에서).
 
 ## 8. 문제 해결
 
@@ -299,122 +266,9 @@ ros2 launch vla_bringup sim_vla.launch.py calib_dir:=~/dev_ws/robot/calib   # �
 | table 캘리브레이션에서 모든 점이 dropped | 초기 `marker_positions`가 3 cm 넘게 틀림 → `--max-drift 1`로 첫 회 실행 후 결과로 다시 실행 |
 | wrist 캘리브레이션 종료 코드 2 | 잡음/놓침 구분 여유 부족 → 조명·카메라 각도 확인, 색 캘리브레이션 먼저 |
 
-## 8-1. 로봇 모니터 (`src/fms/robot_monitor`)
+## 8-1. (삭제됨) 로봇 모니터·Pinky 이동 시험·배송 실행기·간호사 따라가기
 
-관제 서버에서 로봇마다 배터리·위치·주행 상태를 계속 모아 내보냅니다. 로봇은 토픽만 내고, 모니터가 구독합니다.
-
-```bash
-colcon build --symlink-install --packages-select robot_monitor && source install/setup.bash
-ros2 run robot_monitor monitor                         # 설정: src/fms/robot_monitor/config/robots.yaml
-curl http://localhost:8090/api/robots                  # 전체 로봇 상태 (JSON)
-curl -N http://localhost:8090/api/robots/stream        # 1초마다 실시간 (SSE)
-ros2 topic echo /fms/robot_states                      # 같은 내용을 ROS 토픽으로
-```
-
-- 구독(로봇 namespace 아래): `battery/percent`, `battery/voltage`, `odom`, `tf`·`tf_static`(위치 = `map → base_footprint`), `navigate_to_pose/_action/status`
-- 상태: `offline`(3초간 아무 메시지 없음) / `idle` / `navigating`. 배터리 20 % 미만이면 `battery.low = true`
-- 위치는 지도(`map`)가 있어야 나옵니다(SLAM 또는 AMCL 실행 중). 로봇과 같은 `ROS_DOMAIN_ID`에서 실행합니다.
-
-## 8-1-1. EMR 장소로 Pinky 이동 (`src/fms/test_waypoint`)
-
-EMR 맵 화면에서 찍은 장소를 이름으로 골라 Pinky를 차례로 보냅니다. EMR에서 장소 좌표를 읽고(로그인 불필요), 로봇의 Nav2 웹서버(`:8080`)에 목표를 보냅니다.
-ROS가 필요 없는 python3 스크립트라 이 PC나 로봇 어디서든 돌릴 수 있습니다.
-
-로봇에 맵 파일이 없으면 EMR에서 꺼내 보냅니다. EMR이 저장한 이미지(픽셀 그대로)와 해상도·원점으로 map_server용 yaml+png를 만들므로 좌표가 EMR과 정확히 같습니다.
-mode·thresh는 EMR에 없어서 Pinky 맵과 같은 값(trinary, 0.65/0.25)을 씁니다.
-
-```bash
-python3 ~/dev_ws/robot/src/fms/test_waypoint/emr_map_export.py 병원 ~/dev_ws/robot/maps   # → map_rev2.yaml + map_rev2.png
-scp ~/dev_ws/robot/maps/map_rev2.yaml ~/dev_ws/robot/maps/map_rev2.png pinky@<로봇 IP>:~/maps/
-```
-
-```bash
-# 로봇에서 (EMR에 올린 것과 같은 맵 파일로)
-ros2 launch pinky_navigation web_nav2.launch.xml map:=<경로>/map_rev2.yaml
-#   → 웹 화면(http://<로봇 IP>:8080)에서 초기 위치(2D Pose Estimate)를 먼저 잡는다
-
-# 이 PC에서
-cd ~/dev_ws/robot/src/fms/test_waypoint
-python3 test_waypoint.py --list                                    # EMR 장소 목록
-python3 test_waypoint.py 비품실 301호 --robot http://<로봇 IP>:8080 --dry-run   # 검사·계획만
-python3 test_waypoint.py 비품실 301호 302호 간호사스테이션 --robot http://<로봇 IP>:8080
-```
-
-| 단계 | 동작 |
-|---|---|
-| 출발 전 | 이름이 EMR에 있는지, 한 맵에 있는지, **로봇 Nav2 맵이 EMR 맵과 같은지**(해상도·원점·크기), 로봇 위치가 잡혔는지 확인. 하나라도 아니면 움직이지 않음(종료 코드 2) |
-| 출발 | 이동 계획을 보여 주고 `y`를 입력해야 출발 (`--yes`로 생략) |
-| 장소마다 | 목표 전송 → 주행이 끝나면 현재 위치가 목표 0.35 m 안이면 도착 → 3초 머무름 |
-| 실패 | 도착 못 하면 거기서 멈춤(`--continue-on-miss`로 계속). 120초 넘게 안 끝나거나 Ctrl+C면 **정지 명령** |
-
-- 웹서버 `/api/goal`은 성공·실패를 알려 주지 않아 위치로 판정합니다. Nav2가 목표를 거부하면 제한 시간까지 기다린 뒤 정지합니다.
-- 옵션: `--emr`(기본 `http://localhost:8000/api/v1`), `--robot`(기본 `http://192.168.4.1:8080`), `--arrive-tolerance-m`, `--timeout-s`, `--wait-s`, `--skip-map-check`(위험).
-
-## 8-1-2. EMR 배송 실행기 (`src/fms/delivery_executor`, 2026-10-20 · 주행·수령 변경 2026-10-22)
-
-EMR 웹 예약을 로봇에 전달하는 관제 PC 프로그램입니다(EMR 로드맵 2단계). 예약 시각이 지난 배송을 EMR에서 가져와(claim) 로봇을 보내고,
-도착을 알린 뒤 수령을 기다렸다가 복귀시킵니다. 계약: `dev_ws/docs/api_contract_delivery_2026-10-20.md` 4장.
-
-**2026-10-22부터 (사용자 결정)**
-- 주행은 **팀원 Pinky API**(로봇 `:8080`, `POST /goto {dest}` → `GET /jobs/{id}`)로 합니다(`navigation: pinky_api`). ROS가 필요 없고, **인증 없이** 진행합니다(운영 전에 넣기). 분석: `dev_ws/docs/pinky_fms_api_review_2026-10-22.md`.
-- 주행은 **비동기**입니다: 보내 놓고 반복마다 확인하며, **제한 시간이 없습니다**(`navigation_timeout_s: null`). **비품실 금지를 풀었습니다**(비품실 → `PHARMACY`, 복귀 간호사스테이션 → `START_A`).
-- **수령 마커는 꺼 둡니다**(`receipt_markers: false`). 간호사·환자가 EMR 화면에서 "받았습니다"를 누르면, 실행기가 대기 중 2초마다 `/robot/me`를 보고 알아차립니다.
-- 예전 방식(Nav2 직접 `navigation: ros`, 마커 `receipt_markers: true` + EMR `NURSE_RECEIPT_METHOD=marker`)은 설정으로 되살립니다.
-
-```bash
-# 1) EMR 장소·맵·로봇 화면 → 로봇 탭: 로봇 1호의 복귀 장소(예: 간호사스테이션) 지정, 키 발급 → 파일로 저장
-mkdir -p ~/.config/delivery_executor && chmod 700 ~/.config/delivery_executor
-nano ~/.config/delivery_executor/pinky_1.key && chmod 600 ~/.config/delivery_executor/pinky_1.key   # 키 한 줄
-# 2) 설정 확인: src/fms/delivery_executor/config/executor.yaml
-#    emr_robot_id, pinky_api 주소. 목적지는 EMR 장소의 '로봇 목적지'(robot_dest)를 쓴다 — 아래로 Pinky 목적지를 EMR 맵·장소로 가져오기
-#    (팀원이 목적지를 바꾸면 다시 실행. 관리자 비밀번호는 EMR_PASSWORD 또는 입력)
-python3 ~/dev_ws/emr/backend/scripts/import_pinky_dests.py --pinky http://192.168.129.122:8080 --home START_A --robot-id 1
-curl http://192.168.129.122:8080/status      # 로봇 위치 추정(localized)·nav2_ready·idle 확인 (읽기만)
-curl http://192.168.129.122:8080/dests       # 목적지 이름 (2026-10-22 /stops에서 바뀜)
-# 3) 연결 점검 — 로봇을 움직이지 않음 (EMR 키·복귀 장소, Pinky 상태, 목적지 이름, 목적지별 경로 계산)
-colcon build --symlink-install --packages-select delivery_executor && source install/setup.bash
-ros2 run delivery_executor executor --check    # 끝에 "→ 배송을 맡을 수 있습니다"면 준비 완료
-# 4) 실행 — ⚠️ 배송이 있으면 로봇이 실제로 움직입니다
-ros2 run delivery_executor executor            # --config 다른.yaml, --robot pinky_1
-# 5) 도착하면 간호사 화면의 도착 창(또는 배송 목록)에서 "받았습니다" → 실행기가 알아차리고 복귀
-```
-
-| 상황 | 동작 |
-|---|---|
-| 시작 | `/robot/me`로 키가 설정의 로봇 것인지, 복귀 장소 확인. 맡고 있던 배송이 있으면 그 단계부터 이어서. (`ros`면 로봇 /map = EMR 맵도 확인) |
-| claim 전 | (`pinky_api`) `GET /status` — 위치 모름·Nav2 안 됨·다른 작업 중이면 맡지 않고 기다림 |
-| 배송 | 3초마다 claim → 목적지 이름으로 `/goto` → **기다리지 않고** 반복마다 `/jobs/{id}` 확인(비동기, 제한 시간 없음) → 끝나면 도착 보고 → "받았습니다" 대기(2초마다 `/robot/me`) → 복귀도 같은 방식 |
-| 실패 | Pinky 작업 실패(제한 시간을 정했으면 시간 초과도) → `navigation_failed`, 5분 미수령 → `not_received`, 금지 장소(2026-10-22 비품실 해제 — 지금 없음)·`dests`에 없는 장소·Pinky가 못 가는 곳 → `destination_blocked`(움직이지 않음), Pinky가 30초 넘게 다른 작업 중 → `robot_error`. 모두 EMR이 재고를 되돌리고 알림 |
-| 복귀 실패 | 멈춤(다음 배송을 맡지 않음) — 로봇 위치 확인 후 다시 시작 |
-| Ctrl+C | 실행기가 시작한 Pinky 작업을 `POST /cancel`로 멈춤(`ros`면 Nav2 목표 취소). 배송은 EMR에 남아 다음 시작 때 이어서(실패로 보고하지 않음) |
-
-로봇 없이 시험: 가짜 Pinky API(단위 테스트 `test/test_pinky_api.py`와 같은 흉내 서버)에 `pinky_api` 주소를 돌려 실행기 전체를 확인(2026-10-22 수행 — 실제 EMR, 간호사 화면 "받았습니다"까지). 예전 방식은 EMR `backend/scripts/simulate_robot.py` 또는 도메인 77 가짜 Nav2(2026-10-20).
-
-## 8-1-3. 간호사 따라가기 (선택 기능, `src/pinky_onboard/pinky_marker`, 2026-10-20)
-
-간호사 신분증 마커(EMR에서 배정·인쇄한 0~49번)를 Pinky 카메라로 보고 그 간호사를 30 cm 거리로 따라갑니다. 배송과 별개 기능입니다.
-팀원 시제품(`~/Downloads/macker`, 2026-10-12)을 정리한 것이고, **Pinky에서 돕니다**(Pi 카메라). 패키지 폴더를 Pinky 워크스페이스에 복사해 빌드합니다.
-
-```bash
-# PC → Pinky로 복사 후 Pinky에서 빌드
-scp -r ~/dev_ws/robot/src/pinky_onboard/pinky_marker pinky@<로봇 IP>:~/pinky_ws/src/
-colcon build --packages-select pinky_marker && source install/setup.bash     # Pinky에서
-# config/nurses.yaml: 마커 번호 → 이름 (EMR 간호사 화면 배정과 같게)
-ros2 launch pinky_marker follow.launch.py                                      # 카메라 + 따라가기 (LCD 영상 play_cam.py는 꺼 둘 것)
-ros2 service call /nurse_follower/enable std_srvs/srv/SetBool "{data: false}"   # 끄기 / true면 켜기
-ros2 topic echo /follow/state                                                  # WAITING · FOLLOWING · SHORT_LOSS · TARGET_LOST · NAV_BUSY · DISABLED
-```
-
-| 팀원 시제품과 다른 점 | 이유 |
-|---|---|
-| 따라가는 동안에만 `/cmd_vel`을 냄(멈출 때 정지 3번) | 시제품은 늘 20 Hz로 정지 명령을 내서 Nav2 주행을 막았다 |
-| Nav2 주행 중이면 NAV_BUSY — 따라가지 않음 | 배송 실행기와 같이 켜져도 바퀴 명령이 부딪히지 않게 |
-| 영상 구독 QoS reliable·최신 1장 (`image_qos`) | best-effort로는 이 PC에서 0.9 MB 영상이 60장 중 0장 도착(2026-10-20 측정) |
-| 사전 DICT_4X4_250, 따라가기 대상은 0~49만 | 일회용 수령 마커(50~249)를 같은 카메라로 읽을 수 있게(따라가기는 무시) |
-| `~/enable` 서비스, Ctrl+C·SIGTERM 직접 처리 | 켜고 끄기, launch·스크립트에서 띄워도 바로 멈추게 |
-
-- 거리 추정은 초점 거리 500 px 가정(보정 전) — 실제 거리와 다를 수 있다. 카메라가 180° 돌아 달려 `invert_x: true`(팀원 확인).
-- 시험(2026-10-20): 도메인 77 가짜 카메라 영상으로 따라가기·NAV_BUSY·끄기·놓침 확인. **Pi 카메라 노드(`camera`)는 Pinky에서만 확인 가능 — 미시험**.
+`src/fms`(`robot_monitor`, `test_waypoint`, `delivery_executor`)와 `src/pinky_onboard`(`pinky_marker`), `maps/`는 2026-10-23에 지웠습니다. Pinky 주행과 로봇 상태 보고는 팀원 FMS가 맡고, EMR은 배송 미션만 만듭니다. 코드가 다시 필요하면 git 기록(커밋 `340a397`)에서 꺼내면 됩니다.
 
 ## 8-2. 실물 팔 텔레오퍼레이션 (`vla_teleop`)
 
@@ -425,10 +279,8 @@ ros2 run vla_teleop teleop scan                      # 모든 OpenRB: 역할·�
 ros2 run vla_teleop teleop start --arm right         # 에러 확인 → 팔로워 → 리더 자세로 10초 정렬 → 리더 → 좌표 뷰어
 ros2 run vla_teleop teleop here blue_round           # 지금 좌표·기울기·탑뷰/손목 화면 기록 (세션 폴더 points.csv)
 ros2 run vla_teleop teleop stop                      # 리더로 팔을 접은 뒤. 접히지 않았으면 거부(--force로 강제)
-ros2 run vla_teleop teleop tap --x 0.190 --y -0.081 --z -0.04 --record   # 리더 없이 팔로워만: 위로 접근 → 내려 찍기 → 올라와 접힌 자세로 복귀 → 종료. 안전 높이 아래는 거부, --dry-run은 계획만, --record는 세션 폴더에 top.mp4·wrist.mp4
-ros2 run vla_teleop teleop pick --x 0.244 --y 0.004 --z -0.038 --place-x 0.200 --place-y 0.097 --place-z -0.028 --record   # 그리퍼 열기 → 내려가 집기 → 들어 옮기기 → 놓기 → 복귀. 그리퍼 열림/닫힘 값은 config/arms.yaml
 ros2 run vla_teleop teleop camera --tune                # 탑뷰·손목 카메라 노출/화이트밸런스를 측정해 고정값으로 저장(calib/camera_settings.yaml). 평소 조명에서 한 번
-ros2 run vla_teleop teleop camera                       # 저장한 고정값 다시 적용(카메라를 다시 꽂으면 UVC가 값을 잊음). start/tap/pick은 자동 적용
+ros2 run vla_teleop teleop camera                       # 저장한 고정값 다시 적용(카메라를 다시 꽂으면 UVC가 값을 잊음). start와 real_vla는 자동 적용
 ros2 run vla_teleop teleop clear-errors --arm right  # 모터 LED가 빨갛게 깜빡일 때(과부하 등). 팔이 멈춘 상태에서
 ros2 run vla_teleop teleop status
 ```
@@ -438,11 +290,13 @@ ros2 run vla_teleop teleop status
 - 오른쪽 팔 = 팔로워 9C4E6E48 + 리더 0DE4DEF8 + 손목 카메라(USB 포트 10.1.4). `ttyACM` 번호는 다시 꽂으면 바뀌므로 시리얼로 찾습니다.
 - 도메인은 77로 분리해서 실행합니다. 로그와 기록은 `~/.cache/vla_teleop/<시각>/`에 남습니다.
 
-## 9. 실물로 옮길 때 (TODO)
+## 9. 실물 오른팔로 실행
 
-- 마커: `DICT_5X5_100` ID 0–3으로 출력 (다른 딕셔너리면 `aruco_dictionary`와 `colors --aruco-dictionary`도 변경), 크기, **마커 중심끼리의 실측 거리**(자로 측정) → `marker_positions` 초기값. 로봇 기준 위치는 `vla_calibration table`이 구함
-- 카메라: 장치(`/dev/video*`), 해상도 → `vla_calibration intrinsics`
-- 블록 크기와 색 → `block_height`, `vla_calibration colors`
-- 손목 카메라 장착 → `vla_calibration wrist` (없으면 `wrist_check: false`)
-- OMX-F 포트(U2D2) → `ros2 launch open_manipulator_bringup omx_f.launch.py`
-- 실물에서는 `executor.yaml`의 `use_sim_time: false`로 바꾼 설정 파일을 사용
+```bash
+ros2 run vla_bringup stop_vla.sh                 # 남은 실행·텔레옵 정리 (팔은 접힌 자세로)
+ros2 launch vla_bringup real_vla.launch.py       # 카메라 2대 + 팔로워 + 비전(calib/) + 실행기(직접 구동) + 플래너, 도메인은 터미널 설정대로
+ros2 run vla_planner cli                         # 다른 터미널: "파랑 블록을 초록 블록에 쌓아"
+```
+
+- 설정: `perception_real.yaml`, `executor_real.yaml`(`motion_backend: direct`, 판 높이 `surface_plane`, 집기 높이, 그리퍼), `planner_real.yaml`.
+- 2026-10-23 현재 집기는 실물에서 성공하지 못했습니다. 탑뷰 좌표가 x로 1.5~3 cm 틀리고 팔이 멀리 뻗을수록 처집니다. `wrist_refine`으로 재보정한 뒤 다시 시험합니다(`docs/real_tests/2026-10-22_command/failures.md`).

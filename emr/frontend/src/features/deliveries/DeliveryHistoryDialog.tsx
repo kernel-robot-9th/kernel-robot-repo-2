@@ -9,7 +9,8 @@ import { useEffect, useRef } from 'react'
 import { useDeliveryEvents } from '../../api/hooks'
 import { DELIVERY_EVENT_LABEL } from '../../api/types'
 import { Badge, Button, LoadError } from '../../components/ui'
-import { describeEvent, formatEventTime } from './deliveryEventText'
+import { describeEvent } from './deliveryEventText'
+import { formatDateTimeSeconds } from '../../lib/dateFormat'
 
 /** [입력] deliveryId / onClose */
 export function DeliveryHistoryDialog({ deliveryId, onClose }: { deliveryId: number; onClose: () => void }) {
@@ -38,7 +39,7 @@ export function DeliveryHistoryDialog({ deliveryId, onClose }: { deliveryId: num
           <ol className="space-y-2">
             {events.data.map(event => (
               <li key={event.id} className="flex gap-3 text-sm">
-                <span className="w-40 shrink-0 text-slate-500">{formatEventTime(event.occurred_at)}</span>
+                <span className="w-40 shrink-0 text-slate-500">{formatDateTimeSeconds(event.occurred_at)}</span>
                 <span className="w-12 shrink-0"><Badge value={event.event_type} label={DELIVERY_EVENT_LABEL[event.event_type]} /></span>
                 <span className="flex-1">
                   <span className="font-medium">{event.actor_name}</span>

@@ -9,6 +9,7 @@
 #   - DeliveryFailureReason           배송 실패 사유 (2026-10-20)
 #   - DeliveryEventType / DeliveryEventActor  배송 기록 사건 종류·누가 (2026-10-21, 로드맵 4단계 · bedside 2026-10-22)
 #   - DeliveryRequester               배송을 만든 쪽 (간호사 예약·병상 단말 환자 요청, 2026-10-22)
+#   - ReceiptMethod                   수령 방법 (DB에 저장하지 않음 — Delivery.receipt_method가 계산, 2026-10-23 문자열에서 옮김)
 #   - RobotType / RobotStatus         로봇 종류·상태
 #   - NotificationEvent               실시간 알림 종류 (DB에 저장하지 않음, SSE event 이름)
 #   - check_values()                  CHECK 제약용 IN 리스트
@@ -84,6 +85,13 @@ class DeliveryRequester(StrEnum):
     """배송을 만든 쪽 (2026-10-22). 병상 배송은 간호사 승인 없이 바로 생기고, 수령은 병상 화면 버튼으로."""
     NURSE = "nurse"       # 간호사 예약 — 수령은 일회용 마커
     BEDSIDE = "bedside"   # 병상 단말 환자 요청 — 수령은 "받았습니다" 버튼
+
+
+class ReceiptMethod(StrEnum):
+    """수령 방법. 저장하지 않고 배송마다 계산한다(Delivery.receipt_method). 설정 NURSE_RECEIPT_METHOD는 button·marker만."""
+    BUTTON = "button"   # 간호사·환자가 화면에서 "받았습니다"
+    MARKER = "marker"   # 로봇이 일회용 마커를 읽음 (간호사 배송, NURSE_RECEIPT_METHOD=marker)
+    NONE = "none"       # 로봇 전용 장소(충전 등)로의 품목 없는 이동 — 도착 보고가 곧 완료
 
 
 class RobotType(StrEnum):

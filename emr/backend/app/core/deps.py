@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.exceptions import Forbidden, Unauthorized
-from app.core.security import decode_token, hash_robot_api_key
+from app.core.security import decode_token, hash_api_key
 from app.models.bedside_device import BedsideDevice
 from app.models.enums import NurseRole
 from app.models.nurse import Nurse
@@ -102,14 +102,14 @@ def get_current_robot(db: DB, raw_api_key: Annotated[str | None, Depends(robot_a
     """
     repository = RobotRepository(db)
     if settings.ROBOT_KEY_DISABLED:   # 로봇 키 잠시 끔 (2026-10-22) — 맞는 키면 그 로봇, 아니면 ROBOT_KEY_DISABLED_AS
-        robot = repository.get_by_api_key_hash(hash_robot_api_key(raw_api_key)) if raw_api_key else None
+        robot = repository.get_by_api_key_hash(hash_api_key(raw_api_key)) if raw_api_key else None
         robot = robot or repository.get(settings.ROBOT_KEY_DISABLED_AS)
         if robot is None:
             raise Unauthorized(f"ROBOT_KEY_DISABLED but robot {settings.ROBOT_KEY_DISABLED_AS} does not exist", code="robot_key_invalid")
         return robot
     if not raw_api_key:
         raise Unauthorized("missing robot api key", code="robot_key_missing")
-    robot = repository.get_by_api_key_hash(hash_robot_api_key(raw_api_key))
+    robot = repository.get_by_api_key_hash(hash_api_key(raw_api_key))
     if robot is None:
         raise Unauthorized("invalid or revoked robot api key", code="robot_key_invalid")
     return robot
@@ -133,7 +133,7 @@ def get_current_bedside(db: DB, raw_api_key: Annotated[str | None, Depends(bedsi
     """
     if not raw_api_key:
         raise Unauthorized("missing bedside api key", code="bedside_key_missing")
-    device = BedsideDeviceRepository(db).get_by_api_key_hash(hash_robot_api_key(raw_api_key))
+    device = BedsideDeviceRepository(db).get_by_api_key_hash(hash_api_key(raw_api_key))
     if device is None:
         raise Unauthorized("invalid or revoked bedside api key", code="bedside_key_invalid")
     return device

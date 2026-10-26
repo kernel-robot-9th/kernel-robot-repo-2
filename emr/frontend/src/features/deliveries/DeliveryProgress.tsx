@@ -8,6 +8,7 @@
 // =============================================================================
 import type { Delivery } from '../../api/types'
 import { DELIVERY_FAILURE_REASON_LABEL } from '../../api/types'
+import { formatHourMinute } from '../../lib/dateFormat'
 import { useNowMs } from './useNowMs'
 
 const STEPS = [
@@ -17,7 +18,6 @@ const STEPS = [
   { status: 'received', label: '수령' },
 ] as const
 
-const time = (iso: string | null) => iso ? new Date(iso).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : ''
 
 /** 지금 단계의 순번 (실패는 어디서 멈췄는지로). [입력] delivery [출력] 0~3 */
 function stepIndex(delivery: Delivery): number {
@@ -57,9 +57,9 @@ export function DeliveryProgress({ delivery }: { delivery: Delivery }) {
       <p className="text-xs text-slate-500">
         {delivery.status === 'reserved' && !hasCoordinates && <span className="text-amber-700">목적지 좌표가 없어 로봇이 맡지 않습니다 (관리자에게 장소 좌표 등록 요청)</span>}
         {delivery.status === 'reserved' && hasCoordinates && (overdue ? '로봇 배정을 기다리는 중' : '예약 시각이 되면 로봇이 출발합니다')}
-        {delivery.status === 'dispatched' && `${delivery.assigned_robot_name ?? '로봇'} 출발 ${time(delivery.dispatched_at)}`}
-        {delivery.status === 'arrived' && `${delivery.assigned_robot_name ?? '로봇'} 도착 ${time(delivery.arrived_at)} · 수령 마감 ${time(delivery.receipt_deadline_at)}`}
-        {delivery.status === 'received' && `수령 ${time(delivery.received_at)}`}
+        {delivery.status === 'dispatched' && `${delivery.assigned_robot_name ?? '로봇'} 출발 ${formatHourMinute(delivery.dispatched_at)}`}
+        {delivery.status === 'arrived' && `${delivery.assigned_robot_name ?? '로봇'} 도착 ${formatHourMinute(delivery.arrived_at)} · 수령 마감 ${formatHourMinute(delivery.receipt_deadline_at)}`}
+        {delivery.status === 'received' && `수령 ${formatHourMinute(delivery.received_at)}`}
         {failed && <span className="text-red-700">{delivery.failure_reason ? DELIVERY_FAILURE_REASON_LABEL[delivery.failure_reason] : '실패'} · 재고는 되돌렸습니다</span>}
       </p>
     </div>

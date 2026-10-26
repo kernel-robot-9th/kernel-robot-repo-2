@@ -6,6 +6,7 @@
 #   - DeliveryService  create/list_for_nurse/get/update/cancel (간호사 쪽), restore_stock (취소·실패 공용)
 #                      예약·변경·취소는 배송 기록(delivery_events)에도 남긴다 (2026-10-21)
 #                      confirm_receipt — 간호사 "받았습니다" 버튼 수령 (2026-10-22, NURSE_RECEIPT_METHOD=button)
+#                      require_arrived·mark_received — 수령 공용 (간호사·환자 버튼, 로봇 마커, 로봇 전용 장소 이동 — 2026-10-23)
 # 로봇 쪽(배송 가져가기·진행 보고·수령 확인)은 app/services/dispatch.py (2026-10-20)
 # =============================================================================
 from __future__ import annotations
@@ -16,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import BadRequest, Conflict, Forbidden, NotFound
 from app.models.delivery import Delivery, DeliveryItem
-from app.models.enums import DeliveryEventType, DeliveryStatus
+from app.models.enums import DeliveryEventType, DeliveryStatus, ReceiptMethod
 from app.models.location import Location
 from app.repositories.delivery import DeliveryRepository
 from app.repositories.location import LocationRepository
@@ -121,18 +122,35 @@ class DeliveryService:
         [출력] Delivery: received (남의 예약 403, 도착 전·끝났으면 409 delivery_not_arrived, 마커 방식이면 409 delivery_receipt_by_marker)
         """
         delivery = self.get(delivery_id, nurse_id, lock=True)
-        if delivery.status != DeliveryStatus.ARRIVED:
-            raise Conflict(f"delivery {delivery_id} is {delivery.status}; only arrived can be received", code="delivery_not_arrived")
-        if delivery.receipt_method != "button":
+        self.require_arrived(delivery)
+        if delivery.receipt_method != ReceiptMethod.BUTTON:
             raise Conflict(f"delivery {delivery_id} is received by the robot reading the marker", code="delivery_receipt_by_marker")
         now = datetime.now(UTC)
-        delivery.status = DeliveryStatus.RECEIVED
-        delivery.received_at = now
-        delivery.received_by_nurse_id = nurse_id
-        delivery.received_by_robot_id = delivery.assigned_robot_id   # 가져다준 로봇 (마커를 읽지는 않음)
+        self.mark_received(delivery, now, nurse_id)
         self.notifier.notify_received(delivery)   # 같은 간호사의 다른 탭·화면도 목록을 새로 고친다
         self.events.record_by_nurse(delivery, DeliveryEventType.RECEIVED, nurse_id, now)
         return delivery
+
+    @staticmethod
+    def require_arrived(delivery: Delivery) -> None:
+        """수령할 수 있는 상태(arrived)인지 — 간호사·환자 "받았습니다" 공용.
+        [입력] delivery
+        [출력] 없음 (아니면 Conflict delivery_not_arrived)
+        """
+        if delivery.status != DeliveryStatus.ARRIVED:
+            raise Conflict(f"delivery {delivery.id} is {delivery.status}; only arrived can be received", code="delivery_not_arrived")
+
+    @staticmethod
+    def mark_received(delivery: Delivery, received_at: datetime, nurse_id: int | None) -> None:
+        """received로 바꾸고 수령 기록을 채운다 — 간호사·환자 버튼, 로봇 마커, 로봇 전용 장소 이동 공용 (2026-10-23 묶음).
+        받은 로봇은 언제나 맡은 로봇(가져다준 로봇). 알림·배송 기록은 부르는 쪽이 한다(누가 했는지가 다르다).
+        [입력] delivery / received_at / nurse_id: 받은 간호사 (병상 배송은 None)
+        [출력] 없음
+        """
+        delivery.status = DeliveryStatus.RECEIVED
+        delivery.received_at = received_at
+        delivery.received_by_nurse_id = nurse_id
+        delivery.received_by_robot_id = delivery.assigned_robot_id
 
     def cancel(self, delivery_id: int, nurse_id: int) -> Delivery:
         """예약 취소. 예약했던 수량을 재고로 되돌린다.

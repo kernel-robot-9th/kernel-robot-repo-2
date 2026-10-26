@@ -120,6 +120,16 @@ export interface Robot {
   api_key_issued_at: string | null
   /** 복귀 장소 (2026-10-20). null이면 배송을 맡지 않는다 */
   home_location_id: number | null
+  /** 로봇 서버(팀원 Pinky API) 주소, 예: http://192.168.129.107:8080. claim 때 EMR이 GET /status로 상태를 묻는다. null이면 배송을 맡지 않는다 (2026-10-23) */
+  robot_server_url: string | null
+  /** claim 때 로봇 서버에서 받은 마지막 배터리·오염도 (2026-10-23). null이면 아직 받은 적 없음 */
+  status_report: RobotStatusReport | null
+}
+/** 로봇 서버에서 받은 상태. 배터리가 기준 미만·오염도가 기준 초과면 EMR이 새 배송을 주지 않는다 (기준은 백엔드 설정) */
+export interface RobotStatusReport {
+  battery_percent: number        // 0~100
+  contamination_percent: number  // 0(깨끗)~100, 로봇이 잰 값
+  reported_at: string
 }
 /** POST /robots/{id}/api-key 응답 (관리자). api_key는 다시 조회할 수 없다 */
 export interface RobotApiKey {

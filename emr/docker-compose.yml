@@ -13,7 +13,7 @@ services:
       POSTGRES_PASSWORD: emr
       POSTGRES_DB: emr
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"   # 이 PC 안에서만 (개발 계정 emr/emr — 2026-10-23 보안). api는 컨테이너 네트워크의 db로 접속
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

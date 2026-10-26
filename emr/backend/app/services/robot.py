@@ -14,7 +14,7 @@ import structlog
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import BadRequest, Conflict, NotFound
-from app.core.security import generate_robot_api_key, hash_robot_api_key
+from app.core.security import generate_robot_api_key, hash_api_key
 from app.models.enums import RobotStatus, RobotType
 from app.models.robot import Robot
 from app.repositories.delivery import DeliveryRepository
@@ -101,7 +101,7 @@ class RobotService:
         """
         robot = self.get(robot_id)
         raw_api_key = generate_robot_api_key()
-        robot.api_key_hash = hash_robot_api_key(raw_api_key)
+        robot.api_key_hash = hash_api_key(raw_api_key)
         robot.api_key_issued_at = datetime.now(UTC)
         log.info("robot_api_key_issued", robot_id=robot.id)
         return robot, raw_api_key

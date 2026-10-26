@@ -160,7 +160,7 @@ class RobotBriefOut(OrmOut):
 
 
 class RobotMeOut(OrmOut):
-    """GET /robot/me — 실행기가 시작·재시작할 때."""
+    """GET /robot/me — 시작·재시작할 때, 수령을 기다리는 동안."""
 
     robot: RobotBriefOut
     home_location: RobotLocationOut | None = Field(description="좌표가 있는 복귀 장소. 없으면 배송을 맡을 수 없다")

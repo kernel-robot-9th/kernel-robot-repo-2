@@ -5,6 +5,7 @@
 - **이 문서에서 뺀 것**(사용자 결정 2026-10-21): 비상 조작 콘솔, Safety Monitor. 환자 UI·환자 요청은 10-21엔 뺐지만 2026-10-22에 EMR에 넣었다 — 4.1-2절(병상 단말). 그림(`sw_3layer.png`·`.mmd`)에는 아직 없다.
 - 파일: 이 문서 · 그림 [`sw_3layer.png`](sw_3layer.png) · draw.io용 Mermaid 원본 [`sw_3layer.mmd`](sw_3layer.mmd)(draw.io 메뉴 배치 → 삽입 → 고급 → Mermaid에 붙여 넣기).
 - 경로 기준: 백엔드 `emr/backend/app/`, 프론트 `emr/frontend/src/`, 로봇 `robot/src/`.
+- **2026-10-23 이후 달라진 것**: 배송 실행기 `delivery_executor`, 로봇 상태 수집 `robot_monitor`, 이동 시험 `test_waypoint`(4.10~4.12절), 간호사 따라가기 `pinky_marker`(4.13절)는 **코드를 지웠다**(git `340a397`에 남음). Robot Task Manager·Fleet State Manager 자리는 팀원 FMS가 맡는다(주행·상태 보고, EMR 로봇 API로). 그림과 아래 본문은 10-21 기준 그대로 둔다.
 
 ## 1. 한눈에 보기
 

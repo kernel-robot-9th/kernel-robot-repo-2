@@ -108,10 +108,11 @@ class DeliveryRepository(BaseRepository[Delivery]):
         )
         return list(self.db.scalars(statement))
 
-    def lock_next_claimable(self, now: datetime, map_id: int) -> Delivery | None:
+    def lock_next_claimable(self, now: datetime, map_id: int, lock: bool = True) -> Delivery | None:
         """로봇이 가져갈 다음 배송을 잠가서 가져온다: reserved이고 예약 시각이 지났고, 목적지에 그 맵의 좌표가 있는 것 중
         예약 시각이 가장 이른(같으면 id 작은) 한 건. 다른 로봇이 잠근 행은 건너뛴다(SKIP LOCKED).
         [입력] now: 지금 시각(파이썬 — 테스트 트랜잭션에서는 DB now()가 고정이라) / map_id: 로봇 복귀 장소의 맵
+        / lock: False면 잠그지 않고 있는지만 본다 (로봇 서버에 묻기 전, 2026-10-23)
         [출력] Delivery | None
         """
         statement = (
@@ -126,9 +127,10 @@ class DeliveryRepository(BaseRepository[Delivery]):
             )
             .order_by(Delivery.scheduled_at, Delivery.id)
             .limit(1)
-            # of=Delivery: 장소 행까지 잠그면 장소를 수정 중일 때 배송이 조용히 건너뛰어진다
-            .with_for_update(skip_locked=True, of=Delivery)
         )
+        if lock:
+            # of=Delivery: 장소 행까지 잠그면 장소를 수정 중일 때 배송이 조용히 건너뛰어진다
+            statement = statement.with_for_update(skip_locked=True, of=Delivery)
         return self.db.scalar(statement)
 
     def arrived_receipt_marker_ids(self) -> set[int]:

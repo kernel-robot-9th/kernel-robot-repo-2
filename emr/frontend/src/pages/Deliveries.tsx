@@ -16,8 +16,7 @@ import { DeliveryForm } from '../features/deliveries/DeliveryForm'
 import { DeliveryHistoryDialog } from '../features/deliveries/DeliveryHistoryDialog'
 import { DeliveryProgress } from '../features/deliveries/DeliveryProgress'
 import { openReceiptMarker } from '../features/deliveries/receiptMarkerStore'
-
-const fmt = (iso: string) => new Date(iso).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' })
+import { formatDateTime } from '../lib/dateFormat'
 
 export function Deliveries() {
   const deliveries = useDeliveries()
@@ -65,11 +64,11 @@ export function Deliveries() {
             {rows.map(d => (
               <tr key={d.id} className={d.id === editing?.id ? 'bg-blue-50' : ''}>
                 <Td>{d.id}</Td>
-                <Td>{fmt(d.scheduled_at)}</Td>
+                <Td>{formatDateTime(d.scheduled_at)}</Td>
                 <Td>{locName.get(d.destination_location_id) ?? `#${d.destination_location_id}`}</Td>
                 <Td>{d.items.map(it => `${supName.get(it.supply_id) ?? `#${it.supply_id}`} ×${it.quantity}`).join(', ')}</Td>
                 <Td><DeliveryProgress delivery={d} /></Td>
-                <Td className="text-slate-500">{fmt(d.created_at)}</Td>
+                <Td className="text-slate-500">{formatDateTime(d.created_at)}</Td>
                 <Td>
                   <div className="flex gap-1">
                     {d.status === 'reserved' && (

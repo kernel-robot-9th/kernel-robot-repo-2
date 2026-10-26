@@ -1,4 +1,4 @@
-# dev_ws 서버 안내 — 병원 비품·배송 로봇 서버 (EMR 웹 + 로봇 관제 + 로컬 LLM)
+# dev_ws 서버 안내 — 병원 비품·배송 로봇 서버 (EMR 웹 + 로봇팔 + 로컬 LLM)
 
 > 2026-10-20 저장소 README를 팀 저장소 소개(`kernel-robot-repo-2`)로 바꾸면서 기존 README 내용을 여기로 옮겼다.
 
@@ -9,8 +9,8 @@ OMX-F 로봇팔이 자연어 명령으로 물건을 집어 옮긴다(시뮬레�
                      ┌──────────────── 이 PC (fastcamp1-OMEN) ─────────────────┐
 브라우저 ───http───▶ │ emr/      web :5173 ─▶ api :8000 ─▶ db :5432  (docker)    │
 (간호사)             │                                                          │
-Pinky Pro ◀─DDS──▶  │ robot/    robot_monitor :8090   (ROS 2 Jazzy, 도메인 56)   │
-(AMR 로봇)           │ robot/    vla_* OMX-F 시뮬 ─────▶ Ollama :11434 (gemma4)   │
+팀원 FMS ──http──▶  │           (api :8000 로봇 API, 로봇별 키)                │
+(Pinky 주행)         │ robot/    vla_* OMX-F 시뮬·실물 ─▶ Ollama :11434 (gemma4)   │
                      │ ollama_ws/ (예정) 다른 모델을 Ollama 호환 API로 제공        │
                      └──────────────────────────────────────────────────────────┘
 ```
@@ -20,7 +20,7 @@ Pinky Pro ◀─DDS──▶  │ robot/    robot_monitor :8090   (ROS 2 Jazzy, 
 | 폴더 | 무엇 | 자세히 |
 |---|---|---|
 | `emr/` | 간호사용 비품·배송 웹. 로그인, 비품 재고, 배송 예약, 맵·장소·로봇 관리, 재고 부족 실시간 알림, 간호사 ArUco 마커 인쇄, 로봇 API 키·수령 확인 | [emr/README.md](../emr/README.md) · [emr/CLAUDE.md](../emr/CLAUDE.md) |
-| `robot/` | ROS 2 워크스페이스. 관제 모니터(`src/fms/robot_monitor`), OMX-F 자연어 pick & place(`src/vla_planner_robot`), Pinky Pro AMR(`src/pinky_pro`), ROBOTIS upstream | [robot/README.md](../robot/README.md) · [robot/CLAUDE.md](../robot/CLAUDE.md) |
+| `robot/` | ROS 2 워크스페이스. OMX-F 자연어 pick & place(`src/vla_planner_robot`), Pinky Pro AMR(`src/pinky_pro`, 시뮬용), ROBOTIS upstream. 관제·주행 코드는 2026-10-23 삭제(팀원 FMS 담당) | [robot/README.md](../robot/README.md) · [robot/CLAUDE.md](../robot/CLAUDE.md) |
 | `ollama_ws/` | 예정. Ollama에 없는 다른 모델을 Ollama 호환 인터페이스로 제공할 작업 폴더 (아직 비어 있음) | — |
 | `docs/` | 서버 전체 현황 보고서 | [docs/server_report_2026-10-19.md](server_report_2026-10-19.md) |
 
@@ -45,18 +45,7 @@ docker compose up -d --build      # 이후에는 docker compose up -d
 - 계정: `N001`(관리자) · `N002`(간호사) / 비밀번호 `nurse1234`
 - 중지 `docker compose down`, DB까지 초기화 `docker compose down -v`
 
-### 2) 로봇 관제 모니터
-
-```bash
-deactivate 2>/dev/null; conda deactivate 2>/dev/null
-source /opt/ros/jazzy/setup.bash; source ~/dev_ws/robot/install/setup.bash; export ROS_DOMAIN_ID=56
-ros2 run robot_monitor monitor                 # 설정: robot/src/fms/robot_monitor/config/robots.yaml
-curl http://localhost:8090/api/robots          # 전체 로봇 상태(JSON). 실시간은 /api/robots/stream (SSE)
-```
-
-로봇(Pinky Pro)이 같은 네트워크 · 같은 `ROS_DOMAIN_ID`에 있어야 보인다. 위치는 로봇에서 SLAM 또는 Nav2가 돌아 `map` 프레임이 있을 때 나온다.
-
-### 3) OMX-F 로봇팔 시뮬레이션 (필요할 때만)
+### 2) OMX-F 로봇팔 시뮬레이션 (필요할 때만)
 
 ```bash
 ros2 run vla_bringup stop_vla.sh               # 항상 먼저 (이전 실행 정리)
@@ -73,16 +62,15 @@ Gazebo · MoveIt · Ollama가 함께 돌아 메모리(15GB)를 많이 쓴다. �
 | 5173 | EMR 웹 (Vite) | docker `emr-web-1` |
 | 8000 | EMR API (FastAPI, `/docs`) | docker `emr-api-1` |
 | 5432 | PostgreSQL 16 | docker `emr-db-1` |
-| 8090 | 로봇 관제 모니터 (HTTP · SSE) | `ros2 run robot_monitor monitor` |
 | 11434 | Ollama (이 PC 안에서만) | systemd `ollama.service` |
-| 8080 | Pinky Nav2 웹 | **로봇** 쪽 |
+| 8080 | 팀원 Pinky API | **로봇** 쪽 |
 
 ## 지금 상태와 다음 (2026-10-19)
 
 할 일은 **웹(EMR) · 로봇(Pinky AMR·관제) · OMX(로봇팔)** 세 갈래로 나눠 진행한다. 목록은 [docs/server_report_2026-10-19.md](server_report_2026-10-19.md) 6장.
 
 - **웹(EMR)**: 맵 업로드·장소 찍기(1단계)까지 완료. 다음은 배송 배정·진행(2단계) — 로봇 쪽과 API 계약(필드·주기·오류 코드)부터 맞춘다. 그 전에 운영 준비(DB 포트 제한, 프론트 운영 이미지 `/api` 프록시, https).
-- **로봇(Pinky · 관제)**: 관제 모니터는 로봇 1대 기준으로 동작, 여러 대(namespace)는 미지원. EMR을 부르는 로봇 쪽 코드는 아직 없다.
+- **로봇(Pinky · 관제)**: 2026-10-23부터 팀원 FMS가 주행하고 EMR 로봇 API로 상태·도착을 보고한다. 우리 관제 모니터·배송 실행기는 삭제했다.
 - **OMX(로봇팔)**: 시뮬에서 1팔·2팔 검증 완료. 실물 캘리브레이션(`calib/`)과 2팔 실물(U2D2 2개) 전. EMR 적재 연동은 "나중" 단계. `ollama_ws`의 Ollama 호환 서버가 생기면 플래너 LLM을 교체한다.
 
 ## 문제가 생기면
@@ -93,5 +81,4 @@ Gazebo · MoveIt · Ollama가 함께 돌아 메모리(15GB)를 많이 쓴다. �
 | `No module named 'catkin_pkg'` / `rclpy._rclpy_pybind11` | venv·conda가 켜져 있음 → `deactivate`, `conda deactivate` → robot/README 8장 |
 | 빌드 중 exit 137 | 메모리 부족 → `MAKEFLAGS=-j4 colcon build --parallel-workers 2` |
 | 시뮬이 안 뜨거나 팔이 혼자 움직임 | 이전 실행 잔재 → `ros2 run vla_bringup stop_vla.sh` |
-| 모니터에 로봇이 `offline` | 같은 `ROS_DOMAIN_ID`·네트워크인지, `ros2 topic list`에 `battery/percent`·`odom`이 있는지 |
 | 로봇 위치(`pose`)가 null | 로봇에서 SLAM/Nav2가 돌아 `map→base_footprint` TF가 있는지 |

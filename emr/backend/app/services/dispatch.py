@@ -3,7 +3,8 @@
 # 역할   : 배송 배정·진행 — 로봇(관제 PC 배송 실행기)이 부르는 쪽의 업무 규칙 (로드맵 2단계)
 # 작성일 : 2026-10-20
 # 구성   :
-#   - DispatchService  overview(GET /robot/me), claim(배송 가져가기), report_progress(도착·실패 보고),
+#   - DispatchService  overview(GET /robot/me), claim(배송 가져가기 — 2026-10-23부터 로봇 서버에 상태를 물어 배터리·오염도·주행 준비 검사),
+#                      report_progress(도착·실패 보고),
 #                      confirm_receipt(일회용 마커로 수령 확인)
 # 계약: docs/api_contract_delivery_2026-10-20.md. 상태 흐름은 app/models/enums.py DeliveryStatus
 # 성공·거부 모두 structlog로 남긴다(어느 로봇이 어느 배송에 무엇을 했는지). 실제로 상태를 바꾼 출발·도착·수령·실패는
@@ -20,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import Conflict, Forbidden, NotFound
 from app.models.delivery import RECEIPT_MARKER_ID_MAX, RECEIPT_MARKER_ID_MIN, RECEIPT_WAIT_SECONDS, Delivery
-from app.models.enums import DeliveryEventType, DeliveryFailureReason, DeliveryRequester, DeliveryStatus, RobotType
+from app.models.enums import DeliveryEventType, DeliveryFailureReason, DeliveryRequester, DeliveryStatus, ReceiptMethod, RobotType
 from app.models.location import Location
 from app.models.robot import Robot
 from app.repositories.delivery import DeliveryRepository
@@ -28,6 +29,7 @@ from app.repositories.robot import RobotRepository
 from app.services.delivery import DeliveryService
 from app.services.delivery_events import DeliveryEventRecorder
 from app.services.delivery_notifier import DeliveryNotifier
+from app.services.robot_status import ClaimSkipReason, RobotStatusService
 
 log = structlog.get_logger(__name__)
 
@@ -47,6 +49,13 @@ class RobotOverview:
     receipt_wait_seconds: int
 
 
+@dataclass
+class ClaimResult:
+    """claim 결과. delivery가 None이면 줄 것이 없거나(skip_reason None) 로봇 상태 때문에 주지 않은 것(skip_reason)."""
+    delivery: Delivery | None
+    skip_reason: ClaimSkipReason | None = None
+
+
 class DispatchService:
     """로봇이 배송을 가져가고(claim), 도착·실패를 보고하고, 일회용 마커로 수령을 확인한다."""
 
@@ -56,6 +65,7 @@ class DispatchService:
         self.deliveries = DeliveryService(db)
         self.notifier = DeliveryNotifier(db)
         self.events = DeliveryEventRecorder(db)
+        self.robot_status = RobotStatusService(db)
 
     def overview(self, robot: Robot) -> RobotOverview:
         """로봇 자신의 정보 — 실행기가 시작·재시작할 때 이어서 할 일을 알려 준다.
@@ -69,11 +79,12 @@ class DispatchService:
             receipt_wait_seconds=RECEIPT_WAIT_SECONDS,
         )
 
-    def claim(self, robot_id: int) -> Delivery | None:
+    def claim(self, robot_id: int) -> ClaimResult:
         """배송 하나를 맡는다. 이미 맡은 배송이 있으면 그것을 그대로 돌려준다(멱등 — 응답을 잃어도 다시 부르면 된다).
         없으면 reserved이고 예약 시각이 지났고 목적지가 복귀 장소와 같은 맵에 좌표가 있는 것 중 가장 이른 것을 dispatched로.
+        줄 배송이 있으면 그 전에 로봇 서버에 지금 상태를 묻는다(배터리·오염도·주행 준비, 2026-10-23) — 기준 밖이면 주지 않는다.
         [입력] robot_id: 키로 확인된 로봇
-        [출력] Delivery | None: 줄 것이 없으면 None (AMR이 아니면 Forbidden, 복귀 장소가 없으면 Conflict)
+        [출력] ClaimResult: 줄 것이 없으면 delivery None, 상태 때문이면 skip_reason까지 (AMR이 아니면 Forbidden, 복귀 장소가 없으면 Conflict)
         """
         robot = self.robots.lock(robot_id)   # 같은 로봇의 claim이 겹쳐도 한 번씩
         if robot is None:
@@ -84,15 +95,21 @@ class DispatchService:
             raise Forbidden("only amr robots deliver", code="robot_not_amr")
         active = self.repo.get_active_for_robot(robot.id)
         if active is not None:
-            return active
+            return ClaimResult(active)
         home = self._usable_home(robot)
         if home is None:
             attempt.warning("claim_rejected", code="robot_home_not_set")
             raise Conflict("robot home location is not set or has no map coordinates", code="robot_home_not_set")
         now = datetime.now(UTC)
+        # 줄 것이 있을 때만 로봇 서버에 묻는다. 묻는 동안(최대 ROBOT_SERVER_TIMEOUT_SECONDS) 배송 행을 잠가 두지 않으려고 먼저 잠금 없이 본다
+        if self.repo.lock_next_claimable(now, home.map_id, lock=False) is None:
+            return ClaimResult(None)
+        skip_reason = self.robot_status.check_before_claim(robot, now)
+        if skip_reason is not None:
+            return ClaimResult(None, skip_reason)   # 이유는 응답 헤더로
         delivery = self.repo.lock_next_claimable(now, home.map_id)
-        if delivery is None:
-            return None
+        if delivery is None:   # 묻는 사이 다른 로봇이 가져갔거나 간호사가 취소함
+            return ClaimResult(None)
         delivery.status = DeliveryStatus.DISPATCHED
         delivery.assigned_robot_id = robot.id
         delivery.assigned_robot = robot
@@ -100,7 +117,7 @@ class DispatchService:
         attempt.info("delivery_dispatched", delivery_id=delivery.id, destination_location_id=delivery.destination_location_id)
         self.notifier.notify_dispatched(delivery)
         self.events.record_by_robot(delivery, DeliveryEventType.DISPATCHED, robot, now)
-        return delivery
+        return ClaimResult(delivery)
 
     def report_progress(
         self, delivery_id: int, robot_id: int, stage: str, failure_reason: DeliveryFailureReason | None,
@@ -123,11 +140,11 @@ class DispatchService:
         if stage == STAGE_ARRIVED:
             if delivery.status == DeliveryStatus.ARRIVED:
                 return delivery
-            if delivery.status == DeliveryStatus.RECEIVED and delivery.receipt_method == "none":
+            if delivery.status == DeliveryStatus.RECEIVED and delivery.receipt_method == ReceiptMethod.NONE:
                 return delivery   # 로봇 전용 장소 이동의 같은 도착 보고 (멱등)
             if delivery.status != DeliveryStatus.DISPATCHED:
                 return self._reject_transition(attempt, delivery, stage)
-            if delivery.receipt_method == "none":
+            if delivery.receipt_method == ReceiptMethod.NONE:
                 return self._complete_robot_move(attempt, delivery, now)
             # 마커를 먼저 고른다 — 고르는 조회가 자동 flush를 일으켜, 상태부터 바꾸면 마커 없는 arrived가 CHECK에 걸린다
             receipt_marker_id = self._pick_receipt_marker_id()
@@ -199,10 +216,7 @@ class DispatchService:
         if aruco_marker_id != delivery.receipt_marker_id:
             attempt.warning("receipt_rejected", code="receipt_marker_not_for_delivery")
             raise Forbidden(f"aruco_marker_id {aruco_marker_id} is not this delivery's receipt marker", code="receipt_marker_not_for_delivery")
-        delivery.status = DeliveryStatus.RECEIVED
-        delivery.received_at = datetime.now(UTC)
-        delivery.received_by_nurse_id = delivery.nurse_id
-        delivery.received_by_robot_id = robot_id
+        DeliveryService.mark_received(delivery, datetime.now(UTC), delivery.nurse_id)   # 받은 간호사 = 예약 간호사
         attempt.info("receipt_confirmed", nurse_id=delivery.nurse_id)
         self.notifier.notify_received(delivery)
         self.events.record_by_robot(delivery, DeliveryEventType.RECEIVED, delivery.assigned_robot, delivery.received_at)
@@ -214,11 +228,8 @@ class DispatchService:
         """로봇 전용 장소(충전 등)로의 품목 없는 이동 — 도착 보고가 곧 완료 (2026-10-22). 마커·수령 대기 없음.
         [입력] attempt: 로그 / delivery: dispatched / now [출력] Delivery: received (받은 간호사 = 요청 간호사)
         """
-        delivery.status = DeliveryStatus.RECEIVED
         delivery.arrived_at = now
-        delivery.received_at = now
-        delivery.received_by_nurse_id = delivery.nurse_id
-        delivery.received_by_robot_id = delivery.assigned_robot_id
+        DeliveryService.mark_received(delivery, now, delivery.nurse_id)   # 받은 간호사 = 요청 간호사
         attempt.info("robot_move_completed")
         self.notifier.notify_received(delivery)
         self.events.record_by_robot(delivery, DeliveryEventType.ARRIVED, delivery.assigned_robot, now)

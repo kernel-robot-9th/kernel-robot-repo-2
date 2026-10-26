@@ -5,6 +5,7 @@
 # 구성   :
 #   - robot_me          GET  /robot/me                          — 로봇·복귀 장소·맡은 배송 (2026-10-20)
 #   - claim_delivery    POST /robot/deliveries/claim            — 배송 하나 맡기 (멱등, 없으면 204) (2026-10-20)
+#                                                                 EMR이 로봇 서버 /status에 물어 기준 밖이면 204 + X-Claim-Skip-Reason (2026-10-23)
 #   - report_progress   POST /robot/deliveries/{id}/progress    — 도착·실패 보고 (2026-10-20)
 #   - list_deliveries   GET  /robot/deliveries                  — 맡지 않은 예약 목록 (로봇 배정 없이 조회만) (2026-10-22)
 #   - report_arrived    POST /robot/arrived                     — "지금 도착했습니다" (배송 id 없이, 맡은 배송) (2026-10-22)
@@ -21,12 +22,13 @@ from app.services.dispatch import DispatchService
 
 router = APIRouter(responses=ROBOT_RESPONSES)
 NOT_ASSIGNED = "delivery_not_assigned_to_robot(이 로봇이 맡은 배송이 아님)"
+CLAIM_SKIP_REASON_HEADER = "X-Claim-Skip-Reason"
 
 
 @router.get(
     "/me", response_model=RobotMeOut,
     summary="로봇 자신의 정보 (로봇)",
-    description="실행기가 시작·재시작할 때 부른다. 복귀 장소(좌표 있는 것만), 맡고 있는 dispatched·arrived 배송, 수령 대기 시간(초).",
+    description="실행기가 시작·재시작할 때, 수령을 기다리는 동안 부른다. 복귀 장소(좌표 있는 것만), 맡고 있는 dispatched·arrived 배송, 수령 대기 시간(초).",
 )
 def robot_me(db: DB, robot: CurrentRobot) -> RobotMeOut:
     """
@@ -41,10 +43,13 @@ def robot_me(db: DB, robot: CurrentRobot) -> RobotMeOut:
     summary="배송 하나 맡기 (로봇)",
     description=(
         "이미 맡은 배송이 있으면 그것을 200으로(멱등). 없으면 reserved이고 예약 시각이 지났고 목적지가 복귀 장소와 같은 맵에 "
-        "좌표가 있는 것 중 가장 이른 것을 dispatched로 바꿔 200. 줄 것이 없으면 204. 여러 로봇이 동시에 불러도 한 건은 한 로봇에만."
+        "좌표가 있는 것 중 가장 이른 것을 dispatched로 바꿔 200. 줄 것이 없으면 204. 여러 로봇이 동시에 불러도 한 건은 한 로봇에만. "
+        "줄 배송이 있으면 EMR이 그 전에 로봇 서버(관리자가 정한 robot_server_url)의 GET /status를 부른다(2초 제한) — 서버 주소 없음·응답 없음·"
+        "배터리·오염도 칸 없음·주행 준비 안 됨(localized·nav2_ready·state=idle)·배터리 30 미만·오염도 70 초과면 204와 X-Claim-Skip-Reason 헤더 "
+        "(robot_server_not_set · robot_server_unreachable · robot_status_incomplete · robot_not_ready · robot_battery_low · robot_contamination_high). 2026-10-23"
     ),
     responses={
-        204: {"description": "맡을 배송 없음"},
+        204: {"description": "맡을 배송 없음. 로봇 상태 때문이면 X-Claim-Skip-Reason 헤더에 이유"},
         403: {"description": "robot_not_amr(AMR만 배송)"},
         409: {"description": "robot_home_not_set(복귀 장소가 없거나 좌표가 없음)"},
     },
@@ -54,10 +59,11 @@ def claim_delivery(db: DB, robot: CurrentRobot) -> RobotDeliveryOut | Response:
     [입력] robot: 키로 확인된 로봇
     [출력] RobotDeliveryOut | 204
     """
-    delivery = DispatchService(db).claim(robot.id)
-    if delivery is None:
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
-    return RobotDeliveryOut.model_validate(delivery)
+    result = DispatchService(db).claim(robot.id)
+    if result.delivery is None:
+        headers = {CLAIM_SKIP_REASON_HEADER: result.skip_reason} if result.skip_reason else None
+        return Response(status_code=status.HTTP_204_NO_CONTENT, headers=headers)
+    return RobotDeliveryOut.model_validate(result.delivery)
 
 
 @router.post(
