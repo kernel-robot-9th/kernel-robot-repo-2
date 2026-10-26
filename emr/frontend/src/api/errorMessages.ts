@@ -86,6 +86,9 @@ const ERROR_GUIDES: Record<string, ErrorGuide> = {
   robot_key_invalid: { message: '로봇 API 키가 틀렸거나 폐기되었습니다.', hint: '장소·맵·로봇 화면의 로봇 탭에서 키를 다시 발급해 로봇에 설정해 주세요.' },
   robot_not_amr: { message: '배송은 주행 로봇(AMR)만 맡을 수 있습니다.', hint: '매니퓰레이터의 키로 배송을 가져가려 했습니다.' },
   robot_home_not_set: { message: '로봇의 복귀 장소가 정해지지 않았습니다.', hint: '장소·맵·로봇 화면의 로봇 탭에서 맵 좌표가 있는 장소를 복귀 장소로 골라 주세요.' },
+  // OMX(로봇팔) — 관리자 명령·상태 (2026-10-26)
+  omx_unavailable: { message: '로봇팔(OMX) 서버가 응답하지 않습니다.', hint: 'OMX PC와 OMX API(8000번 포트)가 켜져 있는지 확인해 주세요.' },
+  omx_rejected: { message: '로봇팔(OMX)이 명령을 받지 않았습니다.', hint: '다른 작업을 하고 있을 수 있습니다. OMX 상태를 확인한 뒤 다시 보내 주세요.' },
   delivery_not_assigned_to_robot: { message: '이 로봇이 맡은 배송이 아닙니다.', hint: '로봇 설정의 키가 맞는지 확인해 주세요.' },
   delivery_invalid_transition: { message: '지금 배송 단계에서는 할 수 없는 보고입니다.', hint: '배송 목록에서 현재 단계를 확인해 주세요.' },
   delivery_already_received: { message: '이미 수령된 배송입니다.' },

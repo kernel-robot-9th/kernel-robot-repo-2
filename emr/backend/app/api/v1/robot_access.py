@@ -10,15 +10,18 @@
 #   - list_deliveries   GET  /robot/deliveries                  — 맡지 않은 예약 목록 (로봇 배정 없이 조회만) (2026-10-22)
 #   - report_arrived    POST /robot/arrived                     — "지금 도착했습니다" (배송 id 없이, 맡은 배송) (2026-10-22)
 #   - confirm_receipt   POST /robot/deliveries/{id}/receipt     — 일회용 마커로 수령 확인
+#   - omx_end_point     GET  /robot/{request_id}/end-point      — OMX 완료 신호 (인증 없음, 성공만, 로그만 — 2026-10-26)
 # 계약: docs/api_contract_delivery_2026-10-20.md. 로봇용 응답(RobotDeliveryOut)에는 일회용 마커·간호사 정보가 없다
 # =============================================================================
 from __future__ import annotations
 
-from fastapi import APIRouter, Query, Response, status
+from fastapi import APIRouter, Path, Query, Request, Response, status
 
 from app.core.deps import DB, ROBOT_RESPONSES, CurrentRobot
 from app.schemas.delivery import DeliveryProgressIn, DeliveryReceiptIn, RobotDeliveryOut, RobotMeOut
+from app.schemas.robot import OmxEndPointOut
 from app.services.dispatch import DispatchService
+from app.services.omx_signal import OmxSignalService
 
 router = APIRouter(responses=ROBOT_RESPONSES)
 NOT_ASSIGNED = "delivery_not_assigned_to_robot(이 로봇이 맡은 배송이 아님)"
@@ -138,3 +141,28 @@ def confirm_receipt(db: DB, robot: CurrentRobot, delivery_id: int, data: Deliver
     [출력] RobotDeliveryOut: received
     """
     return RobotDeliveryOut.model_validate(DispatchService(db).confirm_receipt(delivery_id, data.aruco_marker_id, robot.id))
+
+
+@router.get(
+    "/{request_id}/end-point", response_model=OmxEndPointOut,
+    summary="OMX 완료 신호 (인증 없음)",
+    description=(
+        "팀원 OMX(로봇팔)가 작업을 마치면 부른다. request_id는 OMX /command·/pinky에 넣은 값 그대로(영문·숫자·`._-`, 1~64자). "
+        "지금은 성공 신호만 받는다 — EMR은 서버 로그에 남기고 200을 돌려준다(DB에는 남기지 않음). 같은 request_id를 여러 번 보내도 매번 200. "
+        "인증 없음(로봇 키 필요 없음). 2026-10-26"
+    ),
+    responses={422: {"description": "request_id 형식이 틀림"}},   # 401은 라우터 공통 설명일 뿐 — 이 엔드포인트는 키를 보지 않는다
+)
+def omx_end_point(
+    request: Request, response: Response,
+    request_id: str = Path(pattern=r"^[A-Za-z0-9._-]{1,64}$", description="OMX 작업의 request_id", examples=["yolo-8b5efa75"]),
+) -> OmxEndPointOut:
+    """
+    [입력] request_id: 경로값 / request: 보낸 쪽 주소를 로그에 남기려고
+    [출력] OmxEndPointOut
+    """
+    response.headers["Cache-Control"] = "no-store"   # GET이 중간에서 캐시되어 신호가 EMR에 닿지 않는 일을 막는다
+    client_host = request.client.host if request.client else None
+    received_at = OmxSignalService().record_end_point(request_id, client_host)
+    return OmxEndPointOut(request_id=request_id, received=True, received_at=received_at)
+

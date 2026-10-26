@@ -50,6 +50,11 @@ class Settings(BaseSettings):
     CLAIM_MAX_CONTAMINATION_PERCENT: float = 70.0   # 이 값 초과면 robot_contamination_high
     ROBOT_SERVER_TIMEOUT_SECONDS: float = 2.0       # 로봇 서버가 이 안에 답하지 않으면 robot_server_unreachable
 
+    # 팀원 OMX(로봇팔) API — 관리자가 EMR에서 명령을 보내고 상태를 본다 (2026-10-26, app/clients/omx.py).
+    # /command는 예전 형식(명령 문장) — 10-26 합의한 색깔별 개수 형식은 팀원 쪽이 바뀐 뒤에
+    OMX_BASE_URL: str = "http://192.168.129.86:8000"
+    OMX_TIMEOUT_SECONDS: float = 3.0     # 이 안에 답하지 않으면 omx_unavailable(503)
+
     def db_host_for_log(self) -> str:
         """로그용 DB 주소 — 비밀번호 제거.
         [입력] 없음

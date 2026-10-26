@@ -239,3 +239,15 @@ Pinky API는 **인증이 없다** — 지금은 그대로 진행(사용자 결�
 - 로봇 쪽은 3.2 claim 규칙 그대로 환자 배송도 가져간다. 3.4의 `receipt_method`가 `button`이면 마커를 기다릴 필요가 없고, 4장 6번의 `/robot/me` 확인으로 수령을 알아차린다.
 - 알림: 환자 배송의 출발·도착·수령은 간호사에게 보내지 않는다. 실패만 관리자에게(`delivery_failed`, `recipient_role: admin`).
 - 배송 기록: 행위자 `bedside`(병상 이름 스냅숏)로 예약·수령을 남긴다.
+
+## 9. OMX → EMR 완료 신호 (2026-10-26)
+
+팀원 OMX(로봇팔 API `192.168.129.86:8000`)가 작업을 마치면 EMR에 알리는 곳이다. 사용자 결정: 단순하게 GET, 지금은 성공 신호만, 인증 없음.
+
+- `GET {EMR}/api/v1/robot/{request_id}/end-point` — `request_id`는 OMX `/command`·`/pinky`에 넣은 값 그대로(영문·숫자·`._-`, 1~64자, 아니면 422).
+- 응답 200 `{"request_id": "yolo-8b5efa75", "received": true, "received_at": "2026-10-26T06:29:16Z"}`, 헤더 `Cache-Control: no-store`. 같은 id를 여러 번 보내도 매번 200.
+- EMR은 서버 로그(`omx_end_point`: request_id·보낸 주소·시각)에만 남긴다. DB·배송 상태·화면은 바꾸지 않는다 — 적재 흐름(FMS `/loaded` 등)과는 FMS 연동 때 잇는다.
+- 팀원 공유용 명세: `docs/omx_end_point_spec_2026-10-26.md`.
+- **OMX `POST /command` 형식 바뀜(10-26 합의)**: `{"command": {"blue": 개수, "green": 개수}, "request_id": "..."}` — 문장 대신 색깔별 개수. 같은 `request_id`로 위 완료 신호를 부른다. 0개 색 표기·최대 개수·EMR 비품 ↔ blue/green 대응은 미정(명세 8장).
+- **EMR → OMX 명령(2026-10-26)**: 관리자 API `POST {EMR}/api/v1/omx/command {command: 문장}`이 OMX `POST /command`를 **예전 형식**(`{"command": "pick and place green gauze", "request_id": "emr-..."}`)으로 부른다. `request_id`는 EMR이 만들고(`emr-` + 시각 + 16진 6자리), OMX는 끝나면 그 값으로 위 완료 신호를 부른다. `GET {EMR}/api/v1/omx/status`는 OMX `/status` 그대로. 새 형식(색깔별 개수)은 OMX가 바뀐 뒤 맞춘다.
+

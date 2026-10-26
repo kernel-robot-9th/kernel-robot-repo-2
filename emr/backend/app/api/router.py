@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.api.v1 import auth, bedside_access, bedside_devices, deliveries, delivery_events, locations, maps, notifications, nurses, robot_access, robots, supplies
+from app.api.v1 import auth, bedside_access, bedside_devices, deliveries, delivery_events, locations, maps, notifications, nurses, omx, robot_access, robots, supplies
 
 api_router = APIRouter()  # main.py가 /api/v1 prefix로 include
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
@@ -24,3 +24,4 @@ api_router.include_router(notifications.router, prefix="/notifications", tags=["
 api_router.include_router(robot_access.router, prefix="/robot", tags=["robot-access"])  # 로봇 키 인증
 api_router.include_router(bedside_devices.router, prefix="/bedside-devices", tags=["bedside-devices"])  # 관리자 (2026-10-22)
 api_router.include_router(bedside_access.router, prefix="/bedside", tags=["bedside-access"])  # 병상 단말 키 인증
+api_router.include_router(omx.router, prefix="/omx", tags=["omx"])  # 관리자 — 팀원 OMX 로봇팔 명령·상태 (2026-10-26)

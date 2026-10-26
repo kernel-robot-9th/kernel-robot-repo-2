@@ -8,6 +8,7 @@
 #   - RobotOut         키는 있는지·언제 발급했는지만 (해시 노출 안 함 — 로봇 조회는 무인증)
 #   - RobotApiKeyOut   키 발급 응답. 평문 키는 이 응답에만 한 번 나온다
 #   - RobotStatusReportOut   claim 때 로봇 서버에서 받은 마지막 배터리·오염도 (2026-10-23)
+#   - OmxEndPointOut   OMX 완료 신호 받음 응답 (GET /robot/{request_id}/end-point, 2026-10-26)
 # =============================================================================
 from __future__ import annotations
 
@@ -75,3 +76,11 @@ class RobotApiKeyOut(BaseModel):
     robot_id: int
     api_key: str = Field(description="평문 키. 요청 헤더 X-Robot-Api-Key에 넣는다. 서버는 해시만 보관")
     issued_at: datetime
+
+
+class OmxEndPointOut(BaseModel):
+    """OMX 완료 신호를 받았다는 응답 (2026-10-26). 200이면 EMR이 받은 것이다."""
+
+    request_id: str = Field(description="OMX /command·/pinky의 request_id 그대로")
+    received: bool = Field(description="항상 true")
+    received_at: datetime = Field(description="EMR이 받은 시각(UTC)")
