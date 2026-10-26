@@ -39,19 +39,33 @@ end_point는 '최근 작업에서 시작 위치 도착을 확인했다'는 결�
       --task "pick and place blue gauze" --episode-time 30 --top-exposure 90 --host 0.0.0.0
 eval_bi.py의 옵션을 그대로 받습니다. --task는 호환용이며 수신 command가 항상 우선합니다.
 POST /command가 오기 전에는 모델/로봇을 실행하지 않습니다.
-모델은 첫 요청에서 로드 후 재사용합니다. 실행 중 POST /return은 같은 제어 루프에
+모델과 가중치는 서버를 켤 때 먼저 로드하고, command가 오면 바로 실행합니다. 실행 중 POST /return은 같은 제어 루프에
 복귀 이벤트를 전달합니다. request_id를 생략하거나 현재 작업 ID와 맞춰 보내세요.
-평가 시간 종료 시에도 복귀합니다. --no-return/--dry-run/복수 episodes는 API에서 금지합니다.
+--start-version v5이고 command에 task_start_poses.json의 키워드(예: "green")가 있으면
+모델 실행 전에 왼팔을 현재 -> 그 task의 경유 -> 시작 자세로 먼저 옮긴 뒤 모델을 돌립니다.
+--start-version v4(기본)는 이동 없이 원래 시작 자세에서 바로 모델을 돌립니다.
+command에 "|"가 있으면 stage 문장 목록으로 보고 첫 문장부터 실행합니다. 예:
+  {"command": "search for the green gauze|grasp the green gauze|put the gauze in the box"}
+다음 stage로 넘어가는 조건 (--stage-switch, 기본 space; gripper/both로 그리퍼 조건 사용):
+  왼쪽 그리퍼 명령이 열리면 search -> grasp, 다시 닫히면 grasp -> carry (학습 라벨과 같은 규칙),
+  서버 터미널에서 스페이스, 또는 POST /next-stage. /status의 stage, stage_text로 현재 단계 확인.
+마지막 stage에서 스페이스 / POST /next-stage를 한 번 더 하면 모델을 끝내고 복귀합니다
+(return_reason = "next_stage").
+마지막 stage에서 그리퍼가 다시 열리면(박스에 놓음) 0.5초 뒤 모델을 끝내고 복귀합니다
+(--no-end-on-release로 끄기). /status return_reason = "released".
+평가 시간 종료 시에도 복귀합니다. --return-on time이면 개방 신호는 받지 않고
+--episode-time이 끝날 때만 경유 -> 시작 자세로 복귀합니다 (테스트용). /status의
+return_reason에 "gripper_open" 또는 "time"으로 복귀 이유가 남습니다. --no-return/--dry-run/복수 episodes는 API에서 금지합니다.
 
 POST /pinky {"pinky_arrive": true/false}: 최신 값을 기억합니다 (계속 보내도 됩니다).
-최근 작업(모방학습 + 시작 자세 복귀)이 끝나 end_point가 true이고 결과 전송도 끝난 상태에서
-pinky_arrive가 true이면 그때 양팔 동작을 시작합니다. 순서는 상관없습니다:
-end_point가 나중에 true가 되어도, 그 전에 받은 pinky_arrive=true가 있으면 바로 시작합니다.
-pinky_arrive=false를 받으면 기억한 값을 지웁니다. 시작할 때도 지웁니다.
-동작 (pinky_sequence.json, 양팔 동시):
-  위치 이동(그리퍼 열면서) -> 닫기 -> 올리기 -> 그리퍼 열기 -> 콜백 {"pinky_done": true}
-  -> 양팔 경유 자세 -> 시작 자세 -> 콜백 {"end_point": true}
-작업당 한 번만 실행되며 이동 중에는 end_point가 false입니다. 끝나도 토크는 켜 둡니다.
+흐름 (pinky_sequence.json, 양팔 동시):
+  모델 종료 -> 왼팔 경유 -> 시작 자세 -> 콜백 {"end_point": true}
+  -> 바로 양팔 위로 접근 -> above_target(그리퍼 열면서) -> 닫기 -> lift 후 들고 대기
+  -> pinky_arrive=true가 오면 그리퍼 열기 -> 콜백 {"pinky_done": true}
+  -> 양팔 경유 -> 시작 자세(그리퍼 닫으면서) -> 콜백 {"end_point": true}
+pinky_arrive=true가 lift 전에 와도 기억했다가 lift가 끝나면 바로 엽니다. false가 오면 지웁니다.
+/status의 pinky: grabbing -> holding(대기) -> releasing -> returning -> completed.
+들고 대기하는 동안 토크는 켜져 있고 시간 제한은 없습니다.
 """
 import argparse
 import copy
@@ -71,16 +85,72 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator
 
 
+TASK_START_POSES = Path(__file__).with_name("task_start_poses.json")
+START_VERSION = "v4"  # --start-version: v4 = model runs from the normal start pose, v5 = colour pre-move
+
+
+def task_start_poses(command, path=TASK_START_POSES, version=None):
+    """(key, via, start, time) for the first key word found in the command, else None."""
+    import json
+    if not Path(path).exists():
+        return None
+    data = json.loads(Path(path).read_text())
+    version = version or START_VERSION
+    versions = data.get("versions", {"v5": {"tasks": data.get("tasks", {})}})
+    if version not in versions:
+        raise RuntimeError(f"start version {version!r} not in {path} ({', '.join(versions)})")
+    tasks = versions[version].get("tasks", {})
+    for key, entry in tasks.items():
+        if key.lower() in command.lower():
+            if entry.get("placeholder", True) or entry.get("via") is None or entry.get("start") is None:
+                raise RuntimeError(f"'{key}' start pose is not measured yet ({path}); no motion performed")
+            return key, list(entry["via"]), list(entry["start"]), float(entry.get("time", 4.0))
+    return None
+
+
+TASK_PRESETS = Path(__file__).with_name("task_presets.json")
+
+
+def load_presets(path=TASK_PRESETS):
+    import json
+    return json.loads(Path(path).read_text()).get("presets", {}) if Path(path).exists() else {}
+
+
 class PolicyRunner:
     """One worker owns the policy, cameras and motor ports for the whole cycle."""
     def __init__(self, args):
         self.args = args
         self.loaded = None
+        self.last_end_reason = None  # "time", "released" (gripper opened in the last stage), "gripper_open"
+        self.next_stage = None  # set by the controller: () -> number of API next-stage requests
+        self.on_stage = None    # set by the controller: (index, sentence) -> None
+
+    def preload(self):
+        """Load the policy and weights once at server start, so a command runs right away."""
+        import eval_bi as ev
+        if self.loaded is None:
+            started = time.perf_counter()
+            logging.info("loading policy %s ...", self.args.policy_path)
+            self.loaded = ev.load_policy(self.args.policy_path, self.args.device)
+            logging.info("policy ready in %.1fs; waiting for POST /command", time.perf_counter() - started)
 
     def __call__(self, command, return_event):
         import eval_bi as ev
         args = copy.copy(self.args)
-        args.task = command  # Plain string data; never shell interpolation.
+        preset = load_presets().get(command.strip())
+        if preset is not None:
+            # A preset name as the command, e.g. "v4_stage3" -> its stage sentences.
+            if Path(preset["policy_path"]).expanduser().resolve() not in (
+                    Path(args.policy_path).resolve(), Path(args.policy_path).resolve().parent):
+                logging.warning("preset %s was made for %s but the loaded model is %s",
+                                command, preset["policy_path"], args.policy_path)
+            command = "|".join(preset["stages"])
+        # "a|b|c" in the command = stage sentences in order (models trained on *_stages data).
+        if "|" in command:
+            args.stages, args.task = command, command.split("|")[0].strip()
+        else:
+            args.task = command  # Plain string data; never shell interpolation.
+        pre_move = task_start_poses(command)  # checked before loading anything
         if self.loaded is None:
             self.loaded = ev.load_policy(args.policy_path, args.device)
         policy, preprocessor, postprocessor = self.loaded
@@ -101,10 +171,20 @@ class PolicyRunner:
                 ev.preflight(args)
             exposure_process = ev.setup_top_exposure(args)
             robot.connect()
+            if pre_move is not None:
+                # e.g. "green" in the command: left arm -> via -> that task's start pose, then the model.
+                key, via, start, duration = pre_move
+                logging.info("task '%s': moving left arm to its start pose before the model", key)
+                pre = copy.copy(args)
+                pre.return_via, pre.start_pose = via, start
+                pre.return_via_time = pre.return_home_time = duration
+                ev.return_to_start(robot, pre)
             ev.run_episode(
                 robot, policy, preprocessor, postprocessor, features, args,
                 should_return=lambda obs: return_event.is_set(),
+                next_stage=self.next_stage, on_stage=self.on_stage,
             )
+            self.last_end_reason = getattr(args, "end_reason", None)
         finally:
             try:
                 # The left-only implementation also handles partially connected resources.
@@ -125,12 +205,18 @@ def move_left_once():
     run_verified_motion()
 
 
+RETURN_ON = ("both", "time")
 PINKY_SEQUENCE = None  # --pinky-sequence; None = pinky_sequence.json next to pinky_move.py
 
 
-def move_pinky_once():
-    from pinky_move import DEFAULT_SEQUENCE, pick
-    pick(PINKY_SEQUENCE or DEFAULT_SEQUENCE)
+def grab_both():
+    from pinky_move import DEFAULT_SEQUENCE, grab
+    grab(PINKY_SEQUENCE or DEFAULT_SEQUENCE)
+
+
+def release_both():
+    from pinky_move import DEFAULT_SEQUENCE, release
+    release(PINKY_SEQUENCE or DEFAULT_SEQUENCE)
 
 
 def return_both_home():
@@ -172,7 +258,11 @@ class CommandRequest(BaseModel):
 
 class ReturnController:
     def __init__(self, callback_url=None, motion=move_left_once, sender=send_result, policy_runner=None,
-                 pinky_motion=move_pinky_once, home_motion=return_both_home):
+                 pinky_motion=grab_both, home_motion=return_both_home, return_on="both",
+                 release_motion=release_both):
+        if return_on not in RETURN_ON:
+            raise ValueError(f"return_on must be one of {RETURN_ON}")
+        self.return_on = return_on
         if callback_url:
             url = httpx.URL(callback_url)
             if url.scheme not in ("http", "https") or not url.host:
@@ -181,9 +271,14 @@ class ReturnController:
         self.motion = motion
         self.sender = sender
         self.policy_runner = policy_runner
-        self.pinky_motion = pinky_motion
+        self.pinky_motion = pinky_motion  # grab: approach -> close -> lift, then hold
+        self.release_motion = release_motion
         self.home_motion = home_motion
         self.pinky_arrive = False  # latest pinky_arrive value received
+        self.stage_requests = 0    # POST /next-stage count for the running command
+        if policy_runner is not None and hasattr(policy_runner, "next_stage"):
+            policy_runner.next_stage = lambda: self.stage_requests
+            policy_runner.on_stage = self._on_stage
         self.return_event = threading.Event()
         self.lock = threading.Lock()
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="left-return")
@@ -193,8 +288,19 @@ class ReturnController:
         self.current = {
             "request_id": None, "end_point": False, "state": "idle",
             "error": None, "delivery": "not_sent", "delivery_error": None,
-            "pinky": None, "pinky_error": None,
+            "pinky": None, "pinky_error": None, "return_reason": None,
         }
+
+    def _on_stage(self, index, text):
+        with self.lock:
+            self.current.update(stage=index, stage_text=text)
+
+    def next_stage(self):
+        with self.lock:
+            if not (self.busy and self.current.get("command") is not None and self.current["state"] == "running"):
+                raise HTTPException(409, "No model is running")
+            self.stage_requests += 1
+            return {**self.current, "next_stage_requested": self.stage_requests}
 
     def snapshot(self):
         with self.lock:
@@ -213,6 +319,9 @@ class ReturnController:
                         raise HTTPException(409, "Motion has ended; result delivery is in progress")
                     if request.request_id is not None and request.request_id != self.current["request_id"]:
                         raise HTTPException(409, "request_id does not match the active command")
+                    if self.return_on == "time":
+                        raise HTTPException(409, "Server runs with --return-on time: the model runs "
+                                                 "until --episode-time ends, then returns")
                     self.return_event.set()
                     return {**self.current, "return_requested": True}
                 if request.request_id is None:
@@ -229,12 +338,14 @@ class ReturnController:
                 raise HTTPException(409, "A return or result delivery is already in progress")
             self.busy = True
             self.return_event.clear()
+            self.stage_requests = 0
             command = request.command if is_command else None
             self.current = {
                 "request_id": request.request_id, "end_point": False, "state": "running",
                 "error": None, "delivery": "pending" if self.callback_url else "disabled",
                 "delivery_error": None,
-                "command": command, "pinky": None, "pinky_error": None,
+                "command": command, "pinky": None, "pinky_error": None, "return_reason": None,
+                "stage": None, "stage_text": None,
             }
             self.requests[request.request_id] = self.current
             response = {**self.current, "accepted": True}
@@ -253,16 +364,42 @@ class ReturnController:
                 self.current.update(state="failed", end_point=False, error=str(exc))
         else:
             with self.lock:
-                self.current.update(state="completed", end_point=True)
+                # Why the model stopped: the gripper-open signal, or --episode-time ran out.
+                if command is None:
+                    reason = None
+                elif self.return_event.is_set():
+                    reason = "gripper_open"
+                else:
+                    reason = getattr(self.policy_runner, "last_end_reason", None)
+                    reason = reason if isinstance(reason, str) else "time"
+                self.current.update(state="completed", end_point=True, return_reason=reason)
 
         # Movement outcome is independent of network success. Never repeat motion
         # because a notification failed.
         try:
             self._deliver({"end_point": self.snapshot()["end_point"]}, request_id)
+            if self.snapshot()["end_point"]:
+                self._grab()
         finally:
             with self.lock:
                 self.busy = False
                 self._maybe_start_pinky()
+
+    def _grab(self):
+        """Right after end_point: approach, close and lift without waiting for Pinky."""
+        with self.lock:
+            # The arms leave the start pose, so end_point no longer holds.
+            self.current.update(end_point=False, pinky="grabbing", pinky_error=None)
+        try:
+            self.pinky_motion()
+        except Exception as exc:
+            logging.exception("Grab failed")
+            with self.lock:
+                self.current.update(pinky="grab_failed", pinky_error=str(exc))
+            self._deliver({"pinky_done": False}, self.current["request_id"])
+        else:
+            with self.lock:
+                self.current["pinky"] = "holding"  # lifted; waiting for pinky_arrive
 
     def _deliver(self, payload, request_id):
         if self.callback_url:
@@ -293,27 +430,25 @@ class ReturnController:
             return {**self.current, "accepted": False, "waiting": self.pinky_arrive}
 
     def _maybe_start_pinky(self):
-        """Call with the lock held. Start only when end_point and pinky_arrive are both true."""
+        """Call with the lock held. Release only when the object is held up and pinky_arrive is true."""
         ready = (self.pinky_arrive and not self.busy and not self.closing
-                 and self.current["state"] == "completed" and self.current["end_point"]
-                 and self.current["pinky"] is None)
+                 and self.current["pinky"] == "holding")
         if not ready:
             return False
         self.busy = True
         self.pinky_arrive = False  # consumed; a continuing sender will set it again
-        # The arms leave the start pose, so end_point no longer holds.
-        self.current.update(end_point=False, pinky="running", pinky_error=None)
+        self.current.update(pinky="releasing", pinky_error=None)
         self.executor.submit(self._run_pinky, self.current["request_id"])
         return True
 
     def _run_pinky(self, request_id):
         try:
             try:
-                self.pinky_motion()
+                self.release_motion()
             except Exception as exc:
-                logging.exception("Pinky pick failed")
+                logging.exception("Release failed")
                 with self.lock:
-                    self.current.update(pinky="failed", pinky_error=str(exc))
+                    self.current.update(pinky="release_failed", pinky_error=str(exc))
                 self._deliver({"pinky_done": False}, request_id)
                 return
             with self.lock:
@@ -340,8 +475,10 @@ class ReturnController:
 
 
 def create_app(callback_url=None, motion=move_left_once, sender=send_result, lock_path=None,
-               policy_runner=None, pinky_motion=move_pinky_once, home_motion=return_both_home):
-    controller = ReturnController(callback_url, motion, sender, policy_runner, pinky_motion, home_motion)
+               policy_runner=None, pinky_motion=grab_both, home_motion=return_both_home, release_motion=release_both,
+               return_on="both"):
+    controller = ReturnController(callback_url, motion, sender, policy_runner, pinky_motion, home_motion,
+                                  return_on, release_motion)
 
     @asynccontextmanager
     async def lifespan(app):
@@ -377,6 +514,11 @@ def create_app(callback_url=None, motion=move_left_once, sender=send_result, loc
         """pinky_arrive 최신 값 저장. end_point도 true이면 양팔 집기 -> 놓기 -> 복귀 시작."""
         return controller.start_pinky(request)
 
+    @app.post("/next-stage", status_code=202)
+    def request_next_stage():
+        """다음 stage 문장으로 넘기기 (스페이스 키와 같은 역할). 모델 실행 중에만."""
+        return controller.next_stage()
+
     @app.get("/end-point")
     def get_end_point():
         return {"end_point": controller.snapshot()["end_point"]}
@@ -397,13 +539,36 @@ def parse_server_args(argv=None):
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--callback-url", default=os.environ.get("END_POINT_CALLBACK_URL") or None)
+    parser.add_argument("--return-on", choices=RETURN_ON, default="both",
+                        help="when the model stops and the left arm returns via -> start: "
+                             "both = gripper_open signal or --episode-time end (default), "
+                             "time = only when --episode-time ends (POST /return is refused while running)")
+    parser.add_argument("--preset", default=None,
+                        help="task_presets.json name (e.g. v4_stage3): fills --policy-path and --start-version "
+                             "when not given; send the same name as the command to use its stage sentences")
+    parser.add_argument("--start-version", default=None,
+                        help="task_start_poses.json version: v4 = no pre-move, model starts from the normal "
+                             "start pose (default); v5 = left arm goes waypoint -> green/blue start pose first")
     parser.add_argument("--pinky-sequence", default=None,
                         help="pose file for the pinky pick (default: pinky_sequence.json)")
     options, evaluation_argv = parser.parse_known_args(argv)
+    if options.preset:
+        presets = load_presets()
+        if options.preset not in presets:
+            parser.error(f"unknown --preset {options.preset!r}; known: {', '.join(presets)}")
+        preset = presets[options.preset]
+        if not any(a == "--policy-path" or a.startswith("--policy-path=") for a in evaluation_argv):
+            evaluation_argv = [*evaluation_argv, "--policy-path", preset["policy_path"]]
+        options.start_version = options.start_version or preset.get("start_version")
+    options.start_version = options.start_version or "v4"
     runner = None
     if evaluation_argv:
         import eval_bi as ev
         args = ev.parse_args(evaluation_argv)
+        # Accept a checkpoint folder too: .../checkpoints/011000 -> .../011000/pretrained_model
+        nested = Path(args.policy_path).expanduser() / "pretrained_model"
+        if (nested / "config.json").exists():
+            args.policy_path = str(nested)
         if args.dry_run or args.no_return or args.episodes != 1:
             parser.error("API commands require real return motion: no dry-run/no-return, episodes=1")
         runner = PolicyRunner(args)
@@ -413,12 +578,19 @@ def parse_server_args(argv=None):
 if __name__ == "__main__":
     import uvicorn
     options, runner = parse_server_args()
+    # Importing lerobot already installed a root handler at WARNING, so force INFO here;
+    # otherwise stage switches and the gripper progress lines never reach the terminal.
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", force=True)
+    START_VERSION = options.start_version
+    task_start_poses("", version=START_VERSION)  # fail fast on an unknown version
+    logging.info("start version %s", START_VERSION)
+    if runner is not None:
+        runner.preload()  # before the server accepts requests
     if options.pinky_sequence:
         from pinky_move import load_sequence
         load_sequence(options.pinky_sequence)  # fail fast on a bad file
         PINKY_SEQUENCE = options.pinky_sequence
-    logging.basicConfig(level=logging.INFO)
     # Reuse the module app's controller only when configuration matches.
     app.state.controller.close()
-    app = create_app(options.callback_url, policy_runner=runner)
+    app = create_app(options.callback_url, policy_runner=runner, return_on=options.return_on)
     uvicorn.run(app, host=options.host, port=options.port, workers=1)

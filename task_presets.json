@@ -1,0 +1,15 @@
+{
+  "note": "Named setups for eval_bi_api.py --preset NAME, or send the name itself as the command (e.g. {\"command\": \"v4_stage3\"}). stages = sentences in order; start_version picks task_start_poses.json.",
+  "presets": {
+    "v5_stage3": {
+      "policy_path": "/home/fastcampus/main_project/outputs/train/smolvla_bi_gauze_v5_stages/checkpoints/011000",
+      "start_version": "v5",
+      "stages": ["search for the green gauze", "grasp the green gauze", "put the gauze in the box"]
+    },
+    "v4_stage3": {
+      "policy_path": "/home/fastcampus/main_project/outputs/train/smolvla_bi_gauze_v4_stages3/checkpoints/022000",
+      "start_version": "v4",
+      "stages": ["search for the green gauze", "grasp the green gauze", "put the gauze in the box"]
+    }
+  }
+}

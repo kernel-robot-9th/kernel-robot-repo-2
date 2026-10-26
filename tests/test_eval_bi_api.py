@@ -1,4 +1,6 @@
 import json
+import os
+os.environ["PINKY_NO_HARDWARE"] = "1"  # tests must never move the robot
 from pathlib import Path
 import tempfile
 import threading
@@ -20,7 +22,7 @@ class ApiTests(unittest.TestCase):
         app = api.create_app(
             callback, motion or Mock(), sender or Mock(),
             lock_path=Path(folder.name) / "api.lock",
-            policy_runner=runner,
+            policy_runner=runner, pinky_motion=Mock(), home_motion=Mock(), release_motion=Mock(),
         )
         client = TestClient(app)
         client.__enter__()
@@ -59,7 +61,7 @@ class ApiTests(unittest.TestCase):
             "gripper_open": True, "request_id": "wrong"}).status_code, 409)
         response = client.post("/return", json={"gripper_open": True, "request_id": "pick-1"})
         self.assertTrue(response.json()["return_requested"])
-        self.assertTrue(self.wait_done(client)["end_point"])
+        self.assertEqual(self.wait_done(client)["state"], "completed")
         motion.assert_not_called()
 
     def test_policy_runner_sets_task_and_cleans_up_without_real_robot(self):
@@ -104,7 +106,7 @@ class ApiTests(unittest.TestCase):
         result = self.wait_done(client)
         self.assertEqual(result["state"], "completed")
         self.assertEqual(result["delivery"], "sent")
-        self.assertEqual(client.get("/end-point").json(), {"end_point": True})
+        self.assertEqual(client.get("/status").json()["pinky"], "holding")  # grab ran after end_point
         sender.assert_called_once_with("http://receiver.example/result", {"end_point": True}, "one")
         response = client.post("/return", json={"gripper_open": True, "request_id": "one"})
         self.assertTrue(response.json()["duplicate"])
@@ -148,7 +150,7 @@ class ApiTests(unittest.TestCase):
         client = self.client(motion, sender)
         client.post("/return", json={"gripper_open": True})
         result = self.wait_done(client)
-        self.assertTrue(result["end_point"])
+        self.assertEqual(result["state"], "completed")
         self.assertEqual(result["delivery"], "failed")
         self.assertEqual(sender.call_count, 3)
         motion.assert_called_once()
@@ -158,7 +160,7 @@ class ApiTests(unittest.TestCase):
         client.post("/return", json={"gripper_open": True})
         result = self.wait_done(client)
         self.assertEqual(result["delivery"], "disabled")
-        self.assertTrue(result["end_point"])
+        self.assertEqual(result["state"], "completed")
 
     def test_http_sender_serializes_body_and_rejects_server_error(self):
         bodies = []

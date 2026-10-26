@@ -1,3 +1,5 @@
+import os
+os.environ["PINKY_NO_HARDWARE"] = "1"  # tests must never move the robot
 """Motor-free tests: python -m unittest discover -s tests -p 'test_eval_bi_return.py'."""
 import unittest
 from types import SimpleNamespace
