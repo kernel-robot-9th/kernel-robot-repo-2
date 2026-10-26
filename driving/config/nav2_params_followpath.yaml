@@ -1,0 +1,202 @@
+# [②] FollowPath 전용 Nav2 설정 (관제가 경로를 통째로 주는 방식)
+# 기준: 로봇의 pinky_navigation/params/nav2_params.yaml (2026-10-20), 맵: map_drawn (실측 벽, 맵 좌표 = 그림 좌표 / 100)
+# - 사용 노드: map_server, amcl, controller_server(+지역 costmap), velocity_smoother
+# - 뺀 것: planner_server, smoother_server, bt_navigator, waypoint_follower, behavior_server, global_costmap, Keepout
+# - 바뀐 값은 "[②]" 주석이 붙은 줄
+
+amcl:
+  ros__parameters:
+    alpha1: 0.2
+    alpha2: 0.2
+    alpha3: 0.2
+    alpha4: 0.2
+    alpha5: 0.2
+    base_frame_id: "base_footprint"
+    beam_skip_distance: 0.5
+    beam_skip_error_threshold: 0.9
+    beam_skip_threshold: 0.3
+    do_beamskip: false
+    global_frame_id: "map"
+    lambda_short: 0.1
+    laser_likelihood_max_dist: 2.0
+    laser_max_range: 100.0
+    laser_min_range: -1.0
+    laser_model_type: "likelihood_field"
+    max_beams: 180                 # [②] 60 -> 180 (2026-10-22, cm 정밀도: 협로 테스트에서 AMCL 2.7cm -> 0.5cm)
+    max_particles: 2000
+    min_particles: 500
+    odom_frame_id: "odom"
+    pf_err: 0.05
+    pf_z: 0.99
+    recovery_alpha_fast: 0.0
+    recovery_alpha_slow: 0.0
+    resample_interval: 1
+    robot_model_type: "nav2_amcl::DifferentialMotionModel"
+    save_pose_rate: 0.5
+    sigma_hit: 0.03                # [②] 0.2 -> 0.03 m (map_drawn 이 실측 벽과 ±1~2cm)
+    tf_broadcast: true
+    transform_tolerance: 1.0
+    update_min_a: 0.03             # [②] 0.05 -> 0.03 rad
+    update_min_d: 0.02             # [②] 0.05 -> 0.02 m
+    z_hit: 0.9                     # [②] 0.5 -> 0.9
+    z_max: 0.05
+    z_rand: 0.1                    # [②] 0.5 -> 0.1
+    z_short: 0.05
+    scan_topic: scan
+    set_initial_pose: true
+    initial_pose:                  # [②] map_drawn 기준 A 표시점 (라이다 중심 (182.7, 24) cm, 180°) 의 바퀴 축
+      x: 1.810
+      y: 0.240
+      z: 0.0
+      yaw: 3.1416
+
+controller_server:
+  ros__parameters:
+    # --- 시스템 기본 설정 ---
+    /bond_disable_heartbeat_timeout: true    # 라이프사이클 노드 간 상태 체크(하트비트) 타임아웃 무시 여부
+
+    # ==========================================================
+    # 1. 주행 컨트롤러 (Regulated Pure Pursuit) 파라미터
+    # ==========================================================
+    FollowPath:
+      plugin: nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController
+      stateful: true                         # 플러그인이 이전 상태를 기억할지 여부
+
+      # 기본 주행 및 속도
+      desired_linear_vel: 0.1                # [m/s] [②] 0.2 -> 0.1 (2026-10-22, 테스트 주행용)
+      allow_reversing: false                 # 후진 허용 여부 (false: 무조건 전진/제자리 회전으로 해결)
+      max_angular_accel: 3.2                 # [rad/s^2] 최대 각가속도 (회전할 때 얼마나 빨리 가속할지)
+
+      # 경로 추종 (Lookahead, 시선 두기)
+      lookahead_dist: 0.15                   # [m] [②] 0.6 -> 0.15 (구간이 30~130cm, 복도 폭 30cm)
+      use_velocity_scaled_lookahead_dist: true # 현재 속도에 비례해 주시 거리를 늘릴지 여부
+      lookahead_time: 1.5                    # [s] 속도 비례 주시 시간 (속도 * 시간 = 주시 거리)
+      min_lookahead_dist: 0.1                # [m] [②] 0.3 -> 0.1
+      max_lookahead_dist: 0.2                # [m] [②] 0.9 -> 0.2
+      curvature_lookahead_dist: 0.6          # [m] 경로의 곡률(커브)을 계산하기 위해 내다보는 거리
+      use_fixed_curvature_lookahead: false   # 곡률 계산용 거리를 고정값으로 쓸지 여부 (false면 주시거리와 연동)
+
+      # 제자리 회전 (고개 먼저 돌리기)
+      use_rotate_to_heading: true            # 경로 방향과 로봇 헤딩이 다를 때 제자리 회전 먼저 하기
+      rotate_to_heading_min_angle: 0.35      # [rad] 약 20도 이상 차이나면 제자리 회전 모드 진입
+      rotate_to_heading_angular_vel: 0.6     # [rad/s] [②] 1.0 -> 0.6
+
+      # 커브길 감속 (Regulated)
+      use_regulated_linear_velocity_scaling: false  # 급커브에서 속도 줄이기
+      regulated_linear_scaling_min_radius: 0.5     # [m] 이 반경보다 좁은 커브를 돌 때는 속도를 최소로 낮춤
+      regulated_linear_scaling_min_speed: 0.05     # [m/s] 커브를 돌 때 낼 수 있는 최소 속도 방어선
+
+      # 장애물 접근 시 감속 (Cost Regulated)
+      use_cost_regulated_linear_velocity_scaling: true # 장애물 근처(비용맵 높은 곳)에서 속도 줄이기
+      cost_scaling_dist: 0.08                # [②] 지역 costmap inflation_radius 와 맞춤 (0.3 -> 0.08)
+      cost_scaling_gain: 1.5                 # 장애물 감속 민감도 (클수록 더 팍 줄임)
+      inflation_cost_scaling_factor: 15.0   # 컨트롤러 내부에서 비용을 계산할 때 쓰는 인플레이션 가중치
+
+      # 목적지 접근 시 감속
+      approach_velocity_scaling_dist: 0.2    # [m] [②] 0.6 -> 0.2 (짧은 구간이 처음부터 감속하지 않게)
+      min_approach_linear_velocity: 0.05     # [m/s] 목표 지점 근처에서 속도를 줄이더라도 이 속도 밑으론 안 내림
+
+      # 안전 및 충돌 방지
+      use_collision_detection: true           # [②] 경로 위 장애물(다른 로봇 등) 미리 검사 → 정지
+      max_allowed_time_to_collision_up_to_carrot: 1.0 # 주시점(Carrot)까지 가는 도중 충돌까지 허용되는 최대 시간 
+      max_robot_pose_search_dist: 1.4875     # [m] 전역 경로 상에서 로봇과 가장 가까운 점을 찾을 때 최대 탐색 거리
+      transform_tolerance: 0.2               # [s] TF(좌표계 변환) 데이터 최대 허용 지연 시간
+
+      # 취소/종료 시 동작
+      use_cancel_deceleration: false         # 내비게이션 취소 명령이 들어왔을 때 팍 멈추지 않고 부드럽게 감속할지
+      cancel_deceleration: 3.2               # [m/s^2] 취소 시 적용할 감속도
+      interpolate_curvature_after_goal: false # 목표 도달 후 경로 곡률 보간을 계속할지 여부
+
+    # ==========================================================
+    # 2. 컨트롤러 서버 공통 설정
+    # ==========================================================
+    controller_plugins: ["FollowPath"]           # 메인 주행 플러그인 (위에서 설정한 이름)
+    controller_frequency: 20.0                   # [Hz] 제어 명령(cmd_vel)을 1초에 20번 내보냄
+    action_server_result_timeout: 10.0           # [s] 액션 서버 결과 대기 최대 시간
+    autostart_node: false                        # 노드 켤 때 자동 활성화 여부
+    bond_heartbeat_period: 0.1                   # [s] 시스템 상태 체크(하트비트) 주기
+    costmap_update_timeout: 0.3                  # [s] 코스트맵 업데이트가 이 시간 지연되면 멈춤
+    enable_stamped_cmd_vel: false                # TwistStamped 메시지 대신 일반 Twist 메시지 사용
+    failure_tolerance: 0.3                       # [s] 제어 계산 실패를 허용하는 시간
+    publish_zero_velocity: true                  # 목표 도달/취소 시 확실하게 정지하도록 0 속도 명령 발행
+    speed_limit_topic: "speed_limit"             # 속도 제한 구역 적용 시 구독할 토픽 이름
+    odom_topic: "odom"                           # 현재 속도를 읽어올 오도메트리 토픽
+    use_realtime_priority: false                 # 리눅스 실시간(Realtime) 우선순위 사용 여부
+    use_sim_time: false                          # 시뮬레이션 시간 사용 여부 (실제 로봇이므로 false)
+    start_type_description_service: true         # 파라미터 타입 설명 서비스 활성화
+
+    # 미세한 노이즈 속도는 0으로 간주하는 임계치
+    min_theta_velocity_threshold: 0.001
+    min_x_velocity_threshold: 0.001
+    min_y_velocity_threshold: 0.5
+
+    # ==========================================================
+    # 3. 목표 도달 판별 (Goal Checker)
+    # ==========================================================
+    goal_checker_plugins: ["general_goal_checker"]
+
+    general_goal_checker:
+      plugin: "nav2_controller::SimpleGoalChecker"
+      stateful: true
+      xy_goal_tolerance: 0.02                    # [m] [②] 0.05 -> 0.02 (0.05 면 5cm 모자란 자리에서 도착 판정됨)
+      yaw_goal_tolerance: 0.05                   # [rad] 목표 각도 오차 약 14도 이내면 올바르게 본 것으로 인정
+
+    # ==========================================================
+    # 4. 주행 진척도 검사 (Progress Checker)
+    # ==========================================================
+    # 로봇이 좁은 곳에 갇혔거나 끼었는지 판별하는 기능
+    progress_checker_plugins: ["progress_checker"]
+
+    progress_checker:
+      plugin: "nav2_controller::SimpleProgressChecker"
+      movement_time_allowance: 30.0              # [s] [②] 10 -> 30 (짧은 구간 + 제자리 회전)
+      required_movement_radius: 0.05             # [m] [②] 0.5 -> 0.05
+
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      # [②] 안전용 경량 지역 costmap: 실시간 라이다만 사용 (정적 맵 / Keepout 없음)
+      update_frequency: 5.0
+      publish_frequency: 2.0
+      global_frame: odom
+      robot_base_frame: base_footprint
+      rolling_window: true
+      width: 2                       # [②] 3 -> 2 (정수 m만 가능, 라즈베리파이 부담 감소)
+      height: 2
+      resolution: 0.02               # [②] 2cm: 20cm 협로의 라이다 벽이 과하게 두꺼워지지 않게
+      robot_radius: 0.07             # [②] 지름 14cm 원형 (원본: 12cm 사각 footprint)
+      plugins: ["obstacle_layer", "inflation_layer"]   # [②] voxel -> 2D obstacle (라이다 1개)
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: True
+        observation_sources: scan
+        scan:
+          topic: /scan
+          data_type: "LaserScan"
+          marking: True
+          clearing: True
+          max_obstacle_height: 2.0
+          obstacle_max_range: 1.0    # [②] 가까운 장애물만
+          obstacle_min_range: 0.0
+          raytrace_max_range: 1.5    # 표시 거리보다 길게 (잔상 제거)
+          raytrace_min_range: 0.0
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        inflation_radius: 0.08       # [②] 0.3 -> 0.08 (협로에서 경로 전체가 고비용이 되지 않게)
+        cost_scaling_factor: 15.0    # RPP inflation_cost_scaling_factor 와 같은 값 유지
+      always_send_full_costmap: True
+
+velocity_smoother:
+  ros__parameters:
+    smoothing_frequency: 20.0
+    scale_velocities: False
+    feedback: "OPEN_LOOP"
+    max_velocity: [0.25, 0.0, 1.5]
+    min_velocity: [-0.25, 0.0, -1.5]
+    max_accel: [2.5, 0.0, 3.2]
+    max_decel: [-2.5, 0.0, -3.2]
+    odom_topic: "odom"
+    odom_duration: 0.1
+    deadband_velocity: [0.0, 0.0, 0.0]
+    velocity_timeout: 1.0
+    enable_stamped_cmd_vel: false

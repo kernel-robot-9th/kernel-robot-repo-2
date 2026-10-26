@@ -27,12 +27,23 @@ Pinky Pro 가 병원 아레나(210 × 200 cm)를 주행 그래프대로 달리�
 | `coords.py`, `points.yaml`, `diagram_walls.yaml` | 좌표 변환, 바닥 표시점 A~G, 그림 기준 벽 |
 | `run_route.py`, `follow_path_client.py`, `battery.sh` | 초기 FollowPath 시험, 배터리 보기 |
 
-## 같이 있어야 하는 것 (이 폴더에 없음)
+## graph/ — 주행 그래프
 
-원래 번들(`~/pinky_map_rev3/`)에서는 `api/`, `tools/` 옆에 아래 폴더가 있어야 돈다.
+| 파일 | 하는 일 |
+|---|---|
+| `graph_spec.yaml` | 사람·편집기가 고치는 원본 (차선, 갈림목, 노드, 엣지) |
+| `build_graph.py` | `graph_spec.yaml` → `graph.yaml` + `graph.png`. 차선 노드·차선 엣지(line)·갈림목 transfer(경계점↔차선, 차선↔차선)를 자동으로 만들고 엣지마다 벽 여유(빈 로봇 Ø11 / 그릇 Ø14)를 계산 |
+| `graph.yaml`, `graph.png` | 만들어진 그래프 (API 와 FMS 가 읽음 — FMS 는 복사하지 말고 이 파일을 가리킬 것) |
+| `graph_editor.py`, `editor.html` | 브라우저 편집기 (`python3 graph/graph_editor.py` → http://localhost:8765) |
 
-- `graph/` (`graph.yaml`, `graph_spec.yaml`) — `graph_route.py` 가 읽는 주행 그래프
-- `maps/` (`map_drawn.*`) — Nav2 · `scan_fit.py` · `set_pose.py` 가 쓰는 지도
-- `launch/nav2_followpath.launch.py`, `config/nav2_params_followpath.yaml` — `pinky-nav2.service` 가 띄우는 Nav2
+## maps/ · launch/ · config/
+
+- `maps/map_drawn.*` — 실측 벽으로 그린 지도 (AMCL·Nav2·스캔 확인용, 맵 m × 100 = 그림 cm). `map_rev3*` 는 SLAM 원본·보정본 (지도 도구용 참고)
+- `launch/nav2_followpath.launch.py`, `config/nav2_params_followpath.yaml` — `pinky-nav2.service` 가 띄우는 Nav2 (map_server + amcl + controller + velocity_smoother, 플래너 없음)
+
+## 로봇에 배포
+
+코드끼리 상대 경로(`../graph`, `../maps`, `../tools`)로 찾고 서비스는 `~/pinky_map_rev3/` 를 가리키므로,
+이 `driving/` 폴더를 로봇의 `~/pinky_map_rev3/` 로 그대로 복사한 뒤 `api/install_service.sh` 를 실행한다.
 
 IR 노드(`pinky_sensor_adc main_node`, `/ir_sensor/range`)는 아직 자동 실행에 없어서 라인트레이싱 도구를 쓸 때 직접 띄운다.
