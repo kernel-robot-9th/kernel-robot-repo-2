@@ -23,6 +23,8 @@
 
 작업 `state`: `running` → `succeeded` / `failed` / `canceled`. 구간 `mode`: `nav`(Nav2) · `wall`(협로 벽 따라가기) · `rotate` · `dock`(정밀 주차).
 
+방 번호 (2026-10-27 확정, `/dests` 의 `name` 앞에 붙음): 101호 ROOM4_L, 102호 ROOM4_R, 103호 ROOM1_LU, 104호 ROOM1_CUL, 105호 ROOM1_CUR, 106호 ROOM1_LD, 107호 ROOM1_CLL, 108호 ROOM1_CLR, 수술실 SURGERY. 로봇 API 의 `dest` 는 노드 이름 그대로다 (방 번호로 주문하는 건 FMS API — fms 브랜치 `fms/API.md`).
+
 목적지 이름 (`/dests`): ROOM4_L, PHARMACY(정밀 주차 가능), ROOM4_R, ROOM1_CUL, ROOM1_CUR, ROOM1_CLL, ROOM1_CLR, ROOM1_LU, ROOM1_LD(왼쪽 1인실 — 10-26 엶, 30cm 단일차선 협로 경유), SURGERY, POCKET, CHARGER. (START_A 는 2026-10-26 그래프에서 뺌 — 출발점 A 로 가려면 `{"x":182.7,"y":24,"heading":180}`)
 `/set_pose` 이름 (tools/points.yaml): A, B, C, D, F, G, start_A, omx_stop, omx_approach.
 

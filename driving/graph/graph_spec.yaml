@@ -45,15 +45,15 @@ nodes:
   R58: {type: way, xy: [130, 58], note: 가운데 아래-오른 1인실 문 앞}
   R90: {type: way, xy: [130, 90], note: 오른쪽 협로 · 계단 통로 갈림목 (대각선 끝)}
   S15: {type: way, xy: [15, 80], note: '단일차선 협로 (30cm). 10-26 엶'}
-  ROOM4_L: {type: stop, xy: [35, 178], heading: 90, name: 4인실 왼쪽}
+  ROOM4_L: {type: stop, xy: [35, 178], heading: 90, name: 101호 4인실 왼쪽}
   PHARMACY: {type: stop, xy: [98.9, 178.8], heading: 90, name: 약제실 OMX, dock: aruco}
-  ROOM4_R: {type: stop, xy: [175, 178], heading: 90, name: 4인실 오른쪽}
-  ROOM1_LU: {type: stop, xy: [15, 112], heading: 180, name: 1인실 왼쪽 위}
-  ROOM1_LD: {type: stop, xy: [15, 50], heading: 180, name: 1인실 왼쪽 아래}
-  ROOM1_CUL: {type: stop, xy: [65, 108], heading: 90, name: 1인실 가운데 위-왼}
-  ROOM1_CUR: {type: stop, xy: [97, 115], heading: 270, name: 1인실 가운데 위-오른}
-  ROOM1_CLL: {type: stop, xy: [72, 45], heading: 90, name: 1인실 가운데 아래-왼}
-  ROOM1_CLR: {type: stop, xy: [105, 52], heading: 180, name: 1인실 가운데 아래-오른}
+  ROOM4_R: {type: stop, xy: [175, 178], heading: 90, name: 102호 4인실 오른쪽}
+  ROOM1_LU: {type: stop, xy: [15, 112], heading: 180, name: 103호 1인실 왼쪽 위}
+  ROOM1_LD: {type: stop, xy: [15, 50], heading: 180, name: 106호 1인실 왼쪽 아래}
+  ROOM1_CUL: {type: stop, xy: [65, 108], heading: 90, name: 104호 1인실 가운데 위-왼}
+  ROOM1_CUR: {type: stop, xy: [97, 115], heading: 270, name: 105호 1인실 가운데 위-오른}
+  ROOM1_CLL: {type: stop, xy: [72, 45], heading: 90, name: 107호 1인실 가운데 아래-왼}
+  ROOM1_CLR: {type: stop, xy: [105, 52], heading: 180, name: 108호 1인실 가운데 아래-오른}
   SURGERY: {type: stop, xy: [180, 50], heading: 90, name: 수술실}
   POCKET: {type: stop, xy: [200, 150], heading: 0, name: 대기 포켓}
   CHARGER: {type: stop, xy: [200, 125], heading: 270, name: 충전}
