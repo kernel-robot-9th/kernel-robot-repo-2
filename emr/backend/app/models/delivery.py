@@ -56,7 +56,6 @@ FAILURE_CONSISTENCY_SQL = (
 RECEIPT_MARKER_RANGE_SQL = (
     f"receipt_marker_id IS NULL OR receipt_marker_id BETWEEN {RECEIPT_MARKER_ID_MIN} AND {RECEIPT_MARKER_ID_MAX}"
 )
-ACTIVE_STATUSES_SQL = "status IN ('dispatched', 'arrived')"
 
 if TYPE_CHECKING:
     from app.models.bedside_device import BedsideDevice
@@ -87,9 +86,7 @@ class Delivery(TimestampMixin, Base):
         # 지금 도착해 있는 배송끼리는 일회용 마커가 겹치지 않는다
         Index("uq_deliveries_receipt_marker_arrived", "receipt_marker_id", unique=True,
               postgresql_where=text("status = 'arrived'")),
-        # 로봇 한 대는 진행 중 배송을 하나만 맡는다
-        Index("uq_deliveries_assigned_robot_active", "assigned_robot_id", unique=True,
-              postgresql_where=text(ACTIVE_STATUSES_SQL)),
+        # '로봇 한 대 = 진행 중 배송 하나' 유일 인덱스는 0015에서 없앴다 (2026-10-27) — FMS 묶음 하나에 여러 신청이 실린다
         # claim: reserved이고 예약 시각이 지난 것을 이른 순으로
         Index("ix_deliveries_status_scheduled_at", "status", "scheduled_at"),
         # 예약한 쪽 (2026-10-22)

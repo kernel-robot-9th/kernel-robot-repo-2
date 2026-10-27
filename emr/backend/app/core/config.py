@@ -55,6 +55,22 @@ class Settings(BaseSettings):
     OMX_BASE_URL: str = "http://192.168.129.86:8000"
     OMX_TIMEOUT_SECONDS: float = 3.0     # 이 안에 답하지 않으면 omx_unavailable(503)
 
+    # 팀원 FMS API v1 연동 1단계 (2026-10-27, 계약 docs/api_contract_delivery_2026-10-20.md 10장). EMR은 FMS·OMX만 연결(상위 관제).
+    # FMS_BASE_URL이 비어 있으면 끔(주문 보내기 주기 작업 없음, 예전 claim 그대로). 있으면 claim은 늘 204로 막힌다
+    FMS_BASE_URL: str = ""                    # 예 "http://192.168.129.50:8770" — FMS는 --control-url http://<EMR>:8000 으로 띄운다
+    FMS_TIMEOUT_SECONDS: float = 3.0
+    FMS_SEND_INTERVAL_SECONDS: float = 5.0    # 신청 시각이 된 배송을 FMS로 보내는 회차 간격
+    # FMS 로봇 번호(robots.yaml 1·2·3) → EMR 로봇 id. [검토 필요] 10-27 EMR 로봇 1 배송로봇 1호·3 2호·4 3호(2는 OMX) 기준 가정값 — 로봇 탭 칸은 다음 단계
+    FMS_ROBOT_MAP: dict[int, int] = {1: 1, 2: 3, 3: 4}
+    # 2단계: FMS 묶음마다 실제 OMX로 적재·탑재 (2026-10-27, services/fms_omx.py). false면 ready·loaded를 FMS(가상 OMX)가 스스로 보낸다.
+    # true면 로봇팔이 움직인다 — 묶음마다 /command {"blue": N, "green": N}(집기) → 들고 대기 → FMS ready → 정밀 주차 뒤 /pinky(내려놓기) → FMS loaded
+    FMS_OMX_ENABLED: bool = False
+    FMS_OMX_ROUND_SECONDS: float = 1.0        # OMX /status를 보고 다음 단계를 보내는 간격
+    # OMX /command 형식 — counts = {"blue": N, "green": N} (10-27 결정). sentence = 임시(10-27 사용자: "임시 방편으로 이전 버전 API,
+    # 수량 무시하고 거즈 문장으로") — 지금 실제 OMX(vision 47bcb47)가 문장만 받아서. 팀원 OMX가 개수 형식을 받으면 counts로 되돌린다.
+    # FMS 묶음(services/fms_omx.py)과 관리자 API(/omx/command) 둘 다 이 값을 따른다
+    OMX_COMMAND_FORMAT: Literal["counts", "sentence"] = "counts"
+
     # 음성 배송 예약 초안 (2026-10-26, app/services/voice_request.py). 사용자 결정: Gemini로 시작, 로컬 모델은 나중에 같은 인터페이스로.
     # gemini면 녹음·문장이 Google 클라우드로 나간다 — 시연·시험 동안만. 키는 .env에만(문서·로그에 넣지 않는다)
     VOICE_PARSER: Literal["gemini", "disabled"] = "disabled"   # disabled면 /voice/* 503 voice_disabled

@@ -1,44 +1,43 @@
 # kernel-robot-repo-2
 커널아카데미 : 로보틱스 심화 캠프 9기 2팀 저장소. 지능형 의료서비스로봇 헬퍼 시스템
 
-병동 간호사가 웹에서 비품 배송을 예약하면, 자율주행 로봇(Pinky Pro)이 병실까지 가져다주고 간호사 확인을 받아 수령을 끝내는 시스템입니다.
-약제실에서 로봇팔(ROBOTIS OMX-F)이 배송 로봇에 비품을 싣는 단계는 팀원이 맡습니다.
+병동 간호사가 웹에서 물품을 신청하면, 약제실에서 로봇팔(ROBOTIS OMX-F)이 비품을 싣고 자율주행 로봇(Pinky Pro)이 병실까지 가져다주며, 간호사 확인을 받아 수령을 끝내는 시스템입니다.
+EMR은 **상위 관제**로 무엇을 어디로 보낼지를 정하고, 배차·주행은 팀원 FMS가, 싣기는 팀원 OMX가 맡습니다. EMR은 이 둘하고만 연결합니다(Pinky에 직접 붙지 않음).
 
 ## 시스템 구성
 
 ```mermaid
 flowchart LR
-  N["간호사<br/>웹 브라우저"] -->|예약·확인| W["EMR 웹<br/>React"]
-  W --> A["EMR API<br/>FastAPI"]
+  N["간호사<br/>웹 브라우저"] -->|신청·확인| W["EMR 웹<br/>React"]
+  W --> A["EMR API<br/>FastAPI · 상위 관제"]
   A --> D[("PostgreSQL")]
-  A <-->|"배송 가져가기·도착·실패 보고<br/>⇄ 배정 때 로봇 상태 조회"| X["팀원 FMS<br/>(Pinky API)"]
-  X -->|주행 명령| P["Pinky Pro<br/>AMR"]
-  A <-->|"적재 명령·상태<br/>⇄ 완료 신호"| O["팀원 OMX<br/>로봇팔"]
+  A <-->|"주문 · ready · loaded<br/>⇄ 이벤트 · 로봇 상태"| X["팀원 FMS<br/>API v1"]
+  X -->|배차·주행| P["Pinky Pro<br/>AMR"]
+  A <-->|"집기 · 내려놓기 명령<br/>⇄ 완료 신호·상태"| O["팀원 OMX<br/>로봇팔"]
 ```
 
 | 구성 | 하는 일 |
 |---|---|
-| **EMR 웹** (`emr/`) | 간호사 로그인, 비품 재고, 배송 예약·단계 표시, 병원 맵과 장소 등록, 로봇 등록과 로봇별 API 키, 병상 단말(환자 요청), 실시간 알림 |
-| **팀원 FMS** (이 저장소 밖) | 어느 로봇이 어떤 길로 갈지 정하고 Pinky를 주행시킨다. EMR과 **양방향**으로 주고받는다(아래) |
-| **팀원 OMX 로봇팔** (이 저장소 밖) | 약제실에서 Pinky 위에 비품을 싣는다(모방학습). EMR이 명령을 보내고 완료 신호를 받는다 |
+| **EMR 웹** (`emr/`) | 간호사 로그인, 물품(재고) 관리, 물품 신청·배송 단계 표시, 병원 지도와 장소, 로봇 등록, 병상 단말(환자 요청), 실시간 알림, 음성 신청. FMS에 주문을 보내고 OMX에 싣기를 시킨다 |
+| **팀원 FMS** (이 저장소 밖) | 주문을 묶어 어느 로봇이 갈지 정하고(배차) Pinky를 주행·충전·오염 처리한다. EMR과 **양방향**으로 주고받는다(아래) |
+| **팀원 OMX 로봇팔** (이 저장소 밖) | 약제실에서 카메라(YOLO)로 거즈를 찾아 집고, 양팔로 Pinky 위에 내려놓는다. EMR이 명령을 보내고 완료 신호를 받는다 |
 
 **EMR ⇄ 팀원 FMS**
 
 | 방향 | 내용 |
 |---|---|
-| FMS → EMR | 배송 가져가기(`POST /api/v1/robot/deliveries/claim`), 예약 목록 보기(`GET /robot/deliveries`), 약제실 도착(`POST /robot/arrived` — Pinky가 약제실 정밀 주차를 마치면 직접 부름, EMR은 로그만), 병실 도착·실패 보고(`POST /robot/deliveries/{id}/progress`) |
-| EMR → FMS | 배정할 때 로봇 서버의 `GET /status`로 배터리·오염도·주행 준비를 확인(로봇별 `robot_server_url`) |
-| (예정) EMR → FMS | 예약 시각에 배송을 묶어 FMS로 보내기 — 별도 브랜치 `fms-order-2026-10-26`에 보관, 팀원 FMS가 준비되면 다시 시작 |
+| EMR → FMS | 주문 `POST /api/v1/orders {request_id, room: "101호", item}`(물품 1개 = 1건), 묶음 준비 끝 `POST /api/v1/batches/{id}/ready`, 다 실음 `POST /api/v1/batches/{id}/loaded` |
+| FMS → EMR | 로봇 상태 `POST /api/v1/fms/robot-status`(1초마다), 이벤트 `POST /api/v1/fms/events`(배차·약제실 정밀 주차·배송·실패) |
 
-**EMR ⇄ 팀원 OMX**: EMR → OMX 적재 명령·상태(`POST /api/v1/omx/command`, `GET /api/v1/omx/status`, 관리자), OMX → EMR 완료 신호(`GET /api/v1/robot/{request_id}/end-point`). 명세는 [OMX 완료 신호](docs/omx_end_point_spec_2026-10-26.md).
+**EMR ⇄ 팀원 OMX**: EMR → OMX 집기 `POST /command {"command": {"blue": N, "green": N}}`(약품 = 파란 거즈, 비품 = 녹색 거즈), 내려놓기 `POST /pinky`, 상태 `GET /status`. OMX → EMR 완료 신호 `GET /api/v1/robot/{request_id}/end-point`. 계약은 [API 계약 문서](docs/api_contract_delivery_2026-10-20.md) 10장.
 
 ## 배송 흐름
 
-1. 간호사가 EMR에서 목적지(병실)·비품·시각을 정해 예약합니다. 재고는 예약할 때 빠집니다. 병상 태블릿에서 환자가 직접 요청할 수도 있습니다.
-2. 예약 시각이 지나면 팀원 FMS가 EMR에서 배송을 가져갑니다. EMR은 이때 로봇 상태(배터리·오염도)를 확인합니다.
-3. 약제실에서 OMX가 비품을 싣고, Pinky가 병실로 갑니다.
+1. 간호사가 EMR에서 목적지(병실)·비품·보낼 시간을 정해 신청합니다. 재고는 신청할 때 빠집니다. 병상 태블릿에서 환자가 직접 요청할 수도 있습니다.
+2. 보낼 시간이 되면 EMR이 물품 1개당 주문 1건으로 FMS에 보냅니다. FMS가 묶어서 로봇을 배차하면 화면에 **출발**이 뜹니다.
+3. EMR이 OMX에 집기를 시키고, 다 들면 FMS에 `ready` → Pinky가 약제실에 정밀 주차 → EMR이 OMX에 내려놓기(`/pinky`) → 다 실으면 FMS에 `loaded` → Pinky가 병실로 갑니다.
 4. 도착하면 예약한 간호사(병상 요청이면 환자) 화면에 **"받았습니다" 버튼**이 뜹니다. 누르면 수령이 끝납니다. (일회용 ArUco 마커 수령도 EMR에 있지만 지금은 꺼 두었습니다.)
-5. 로봇 쪽이 실패를 보고하면 재고가 되돌아갑니다.
+5. FMS가 실패를 알리면 재고가 되돌아갑니다.
 
 단계마다 예약한 간호사에게 실시간 알림이 가고, 실패는 관리자에게도 갑니다. 자세한 규칙은 [API 계약 문서](docs/api_contract_delivery_2026-10-20.md)에 있습니다.
 
@@ -91,24 +90,25 @@ MAKEFLAGS=-j4 colcon build --symlink-install --parallel-workers 2 --cmake-args -
 | EMR 실행·계정·다른 PC 접속 | [emr/README.md](emr/README.md) |
 | 로봇 워크스페이스 빌드 | [robot/README.md](robot/README.md) |
 | 서버 한 대 전체 구성(포트·실행 순서·문제 해결) | [docs/server_guide.md](docs/server_guide.md) |
-| 팀원 FMS가 EMR을 부르는 방법 | [팀원 연동 안내](docs/emr_robot_api_for_teammate_2026-10-22.md) |
+| EMR ⇄ FMS·OMX 연동 (10-27) | [연동 작업 정리](docs/emr_fms_omx_integration_2026-10-27.md) · [API 계약 10장](docs/api_contract_delivery_2026-10-20.md) |
 
-## 현재 상태 (2026-10-26)
+## 현재 상태 (2026-10-27)
 
 | 기능 | 상태 |
 |---|---|
-| EMR 비품·예약·맵·장소·로봇·알림·배송 기록 | 완료, 백엔드 테스트 169개 |
+| EMR 물품·신청·지도·장소·로봇·알림·배송 기록·음성 신청 | 완료, 백엔드 테스트 232개 |
 | 병상 단말 환자 요청·"받았습니다" 수령 | 완료 |
-| EMR ⇄ 팀원 FMS | 로봇 쪽이 가져가기·도착·실패 보고, EMR이 배정 때 로봇 상태 확인. Pinky가 약제실 도착을 EMR에 직접 알리는 것 확인(10-23) |
-| EMR → FMS 묶음 보내기 | 예정 — 브랜치 `fms-order-2026-10-26`에 보관 |
-| EMR ⇄ 팀원 OMX | 적재 명령·상태·완료 신호 API 완료(10-26) |
+| EMR ⇄ 팀원 FMS (API v1) | 완료 — 주문 보내기, 이벤트로 출발·도착·실패. FMS 시뮬레이터로 신청 → 도착 확인(10-27) |
+| EMR ⇄ 팀원 OMX | 완료 — FMS 묶음마다 집기 → `ready` → 정밀 주차 뒤 내려놓기 → `loaded`. **시뮬레이터 Pinky + 실물 OMX로 신청 → 도착 확인**(10-27, 임시 문장 형식) |
+| 남은 연동 | 팀원 OMX가 개수 형식 `{"blue": N, "green": N}` 받기, FMS 다시 시작 대응, 취소 연동, 지도 위 로봇 위치 |
 | Pinky 실물 주행 | 복도·협로·약제실 정밀 주차 확인. 병실 칸 진입 구간은 팀원 쪽 Nav2 조정 필요 |
 | 시험용 설정 | 로그인·로봇 키 검사를 잠시 꺼 둠 — 운영 전에 켜기 ([EMR 이슈 정리](docs/emr_dev_issues_2026-10-23.md) 3장) |
 
 ## 문서
 
-- [배송 API 계약](docs/api_contract_delivery_2026-10-20.md): EMR과 로봇 쪽 사이의 상태·API·오류 코드, OMX 완료 신호(9장)
-- [팀원 연동 안내](docs/emr_robot_api_for_teammate_2026-10-22.md): 팀원 FMS가 EMR을 부르는 순서와 예시
+- [배송 API 계약](docs/api_contract_delivery_2026-10-20.md): EMR과 로봇 쪽 사이의 상태·API·오류 코드, OMX 완료 신호(9장), **FMS API v1·OMX 연동(10장)**
+- [FMS·OMX 연동 작업 정리](docs/emr_fms_omx_integration_2026-10-27.md) (10-27) · [SW 아키텍처](docs/architecture/README.md)
+- [팀원 연동 안내](docs/emr_robot_api_for_teammate_2026-10-22.md): 예전 claim 방식(10-22, 10-27부터 쓰지 않음)
 - [OMX 완료 신호 명세](docs/omx_end_point_spec_2026-10-26.md)
 - [Pinky API 분석](docs/pinky_fms_api_review_2026-10-22.md): 팀원 Pinky API 실측과 연동 제안
 - [EMR 개발 이슈·문제 해결](docs/emr_dev_issues_2026-10-23.md): 진행도, 해결한 문제, 남은 문제 전체 표

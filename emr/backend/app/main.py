@@ -3,13 +3,14 @@
 # 역할   : FastAPI 진입점 — 앱 조립·예외 핸들러·라이프사이클
 # 작성일 : 2026-10-13
 # 구성   :
-#   - lifespan()    기동 시 DB 검증·알림 LISTEN 시작, 종료 시 LISTEN 중지·풀 정리
+#   - lifespan()    기동 시 DB 검증·알림 LISTEN 시작·FMS 주문 보내기 주기 작업(FMS_BASE_URL)·OMX 적재 주기 작업(FMS_OMX_ENABLED), 종료 시 정리
 #   - create_app()  앱 팩토리
 #   - app           uvicorn app.main:app 대상
 # =============================================================================
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
+import asyncio
+from contextlib import asynccontextmanager, suppress
 from collections.abc import AsyncGenerator
 
 import structlog
@@ -24,9 +25,31 @@ from app.core.database import engine
 from app.core.exceptions import DomainError
 from app.core.notification_hub import notification_hub
 from app.core.logging import configure_logging
+from app.services.fms_omx import run_omx_round
+from app.services.fms_order import run_send_round
 
 configure_logging(settings.LOG_LEVEL)
 log = structlog.get_logger(__name__)
+
+
+async def _send_to_fms_forever() -> None:
+    """신청 시각이 된 배송을 FMS로 보내는 회차를 계속 돈다 (2026-10-27). DB·HTTP가 동기라 스레드에서.
+    [입력] 없음
+    [출력] 없음 (lifespan이 취소할 때까지)
+    """
+    while True:
+        await asyncio.to_thread(run_send_round)
+        await asyncio.sleep(settings.FMS_SEND_INTERVAL_SECONDS)
+
+
+async def _run_omx_forever() -> None:
+    """FMS 묶음을 실제 OMX로 싣는 회차를 계속 돈다 (2026-10-27, 2단계). 로봇팔이 움직인다 — FMS_OMX_ENABLED일 때만.
+    [입력] 없음
+    [출력] 없음 (lifespan이 취소할 때까지)
+    """
+    while True:
+        await asyncio.to_thread(run_omx_round)
+        await asyncio.sleep(settings.FMS_OMX_ROUND_SECONDS)
 
 
 @asynccontextmanager
@@ -39,6 +62,15 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
         conn.execute(text("SELECT 1"))
     notification_hub.start()
     log.info("startup", env=settings.ENV, db=settings.db_host_for_log())
+    background_tasks: list[asyncio.Task] = []
+    if settings.FMS_BASE_URL:
+        background_tasks.append(asyncio.create_task(_send_to_fms_forever(), name="fms-send"))
+        log.info("fms_send_enabled", fms_base_url=settings.FMS_BASE_URL, interval_seconds=settings.FMS_SEND_INTERVAL_SECONDS,
+                 robot_map=settings.FMS_ROBOT_MAP)
+        if settings.FMS_OMX_ENABLED:
+            background_tasks.append(asyncio.create_task(_run_omx_forever(), name="fms-omx"))
+            log.warning("fms_omx_enabled", omx_base_url=settings.OMX_BASE_URL,
+                        detail="FMS batches are loaded by the real OMX arm — the arm moves (FMS_OMX_ENABLED=1)")
     if settings.AUTH_DISABLED:
         log.warning("auth_disabled", acting_as=settings.AUTH_DISABLED_AS,
                     detail="JWT login is OFF — anyone on the network acts as this admin (AUTH_DISABLED=1)")
@@ -46,6 +78,10 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
         log.warning("robot_key_disabled", acting_as_robot_id=settings.ROBOT_KEY_DISABLED_AS,
                     detail="robot API key check is OFF — calls without a key act as this robot (ROBOT_KEY_DISABLED=1)")
     yield
+    for task in background_tasks:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
     await notification_hub.stop()
     engine.dispose()
     log.info("shutdown")
@@ -78,6 +114,7 @@ def create_app() -> FastAPI:
             {"name": "bedside-devices", "description": "병상 단말 관리 — 등록·병실·키 발급 (관리자, 2026-10-22)"},
             {"name": "bedside-access", "description": "병상 단말 전용 — 환자 비품 요청·\"받았습니다\". `X-Bedside-Api-Key`로 호출"},
             {"name": "robot-access", "description": "로봇 전용 — 배송 수령 확인. 간호사 토큰이 아니라 `X-Robot-Api-Key`(로봇별 키)로 호출"},
+            {"name": "fms", "description": "팀원 FMS → EMR 웹훅 — 로봇 상태·이벤트 (인증 없음, FMS API v1 연동 1단계, 2026-10-27)"},
         ],
         docs_url="/docs" if settings.ENV != "prod" else None,  # 운영에선 OpenAPI 비노출
         redoc_url=None,

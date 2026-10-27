@@ -104,6 +104,8 @@ const ERROR_GUIDES: Record<string, ErrorGuide> = {
   delivery_not_found: { message: '선택한 물품 신청을 찾을 수 없습니다.', hint: ALREADY_GONE_HINT },
   delivery_not_owned: { message: '다른 간호사의 신청은 변경하거나 취소할 수 없습니다.', hint: '본인이 등록한 신청만 바꿀 수 있습니다.' },
   delivery_not_reserved: { message: '로봇이 이미 출발했거나 끝난 신청이라 변경하거나 취소할 수 없습니다.', hint: '목록을 새로 불러왔습니다. 현재 상태를 확인해 주세요.' },
+  omx_sentence_disabled: { message: '로봇팔 명령은 색깔별 개수로 보내 주세요.', hint: '문장 명령은 임시 설정(OMX_COMMAND_FORMAT=sentence)을 켰을 때만 받습니다.' },
+  delivery_sent_to_fms: { message: '운반 로봇 쪽에 이미 전달된 신청이라 변경하거나 취소할 수 없습니다.', hint: '꼭 바꿔야 하면 관리자에게 문의해 주세요.' },
   scheduled_at_not_future: { message: '보낼 시간이 이미 지났습니다.', hint: '지금보다 뒤의 시각을 골라 다시 저장해 주세요.' },
   delivery_item_duplicate: { message: '같은 비품이 품목에 두 번 들어 있습니다.', hint: '한 줄로 합치고 수량을 조정해 주세요.' },
   stock_insufficient: { message: '재고가 부족해서 신청할 수 없습니다.', hint: '품목 선택 칸에 보이는 재고를 확인하고 수량을 줄여 주세요. 아무것도 바뀌지 않았습니다.' },

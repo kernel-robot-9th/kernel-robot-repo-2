@@ -121,6 +121,17 @@ ROBOT_SERVER_URL = "http://robot.test:8080"
 
 
 @pytest.fixture(autouse=True)
+def fms_off(monkeypatch) -> None:
+    """FMS·OMX 연동은 기본 끔 — 개발 스택 .env에 FMS_BASE_URL이 있어도 테스트는 예전 claim 흐름으로 (2026-10-27).
+    FMS 테스트(test_fms.py·test_fms_omx.py)는 자기 픽스처에서 다시 켠다."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "FMS_BASE_URL", "")
+    monkeypatch.setattr(settings, "FMS_OMX_ENABLED", False)
+    monkeypatch.setattr(settings, "OMX_COMMAND_FORMAT", "counts")   # .env의 임시 sentence와 상관없이 (10-27)
+
+
+@pytest.fixture(autouse=True)
 def robot_server(monkeypatch) -> dict:
     """가짜 로봇 서버(팀원 Pinky API GET /status) — 테스트는 네트워크에 나가지 않는다 (2026-10-23).
     돌려주는 dict를 고치면 응답이 바뀐다. robot_server["error"] = "..."이면 연결 실패(RobotServerError).

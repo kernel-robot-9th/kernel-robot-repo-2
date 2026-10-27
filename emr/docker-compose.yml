@@ -36,6 +36,9 @@ services:
       ROBOT_KEY_DISABLED: ${ROBOT_KEY_DISABLED:-0}   # 1이면 로봇 API 키 끔 — 키 없으면 로봇 1호로 (2026-10-22, 시연·시험용)
       VOICE_PARSER: ${VOICE_PARSER:-disabled}   # gemini면 음성 배송 예약 초안 켬 — 녹음이 Google 클라우드로 나간다 (2026-10-26)
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}       # .env에만 둔다
+      FMS_BASE_URL: ${FMS_BASE_URL:-}           # 팀원 FMS API v1 주소 — 비우면 끔 (2026-10-27, 계약 10장)
+      FMS_OMX_ENABLED: ${FMS_OMX_ENABLED:-0}    # 1이면 FMS 묶음을 실제 OMX로 싣는다 — 로봇팔이 움직인다 (2026-10-27, 계약 10.4)
+      OMX_COMMAND_FORMAT: ${OMX_COMMAND_FORMAT:-counts}   # sentence = 임시: 수량 무시하고 거즈 문장 (10-27, 실제 OMX가 문장만 받는 동안)
     ports:
       - "8000:8000"
     volumes:

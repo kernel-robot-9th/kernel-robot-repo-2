@@ -109,6 +109,29 @@ class RobotStatus(StrEnum):
     # [검토 필요] 상태 종류는 가정값이고 두 종류 공통이다. 매니퓰레이터에 delivering·charging이 맞지 않으므로 종류별 상태를 로봇 부서와 정해야 한다.
 
 
+class FmsOrderStatus(StrEnum):
+    """팀원 FMS 주문 상태 (FMS API v1 Order.status 그대로, 2026-10-27). fms_orders.status에 저장한다."""
+    QUEUED = "queued"          # 노는 핑키를 기다림 — 이때만 FMS가 취소를 받는다
+    ASSIGNED = "assigned"      # 묶음에 들어감 (batch_assigned)
+    LOADED = "loaded"          # 핑키에 실림
+    DELIVERED = "delivered"    # 병실에서 한 바퀴 끝 (order_delivered)
+    CANCELED = "canceled"
+    FAILED = "failed"
+
+
+class FmsBatchStep(StrEnum):
+    """FMS 묶음의 OMX 적재 단계 (2026-10-27, 연동 2단계 — services/fms_omx.py). PICK → PICKING → READY → CALLED → PINKY → LOADING → LOADED → DELIVERING."""
+    PICK = "pick"              # /command {"blue": N, "green": N}를 보낼 차례 (OMX가 비면)
+    PICKING = "picking"        # OMX가 집는 중 — /status로 끝났는지 본다
+    READY = "ready"            # OMX가 집어서 들었다 → FMS ready를 보낼 차례
+    CALLED = "called"          # Pinky가 약제실로 오는 중 (robot_at_pharmacy = 정밀 주차 끝을 기다림)
+    PINKY = "pinky"            # 정밀 주차 끝 → /pinky(내려놓기)를 보낼 차례
+    LOADING = "loading"        # OMX가 Pinky 위에 내려놓고 시작 자세로 돌아가는 중 — /status로 끝났는지 본다
+    LOADED = "loaded"          # 다 실었다 → FMS loaded를 보낼 차례
+    DELIVERING = "delivering"  # FMS에 loaded를 보냄 (끝)
+    FAILED = "failed"          # OMX 실패·거절 (error에 까닭, 사람이 봐야 함)
+
+
 class NotificationEvent(StrEnum):
     """실시간 알림(SSE) 종류 (2026-10-16). 알림은 저장하지 않는다 — 지금 부족한 비품 목록은 재고에서 바로 계산한다.
     재고 알림은 모든 간호사에게. 배송 단계 알림은 예약한 간호사 본인에게(payload의 recipient_nurse_id — 2026-10-19),

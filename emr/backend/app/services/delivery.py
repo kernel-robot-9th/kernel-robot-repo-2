@@ -20,6 +20,7 @@ from app.models.delivery import Delivery, DeliveryItem
 from app.models.enums import DeliveryEventType, DeliveryStatus, ReceiptMethod
 from app.models.location import Location
 from app.repositories.delivery import DeliveryRepository
+from app.repositories.fms_order import FmsOrderRepository
 from app.repositories.location import LocationRepository
 from app.repositories.supply import SupplyRepository
 from app.schemas.delivery import (
@@ -41,6 +42,7 @@ class DeliveryService:
 
     def __init__(self, db: Session) -> None:
         self.repo = DeliveryRepository(db)
+        self.fms_orders = FmsOrderRepository(db)
         self.supplies = SupplyRepository(db)
         self.locations = LocationRepository(db)
         self.low_stock_notifier = LowStockNotifier(db)
@@ -182,11 +184,14 @@ class DeliveryService:
     def _get_reserved(self, delivery_id: int, nurse_id: int) -> Delivery:
         """본인 예약이고 reserved 상태인지 확인하고 반환.
         [입력] delivery_id / nurse_id
-        [출력] Delivery (reserved 아니면 Conflict — 로봇이 이미 맡았거나 끝난 예약)
+        [출력] Delivery (reserved 아니면 Conflict — 로봇이 이미 맡았거나 끝난 예약.
+        물품을 하나라도 FMS에 보냈으면 Conflict delivery_sent_to_fms — FMS 취소 연동 전까지, 2026-10-27)
         """
         delivery = self.get(delivery_id, nurse_id, lock=True)
         if delivery.status != DeliveryStatus.RESERVED:
             raise Conflict(f"delivery {delivery_id} is {delivery.status}; only reserved can be changed", code="delivery_not_reserved")
+        if self.fms_orders.delivery_has_orders(delivery.id):
+            raise Conflict(f"delivery {delivery_id} is already sent to FMS", code="delivery_sent_to_fms")
         return delivery
 
     def _validate_scheduled_at(self, scheduled_at: datetime) -> None:

@@ -20,6 +20,7 @@ from datetime import UTC, datetime
 import structlog
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.exceptions import Conflict, Forbidden, NotFound
 from app.models.delivery import RECEIPT_MARKER_ID_MAX, RECEIPT_MARKER_ID_MIN, RECEIPT_WAIT_SECONDS, Delivery
 from app.models.enums import DeliveryEventType, DeliveryFailureReason, DeliveryRequester, DeliveryStatus, ReceiptMethod, RobotType
@@ -96,6 +97,8 @@ class DispatchService:
         active = self.repo.get_active_for_robot(robot.id)
         if active is not None:
             return ClaimResult(active)
+        if settings.FMS_BASE_URL:   # FMS 연동 중(2026-10-27) — 배차는 FMS가. 예전 claim이 같은 배송을 함께 바꾸지 않게 막는다
+            return ClaimResult(None)
         now = datetime.now(UTC)
         # 줄 것이 있을 때만 로봇 서버에 묻는다. 묻는 동안(최대 ROBOT_SERVER_TIMEOUT_SECONDS) 배송 행을 잠가 두지 않으려고 먼저 잠금 없이 본다
         if self.repo.lock_next_claimable(now, lock=False) is None:

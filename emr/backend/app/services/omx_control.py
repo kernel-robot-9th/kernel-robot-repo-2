@@ -3,11 +3,11 @@
 # 역할   : 관리자가 EMR에서 OMX(로봇팔)에 명령을 보내고 상태를 본다 (2026-10-26)
 # 작성일 : 2026-10-26
 # 구성   :
-#   - OmxControlService  send_command(command, admin_id) — request_id를 만들어 OMX POST /command
+#   - OmxControlService  send_command(counts, admin_id) — request_id를 만들어 OMX POST /command {"blue": n, "green": n}
 #                        status() — OMX GET /status 그대로
 #   - new_request_id()   "emr-20261026T063012-1a2b3c" — 완료 신호 주소(/robot/{request_id}/end-point) 규칙에 맞는 값
 # OMX가 끝나면 같은 request_id로 GET /api/v1/robot/{request_id}/end-point를 부른다(services/omx_signal.py).
-# /command는 예전 형식(명령 문장). DB는 쓰지 않는다 — 보낸 명령은 서버 로그(omx_command_sent)에만
+# /command는 색깔별 개수(2026-10-27, 예전 형식 = 명령 문장). DB는 쓰지 않는다 — 보낸 명령은 서버 로그(omx_command_sent)에만
 # =============================================================================
 from __future__ import annotations
 
@@ -19,7 +19,8 @@ import structlog
 
 from app.clients.omx import OmxRejected, OmxUnavailable, get_status, send_command
 from app.core.config import settings
-from app.core.exceptions import Conflict, ServiceUnavailable
+from app.core.exceptions import BadRequest, Conflict, ServiceUnavailable
+from app.services.omx_items import omx_command
 
 log = structlog.get_logger(__name__)
 
@@ -34,16 +35,22 @@ def new_request_id(now: datetime) -> str:
 class OmxControlService:
     """OMX 명령·상태. OMX 응답이 없으면 503 omx_unavailable, 거절(4xx)이면 409 omx_rejected."""
 
-    def send_command(self, command: str, admin_id: int) -> tuple[str, datetime, dict[str, Any]]:
-        """명령 문장을 OMX에 보낸다 — 로봇팔이 움직인다.
-        [입력] command: 예 "pick and place green gauze" / admin_id: 보낸 관리자(로그용)
+    def send_command(self, command: dict[str, int] | str, admin_id: int) -> tuple[str, datetime, dict[str, Any]]:
+        """OMX에 명령을 보낸다 — 로봇팔이 움직인다.
+        [입력] command: 색깔별 개수 {"blue": 1, "green": 0}(설정 OMX_COMMAND_FORMAT을 따름)
+        또는 문장(임시 — OMX_COMMAND_FORMAT=sentence일 때만 그대로 보냄, 아니면 BadRequest omx_sentence_disabled)
+        / admin_id: 보낸 관리자(로그용)
         [출력] (request_id, 보낸 시각, OMX 응답 JSON)
         """
+        if isinstance(command, str) and settings.OMX_COMMAND_FORMAT != "sentence":
+            # 문장은 임시 스위치를 켰을 때만 (10-27 사용자: "합의한 내용으로 변경" — 기본은 개수 형식)
+            raise BadRequest("sentence commands are off; send {\"blue\": n, \"green\": n}", code="omx_sentence_disabled")
         sent_at = datetime.now(UTC)
         request_id = new_request_id(sent_at)
-        attempt = log.bind(request_id=request_id, admin_id=admin_id, command=command)
+        to_omx = command if isinstance(command, str) else omx_command(command)
+        attempt = log.bind(request_id=request_id, admin_id=admin_id, command=command, sent_command=to_omx)
         try:
-            response = send_command(settings.OMX_BASE_URL, command, request_id, settings.OMX_TIMEOUT_SECONDS)
+            response = send_command(settings.OMX_BASE_URL, to_omx, request_id, settings.OMX_TIMEOUT_SECONDS)
         except OmxUnavailable as error:
             attempt.warning("omx_command_failed", error=str(error))
             raise ServiceUnavailable(str(error), code="omx_unavailable") from error

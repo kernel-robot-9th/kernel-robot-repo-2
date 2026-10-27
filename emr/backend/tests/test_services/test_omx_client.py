@@ -1,4 +1,4 @@
-"""OMX 클라이언트 — POST /command(예전 형식)·GET /status, 실패를 OmxUnavailable·OmxRejected로 바꾸는지 (2026-10-26). DB 불필요, 네트워크 안 나감."""
+"""OMX 클라이언트 — POST /command(색깔별 개수, 2026-10-27)·GET /status, 실패를 OmxUnavailable·OmxRejected로 바꾸는지 (2026-10-26). DB 불필요, 네트워크 안 나감."""
 from __future__ import annotations
 
 import httpx
@@ -10,7 +10,7 @@ from app.clients.omx import OmxRejected, OmxUnavailable, get_status, send_comman
 BASE_URL = "http://omx.test:8000/"
 
 
-def test_send_command_posts_sentence_and_request_id(monkeypatch):
+def test_send_command_posts_color_counts_and_request_id(monkeypatch):
     called: list[tuple[str, dict]] = []
 
     def _post(url: str, json: dict, timeout: float) -> httpx.Response:
@@ -18,8 +18,8 @@ def test_send_command_posts_sentence_and_request_id(monkeypatch):
         return httpx.Response(200, json={"accepted": True, "request_id": json["request_id"]})
 
     monkeypatch.setattr(omx.httpx, "post", _post)
-    assert send_command(BASE_URL, "pick and place green gauze", "emr-1", 3.0) == {"accepted": True, "request_id": "emr-1"}
-    assert called == [("http://omx.test:8000/command", {"command": "pick and place green gauze", "request_id": "emr-1"})]
+    assert send_command(BASE_URL, {"blue": 1, "green": 2}, "emr-1", 3.0) == {"accepted": True, "request_id": "emr-1"}
+    assert called == [("http://omx.test:8000/command", {"command": {"blue": 1, "green": 2}, "request_id": "emr-1"})]
 
 
 def test_get_status_joins_url(monkeypatch):
@@ -37,7 +37,7 @@ def test_get_status_joins_url(monkeypatch):
 def test_4xx_is_rejected_with_detail(monkeypatch):
     monkeypatch.setattr(omx.httpx, "post", lambda url, json, timeout: httpx.Response(409, json={"detail": "busy"}))
     with pytest.raises(OmxRejected) as caught:
-        send_command(BASE_URL, "x", "emr-1", 3.0)
+        send_command(BASE_URL, {"blue": 1, "green": 0}, "emr-1", 3.0)
     assert caught.value.status_code == 409 and caught.value.detail == "busy"
 
 
@@ -58,4 +58,4 @@ def test_connection_failure_is_unavailable(monkeypatch):
 
     monkeypatch.setattr(omx.httpx, "post", _post)
     with pytest.raises(OmxUnavailable):
-        send_command(BASE_URL, "x", "emr-1", 3.0)
+        send_command(BASE_URL, {"blue": 1, "green": 0}, "emr-1", 3.0)

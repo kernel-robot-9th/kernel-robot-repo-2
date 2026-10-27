@@ -6,6 +6,7 @@
 #   - DeliveryRepository  get_with_items, list_by_nurse, replace_items
 #                         배정·진행 (2026-10-20): get_active_for_robot, lock_next_claimable, arrived_receipt_marker_ids
 #                         병상 요청 (2026-10-22): get_active_for_bedside, list_for_bedside
+#                         FMS 보내기 (2026-10-27): lock_due_for_fms
 # =============================================================================
 from __future__ import annotations
 
@@ -132,6 +133,28 @@ class DeliveryRepository(BaseRepository[Delivery]):
             # of=Delivery: 장소 행까지 잠그면 장소를 수정 중일 때 배송이 조용히 건너뛰어진다
             statement = statement.with_for_update(skip_locked=True, of=Delivery)
         return self.db.scalar(statement)
+
+    def lock_due_for_fms(self, now: datetime, limit: int = 50) -> list[Delivery]:
+        """FMS로 보낼 배송을 잠가서 가져온다 (2026-10-27): reserved이고 신청 시각이 지났고 목적지에 robot_dest(FMS 방 번호)가 있는 것,
+        이른 순. 보내는 동안 간호사 변경·취소가 끼어들지 않게 잠근다 — 끝나면 변경·취소는 delivery_sent_to_fms로 막힌다.
+        이미 다 보낸 배송도 batch_assigned 전까지 reserved라 함께 나온다(서비스가 물품별로 건너뛴다).
+        [입력] now: 지금 시각 / limit: 한 회차에 볼 배송 수
+        [출력] list[Delivery]: 품목·목적지 로드됨
+        """
+        statement = (
+            select(Delivery)
+            .join(Location, Delivery.destination_location_id == Location.id)
+            .options(*_with_details())
+            .where(
+                Delivery.status == DeliveryStatus.RESERVED,
+                Delivery.scheduled_at <= now,
+                Location.robot_dest.is_not(None),
+            )
+            .order_by(Delivery.scheduled_at, Delivery.id)
+            .limit(limit)
+            .with_for_update(skip_locked=True, of=Delivery)
+        )
+        return list(self.db.scalars(statement))
 
     def arrived_receipt_marker_ids(self) -> set[int]:
         """지금 도착(arrived)해 있는 배송들이 쓰는 일회용 마커 번호.
