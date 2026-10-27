@@ -108,10 +108,11 @@ class DeliveryRepository(BaseRepository[Delivery]):
         )
         return list(self.db.scalars(statement))
 
-    def lock_next_claimable(self, now: datetime, map_id: int, lock: bool = True) -> Delivery | None:
-        """로봇이 가져갈 다음 배송을 잠가서 가져온다: reserved이고 예약 시각이 지났고, 목적지에 그 맵의 좌표가 있는 것 중
+    def lock_next_claimable(self, now: datetime, lock: bool = True) -> Delivery | None:
+        """로봇이 가져갈 다음 배송을 잠가서 가져온다: reserved이고 예약 시각이 지났고, 목적지에 로봇 목적지 이름(robot_dest)이 있는 것 중
         예약 시각이 가장 이른(같으면 id 작은) 한 건. 다른 로봇이 잠근 행은 건너뛴다(SKIP LOCKED).
-        [입력] now: 지금 시각(파이썬 — 테스트 트랜잭션에서는 DB now()가 고정이라) / map_id: 로봇 복귀 장소의 맵
+        2026-10-27: 복귀 장소의 맵·좌표 조건을 없앴다 — 팀원 FMS는 /goto {dest}로 가므로 robot_dest가 있으면 갈 수 있다
+        [입력] now: 지금 시각(파이썬 — 테스트 트랜잭션에서는 DB now()가 고정이라)
         / lock: False면 잠그지 않고 있는지만 본다 (로봇 서버에 묻기 전, 2026-10-23)
         [출력] Delivery | None
         """
@@ -122,8 +123,7 @@ class DeliveryRepository(BaseRepository[Delivery]):
             .where(
                 Delivery.status == DeliveryStatus.RESERVED,
                 Delivery.scheduled_at <= now,
-                Location.map_id == map_id,
-                Location.map_x_m.is_not(None),
+                Location.robot_dest.is_not(None),
             )
             .order_by(Delivery.scheduled_at, Delivery.id)
             .limit(1)

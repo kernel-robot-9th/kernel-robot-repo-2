@@ -4,7 +4,7 @@
 # 작성일 : 2026-10-14
 # 구성   :
 #   - Robot  api_key_hash·api_key_issued_at: 수령 확인 API용 로봇별 키 (2026-10-19)
-#            home_location_id: 배송을 마치거나 실패하면 돌아갈 복귀 장소 (2026-10-20)
+#            home_location_id: 예전 복귀 장소 (2026-10-20) — 2026-10-27부터 쓰지 않음(사용자 결정: 팀원 FMS가 정함). 마이그레이션 없이 칸만 남김
 #            robot_server_url: 로봇 서버(팀원 Pinky API) 주소 — claim 때 EMR이 /status를 묻는다 (2026-10-23)
 #            status_report: 그때 받은 마지막 배터리·오염도 (robot_status_reports, 2026-10-23)
 # =============================================================================
@@ -43,9 +43,10 @@ class Robot(TimestampMixin, Base):
     # 로봇이 EMR API(수령 확인)를 부를 때 쓰는 키의 sha256. 평문은 발급 응답에서 한 번만 보여 준다. NULL=키 없음
     api_key_hash: Mapped[str | None] = mapped_column(String(64))
     api_key_issued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    # 복귀 장소. 복귀 장소로 쓰는 장소는 지울 수 없다(RESTRICT, 서비스가 409 location_is_robot_home). NULL=미지정
     # 로봇 서버(팀원 Pinky API) 주소, 예: http://192.168.129.107:8080. NULL이면 상태를 물을 수 없어 배송을 맡지 않는다 (2026-10-23)
     robot_server_url: Mapped[str | None] = mapped_column(String(255))
+    # 예전 복귀 장소 — 2026-10-27부터 API·claim이 쓰지 않는다. 칸은 마이그레이션 번호(보관 브랜치 0015·0016)와 겹치지 않으려고 남김.
+    # 장소를 지울 때 LocationRepository.clear_robot_home이 비운다(RESTRICT FK)
     home_location_id: Mapped[int | None] = mapped_column(
         ForeignKey("locations.id", name="fk_robots_home_location_id", ondelete="RESTRICT")
     )

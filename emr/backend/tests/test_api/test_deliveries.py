@@ -38,7 +38,7 @@ def test_delivery_create_list_get(client, seed, auth_headers):
     assert [r["id"] for r in client.get(URL, headers=auth_headers).json()] == [later["id"], created["id"]]  # 빠른 순
     assert client.get(f"{URL}/{created['id']}", headers=auth_headers).json()["destination_location"] == {
         "id": seed["room_301"].id, "name": "301호", "map_x_m": 12.5, "map_y_m": 3.2, "map_yaw_rad": 1.57,
-        "map_id": seed["ward_map"].id, "robot_dest": None, "robot_only": False, "map": {"id": seed["ward_map"].id, "name": "3병동", "file_name": "ward3.yaml", "resolution_m_per_pixel": 0.05, "origin_x_m": -10.0, "origin_y_m": -10.0, "origin_yaw_rad": 0.0, "has_image": False, "image_width_px": None, "image_height_px": None, "image_file_name": None, "updated_at": ANY}}
+        "map_id": seed["ward_map"].id, "robot_dest": "ROOM_301", "robot_only": False, "map": {"id": seed["ward_map"].id, "name": "3병동", "file_name": "ward3.yaml", "resolution_m_per_pixel": 0.05, "origin_x_m": -10.0, "origin_y_m": -10.0, "origin_yaw_rad": 0.0, "has_image": False, "image_width_px": None, "image_height_px": None, "image_file_name": None, "updated_at": ANY}}
     assert client.get(f"{URL}/999999", headers=auth_headers).status_code == 404
 
 

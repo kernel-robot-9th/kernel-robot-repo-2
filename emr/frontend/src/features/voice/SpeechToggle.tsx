@@ -12,10 +12,10 @@ export function SpeechToggle() {
     <button
       type="button"
       onClick={() => setSpeechEnabled(!enabled)}
-      title={enabled ? '안내 음성 끄기' : '배송 알림을 소리로 읽어 줍니다'}
+      title={enabled ? '알림 소리 끄기' : '배송 알림을 소리로 읽어 줍니다'}
       className={`rounded px-2 py-1 ${enabled ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:bg-slate-100'}`}
     >
-      {enabled ? '🔊 안내 음성 켜짐' : '🔇 안내 음성'}
+      {enabled ? '🔊 알림 켜짐' : '🔇 알림 꺼짐'}
     </button>
   )
 }

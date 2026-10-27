@@ -55,18 +55,17 @@ reserved ──(로봇 claim)──▶ dispatched ──(로봇 도착 보고)�
 ```json
 {
   "robot": {"id": 1, "name": "배송로봇 1호", "robot_type": "amr"},
-  "home_location": {"id": 2, "name": "간호사스테이션", "map_id": 4, "map_x_m": -0.6, "map_y_m": -1.55, "map_yaw_rad": 0.0},
   "active_delivery": null,
   "receipt_wait_seconds": 300
 }
 ```
-- `home_location`: 관리자가 정한 복귀 장소. 없거나 좌표가 없으면 `null`.
+- (2026-10-27 없앰) `home_location` — 복귀 장소는 EMR이 정하지 않는다(사용자 결정: 어디로 돌아갈지는 팀원 FMS가 정함). DB 칸만 남아 있고 API에는 없다.
 - `active_delivery`: 이 로봇이 맡은 `dispatched`·`arrived` 배송(3.4 형식) 또는 `null` — 실행기가 재시작했을 때 이어서 한다.
 
 ### 3.2 `POST /robot/deliveries/claim` — 배송 가져가기 (실행기가 3초마다)
 - 본문 없음. **멱등**: 이 로봇이 이미 `dispatched`·`arrived` 배송을 갖고 있으면 그것을 200으로 돌려준다(응답을 잃어도 다시 부르면 된다).
 - 없으면 다음 조건 중 `scheduled_at`이 가장 이른(같으면 id 작은) 한 건을 `dispatched`로 바꿔 200:
-  `status = reserved`, `scheduled_at <= 지금`, 목적지에 맵 좌표가 있고, 목적지 맵 = 복귀 장소 맵.
+  `status = reserved`, `scheduled_at <= 지금`, 목적지에 **로봇 목적지 이름(`robot_dest`)이 있음**(2026-10-27 — 전에는 '맵 좌표가 있고 복귀 장소와 같은 맵').
   여러 로봇이 동시에 불러도 한 건은 한 로봇에만 간다(`FOR UPDATE SKIP LOCKED`).
 - 줄 배송이 있으면 그 전에 **EMR이 로봇 서버에 지금 상태를 묻는다**(3.6, 2026-10-23). 아래 중 하나면 배송을 주지 않고 **204** + 헤더 `X-Claim-Skip-Reason`:
   `robot_server_not_set`(로봇 서버 주소 없음) · `robot_server_unreachable`(2초 안에 응답 없음·200 아님) · `robot_status_incomplete`(`battery_percent`·`contamination_percent` 0~100이 없음) · `robot_not_ready`(`localized`·`nav2_ready`가 true가 아니거나 `state`가 `idle`이 아님) · `robot_battery_low`(배터리 30 % 미만) · `robot_contamination_high`(오염도 70 초과).
@@ -76,7 +75,6 @@ reserved ──(로봇 claim)──▶ dispatched ──(로봇 도착 보고)�
 | 오류 | 코드 |
 |---|---|
 | 403 | `robot_not_amr` — AMR만 배송을 맡는다 |
-| 409 | `robot_home_not_set` — 복귀 장소가 없거나 좌표가 없음 |
 
 ### 3.3 `POST /robot/deliveries/{id}/progress` — 진행 보고
 ```json
@@ -112,7 +110,7 @@ reserved ──(로봇 claim)──▶ dispatched ──(로봇 도착 보고)�
   "receipt_method": "marker"
 }
 ```
-- `destination`·`home_location`의 `robot_dest` (2026-10-22): 팀원 Pinky API 목적지 이름(`GET /dests`). 실행기가 `POST /goto {"dest"}`로 쓴다. 채우기: `emr/backend/scripts/import_pinky_dests.py`(Pinky 목적지 → EMR 맵 "Pinky 아레나"·장소, 다시 돌리면 갱신).
+- `destination`의 `robot_dest` (2026-10-22): 팀원 Pinky API 목적지 이름(`GET /dests`). 실행기가 `POST /goto {"dest"}`로 쓴다. 채우기: `emr/backend/scripts/import_pinky_dests.py`(Pinky 목적지 → EMR 맵 "Pinky 아레나"·장소, 다시 돌리면 갱신).
 - `receipt_deadline_at` = `arrived_at + receipt_wait_seconds` (arrived일 때만).
 - `receipt_method` (2026-10-22): `button` = 사람이 화면에서 "받았습니다"로 수령 — 환자(병상) 배송은 항상(8장), 간호사 배송은 `NURSE_RECEIPT_METHOD=button`(지금 기본, 5장) / `marker` = 간호사 배송, 로봇이 일회용 마커를 읽어 `receipt` 호출(`NURSE_RECEIPT_METHOD=marker`). 병상 배송에 로봇이 `receipt`를 부르면 409 `delivery_receipt_by_button`.
 - 넣지 않는 것: 일회용 마커, 간호사 이름·id.
@@ -161,7 +159,7 @@ Pinky API는 **인증이 없다** — 지금은 그대로 진행(사용자 결�
 
 **주행은 비동기**(2026-10-22): 실행기는 주행을 보내고(`/goto` 202 → 작업 id) 기다리지 않는다. 반복마다(`navigation_poll_s`, 1초) `GET /jobs/{id}`를 한 번 보고, 끝나면 다음 단계(도착 보고·복귀)로 간다. 다른 작업 중(409)이면 다음 반복에서 다시 보낸다. 보내기 전에 `GET /plan`으로 갈 거리가 없으면(이미 그 목적지에 있음) `/goto` 없이 도착으로 본다. 연결 점검은 `executor --check`(GET만, 로봇을 움직이지 않음). **주행 제한 시간은 없다**(`navigation_timeout_s: null`, 사용자 결정) — 로봇 작업이 끝날 때까지 기다리고, 숫자를 넣으면 넘을 때 취소·`navigation_failed`.
 
-1. 시작: `GET /robot/me`. 복귀 장소가 없으면 기다리며 경고. `active_delivery`가 있으면 그 단계부터 이어서.
+1. 시작: `GET /robot/me`. `active_delivery`가 있으면 그 단계부터 이어서. (복귀 장소 확인은 2026-10-27 없앰 — 실행기도 10-23 삭제)
 2. 출발 전: (`ros`) 로봇 `/map`(해상도·원점·크기)이 EMR 맵과 같은지 확인. 다르면 배송을 맡지 않는다. (`pinky_api`) claim 전마다 `/status` 확인.
 3. 3초마다 `claim`(주행 중에는 하지 않음). 받은 배송의 목적지가 금지 장소(지금 없음)면 바로 `failed destination_blocked`(움직이지 않음). `pinky_api`에서 로봇 목적지가 없는 장소, Pinky가 못 간다는 곳(`/goto` 400)도 `destination_blocked`(움직이지 않음, 복귀 없음). Pinky가 다른 작업 중(409)이 30초 넘게 이어지면 `robot_error`.
 4. 주행 성공 → `progress arrived`. 실패(Pinky 작업 `failed` — 구간 결과 `blocked·contact·timeout·lost`)·(제한 시간을 정했을 때) 시간 초과 → `failed navigation_failed` → 복귀.
@@ -187,8 +185,8 @@ Pinky API는 **인증이 없다** — 지금은 그대로 진행(사용자 결�
 
 ## 6. 관리자
 
-- 로봇 탭에서 로봇별 **복귀 장소**를 고른다(`PATCH /robots/{id}` `home_location_id`).
-- 진행 중 배송이 있는 로봇은 삭제할 수 없다(409 `robot_has_active_delivery`). 복귀 장소로 쓰는 장소는 삭제할 수 없다(409 `location_is_robot_home`).
+- (2026-10-27 없앰) 로봇별 복귀 장소 — 로봇 탭 칸과 `PATCH /robots/{id}` `home_location_id`를 뺐다. 보내도 무시한다.
+- 진행 중 배송이 있는 로봇은 삭제할 수 없다(409 `robot_has_active_delivery`). 예전 복귀 장소로 남은 장소도 지울 수 있다(EMR이 로봇의 값을 비우고 지움 — `location_is_robot_home`은 없앰).
 
 ## 7. 열린 질문
 

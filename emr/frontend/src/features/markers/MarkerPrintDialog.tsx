@@ -32,12 +32,12 @@ export function MarkerPrintDialog({ nurse, onClose }: { nurse: Nurse & { aruco_m
       <div className="space-y-4 p-6">
         <div className="flex flex-col items-center gap-2 rounded border border-dashed border-slate-300 px-8 py-6 print:border-slate-400">
           <h2 id="marker-dialog-title" className="text-lg font-semibold">{nurse.name}</h2>
-          <p className="font-mono text-sm text-slate-600">{nurse.employee_no} · 마커 {nurse.aruco_marker_id}번 (4x4_50)</p>
+          <p className="font-mono text-sm text-slate-600">{nurse.employee_no} · 신분증 인식표 {nurse.aruco_marker_id}번</p>
           <ArucoMarker arucoMarkerId={nurse.aruco_marker_id} markerSideMm={PRINT_MARKER_SIDE_MM} />
         </div>
         <p className="max-w-sm text-xs text-slate-500 print:hidden">
-          인쇄 설정에서 배율을 <b>100%(실제 크기)</b>로 두세요. 마커의 검정 정사각형 한 변이 {PRINT_MARKER_SIDE_MM}mm여야 합니다.
-          마커 둘레의 흰 여백은 자르지 마세요.
+          인쇄 설정에서 배율을 <b>100%(실제 크기)</b>로 두세요. 인식표의 검정 정사각형 한 변이 {PRINT_MARKER_SIDE_MM}mm여야 합니다.
+          인식표 둘레의 흰 여백은 자르지 마세요.
         </p>
         <div className="flex justify-end gap-2 print:hidden">
           <Button variant="secondary" onClick={onClose}>닫기</Button>

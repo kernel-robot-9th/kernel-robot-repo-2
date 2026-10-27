@@ -33,27 +33,26 @@ export function describeReceivedItems(received: Pick<DeliveryReceivedEvent, 'ite
  *  [입력] event / stage: SSE data / myNurseId: 로그인한 간호사 [출력] 없음 */
 function showDeliveryToast(event: string, stage: DeliveryStageEvent, myNurseId: number | undefined): void {
   const what = `${stage.destination_location_name} 배송(${describeReceivedItems(stage)})`
-  const robot = stage.robot_name ?? '로봇'
   if (event === 'delivery_dispatched') {
-    showToast('로봇 출발', `${robot}이(가) ${what}을 가지고 출발했습니다.`, 'info')
-    speak(`${stage.destination_location_name} 배송 로봇이 출발했습니다.`)
+    showToast('운반 로봇 출발', `운반 로봇이 ${what}을 가지고 출발했습니다.`, 'info')   // 로봇 이름·"이(가)" 대신 '운반 로봇' (2026-10-27)
+    speak(`${stage.destination_location_name} 운반 로봇이 출발했습니다.`)
   } else if (event === 'delivery_arrived') {
     const howToReceive = stage.receipt_method === 'marker'
-      ? '화면에 뜬 수령 마커를 로봇 카메라에 보여 주세요.'
+      ? '화면에 뜬 수령 마커를 운반 로봇 카메라에 보여 주세요.'
       : "물건을 받은 뒤 화면의 '받았습니다'를 눌러 주세요."   // 2026-10-22 기본
-    showToast('로봇 도착', `${robot}이(가) ${stage.destination_location_name}에 도착했습니다. ${howToReceive}`, 'info')
-    speak(`${stage.destination_location_name}에 배송 로봇이 도착했습니다. ${stage.receipt_method === 'marker' ? '수령 마커를 로봇 카메라에 보여 주세요.' : '물건을 받은 뒤 받았습니다를 눌러 주세요.'}`)
+    showToast('운반 로봇 도착', `운반 로봇이 ${stage.destination_location_name}에 도착했습니다. ${howToReceive}`, 'info')
+    speak(`${stage.destination_location_name}에 운반 로봇이 도착했습니다. ${stage.receipt_method === 'marker' ? '수령 마커를 운반 로봇 카메라에 보여 주세요.' : '물건을 받은 뒤 받았습니다를 눌러 주세요.'}`)
   } else if (event === 'delivery_received') {
-    showToast('배송 수령 완료', `${what} 수령이 확인되었습니다. ${robot}이(가) 돌아갑니다.`, 'success')
+    showToast('받음 확인', `${what}을 받았습니다.`, 'success')   // 다음 행선지는 팀원 FMS가 정한다 — '돌아갑니다'는 뺌
   } else if (event === 'delivery_failed') {
-    const reason = stage.failure_reason ? DELIVERY_FAILURE_REASON_LABEL[stage.failure_reason] : '로봇이 실패를 보고했습니다'
+    const reason = stage.failure_reason ? DELIVERY_FAILURE_REASON_LABEL[stage.failure_reason] : '운반 로봇이 실패를 보고했습니다.'   // 문구는 마침표로 끝난다
     if (stage.bedside_name) {   // 병상(환자) 요청 배송 — 관리자에게만 온다 (2026-10-22)
-      showToast('환자 요청 배송 실패 (관리자 알림)', `#${stage.delivery_id} ${stage.bedside_name} 요청 ${what}: ${reason}. 재고는 되돌렸습니다.`, 'error')
+      showToast('환자 요청 배송 실패 (관리자 알림)', `#${stage.delivery_id} ${stage.bedside_name} 요청 ${what}: ${reason} 재고는 되돌렸습니다.`, 'error')
       return
     }
     const mine = myNurseId === undefined || myNurseId === stage.recipient_nurse_id
-    showToast(mine ? '배송 실패' : '배송 실패 (관리자 알림)', `#${stage.delivery_id} ${what}: ${reason}. 재고는 되돌렸습니다.`, 'error')
-    if (mine) speak(`${stage.destination_location_name} 배송이 실패했습니다. ${reason}.`)
+    showToast(mine ? '배송 실패' : '배송 실패 (관리자 알림)', `#${stage.delivery_id} ${what}: ${reason} 재고는 되돌렸습니다.`, 'error')
+    if (mine) speak(`${stage.destination_location_name} 배송이 실패했습니다. ${reason}`)
   }
 }
 

@@ -54,8 +54,8 @@ export function Table({ children }: { children: ReactNode }) {
     </div>
   )
 }
-export const Th = ({ children }: { children: ReactNode }) => (
-  <th className="border-b border-slate-200 bg-slate-100 px-3 py-2 text-left font-medium text-slate-600">{children}</th>
+export const Th = ({ children, className = '' }: { children: ReactNode; className?: string }) => (
+  <th className={`border-b border-slate-200 bg-slate-100 px-3 py-2 text-left font-medium text-slate-600 ${className}`}>{children}</th>
 )
 export const Td = ({ children, className = '' }: { children: ReactNode; className?: string }) => (
   <td className={`border-b border-slate-100 px-3 py-2 ${className}`}>{children}</td>

@@ -32,7 +32,7 @@ export interface TokenOut {
 }
 /** admin: 간호사 관리·장소·맵·로봇 변경 가능 / nurse: 일반 (비품·배송 예약은 모두 가능) */
 export type NurseRole = 'admin' | 'nurse'
-export const NURSE_ROLE_LABEL: Record<NurseRole, string> = { admin: '관리자', nurse: '일반' }
+export const NURSE_ROLE_LABEL: Record<NurseRole, string> = { admin: '관리자', nurse: '간호사' }   // 2026-10-27 '일반' → '간호사'
 
 export interface Nurse {
   id: number
@@ -110,6 +110,8 @@ export interface Location {
 }
 
 export type RobotType = 'amr' | 'manipulator'
+/** 화면 이름 (2026-10-27 사용자 결정): amr = 운반 로봇(Pinky, 물품을 실어 나름) · manipulator = 탑재 로봇(OMX, 물품을 싣는 팔) */
+export const ROBOT_TYPE_LABEL: Record<RobotType, string> = { amr: '운반 로봇', manipulator: '탑재 로봇' }
 export type RobotStatus = 'idle' | 'delivering' | 'charging' | 'maintenance'
 export interface Robot {
   id: number
@@ -119,8 +121,6 @@ export interface Robot {
   /** 로봇 전용 API(/robot/...)용 키가 발급되어 있는지. 키 자체는 발급 응답에서 한 번만 나온다 */
   has_api_key: boolean
   api_key_issued_at: string | null
-  /** 복귀 장소 (2026-10-20). null이면 배송을 맡지 않는다 */
-  home_location_id: number | null
   /** 로봇 서버(팀원 Pinky API) 주소, 예: http://192.168.129.107:8080. claim 때 EMR이 GET /status로 상태를 묻는다. null이면 배송을 맡지 않는다 (2026-10-23) */
   robot_server_url: string | null
   /** claim 때 로봇 서버에서 받은 마지막 배터리·오염도 (2026-10-23). null이면 아직 받은 적 없음 */
@@ -239,18 +239,18 @@ export type DeliveryUpdate = Partial<DeliveryCreate>
 
 /** 한국어 라벨 — 화면 여러 곳에서 공유 */
 export const DELIVERY_STATUS_LABEL: Record<DeliveryStatus, string> = {
-  reserved: '예약됨',
+  reserved: '신청됨',
   cancelled: '취소',
   dispatched: '출발',
   arrived: '도착 · 수령 대기',
-  received: '수령',
+  received: '받음',   // 2026-10-27 화면 문구와 맞춤
   failed: '실패',
 }
 export const DELIVERY_FAILURE_REASON_LABEL: Record<DeliveryFailureReason, string> = {
-  navigation_failed: '로봇이 목적지까지 가지 못했습니다',
-  not_received: '도착 후 수령하지 않았습니다',
-  destination_blocked: '지금은 로봇이 갈 수 없는 장소입니다',
-  robot_error: '로봇 오류',
+  navigation_failed: '운반 로봇이 가지 못하였습니다. 다시 신청해 주세요.',   // 문구 2026-10-27 사용자 결정 — 모두 마침표로 끝난다
+  not_received: '아무도 받지 않았습니다.',
+  destination_blocked: '지금은 운반 로봇이 갈 수 없는 장소입니다.',
+  robot_error: '운반 로봇에 문제가 생겼습니다. 비상 정지합니다.',
 }
 // ---------- 배송 기록 (2026-10-21, 로드맵 4단계) ----------
 /** 간호사: 예약·변경·취소 / 로봇: 출발·도착·수령·실패. 상태가 실제로 바뀐 때만 남는다 (거부·같은 보고 반복은 없음) */
@@ -310,12 +310,12 @@ export interface DeliveryEventFilters {
   until?: string
 }
 export const DELIVERY_EVENT_LABEL: Record<DeliveryEventType, string> = {
-  reserved: '예약',
+  reserved: '신청',
   updated: '변경',
   cancelled: '취소',
   dispatched: '출발',
   arrived: '도착',
-  received: '수령',
+  received: '받음',   // 2026-10-27 화면 문구와 맞춤
   failed: '실패',
 }
 

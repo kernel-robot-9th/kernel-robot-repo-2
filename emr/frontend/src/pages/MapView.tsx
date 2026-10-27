@@ -13,6 +13,7 @@ import { useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import { apiUrl } from '../api/client'
 import { useIsAdmin, useLocations, useMaps, useRobots } from '../api/hooks'
+import { ROBOT_TYPE_LABEL } from '../api/types'
 import { ROBOT_STATUS_LABEL } from '../api/types'
 import { Badge, LoadError, PageTitle, Select } from '../components/ui'
 import { LocationPicker } from '../features/maps/LocationPicker'
@@ -73,7 +74,7 @@ export function MapView() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <PageTitle>맵</PageTitle>
+        <PageTitle>병원 지도</PageTitle>
         <div className="w-64">
           <Select value={map?.id ?? ''} onChange={e => { setPicked(null); setMapId(e.target.value === '' ? '' : Number(e.target.value)) }}>
             {(maps.data ?? []).map(m => <option key={m.id} value={m.id}>{m.name} ({m.file_name})</option>)}
@@ -81,12 +82,12 @@ export function MapView() {
         </div>
       </div>
       {maps.isError ? (
-        <LoadError what="맵 목록" error={maps.error} onRetry={() => void maps.refetch()} />
+        <LoadError what="병원 지도 목록" error={maps.error} onRetry={() => void maps.refetch()} />
       ) : (
         <div className="flex gap-4">
           <div className="flex-1 rounded border border-slate-200 bg-white p-2">
             {!map || !size ? (
-              <p className="p-4 text-sm text-slate-500">등록된 맵이 없습니다. 장소·맵·로봇 메뉴의 맵 탭에서 맵 파일을 올려 주세요.</p>
+              <p className="p-4 text-sm text-slate-500">등록된 병원 지도가 없습니다. 관리자에게 지도 등록을 요청해 주세요.</p>
             ) : (
               <svg
                 ref={svgRef} viewBox={`0 0 ${size.width_px} ${size.height_px}`}
@@ -130,7 +131,7 @@ export function MapView() {
                 })()}
               </svg>
             )}
-            {map && (
+            {map && isAdmin && (   /* 지도 파일·해상도·원점은 관리자 정보 (2026-10-27) */
               <p className="px-2 pt-2 text-xs text-slate-500">
                 {map.file_name}{map.image_file_name ? ` · ${map.image_file_name} ${map.image_width_px}×${map.image_height_px}px` : ' · 이미지 없음(격자)'}
                 {' '}· resolution {map.resolution_m_per_pixel} m/px · origin ({map.origin_x_m}, {map.origin_y_m}, {map.origin_yaw_rad}) · 장소 {marks.length}개
@@ -146,15 +147,15 @@ export function MapView() {
               />
             )}
             <div className="space-y-2 rounded border border-slate-200 bg-white p-3">
-              <h2 className="text-sm font-medium">로봇</h2>
+              <h2 className="text-sm font-medium">운반·탑재 로봇</h2>
               {robots.isError && <LoadError what="로봇 목록" error={robots.error} onRetry={() => void robots.refetch()} />}
               {(robots.data ?? []).map(r => (
                 <div key={r.id} className="flex items-center justify-between text-sm">
-                  <span>{r.name} <span className="text-xs text-slate-400">{r.robot_type}</span></span>
+                  <span>{r.name} <span className="text-xs text-slate-400">{ROBOT_TYPE_LABEL[r.robot_type]}</span></span>
                   <Badge value={r.status} label={ROBOT_STATUS_LABEL[r.status]} />
                 </div>
               ))}
-              <p className="pt-2 text-xs text-slate-400">위치 표시는 로봇 상태 보고(로드맵 3단계) 뒤에 추가</p>
+              <p className="pt-2 text-xs text-slate-400">운반 로봇의 지금 위치는 아직 지도에 보이지 않습니다.</p>
             </div>
           </aside>
         </div>

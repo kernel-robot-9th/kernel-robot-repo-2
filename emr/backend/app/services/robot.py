@@ -4,7 +4,7 @@
 # 작성일 : 2026-10-14
 # 구성   :
 #   - RobotService  list/get/create/update/delete, issue_api_key/revoke_api_key (로봇 전용 API용 로봇별 키)
-#                   update: 복귀 장소 home_location_id (2026-10-20). delete: 진행 중 배송이 있으면 409
+#                   update: 이름·상태·로봇 서버 주소 (복귀 장소는 2026-10-27 없앰 — 팀원 FMS가 정함). delete: 진행 중 배송이 있으면 409
 # =============================================================================
 from __future__ import annotations
 
@@ -13,12 +13,11 @@ from datetime import UTC, datetime
 import structlog
 from sqlalchemy.orm import Session
 
-from app.core.exceptions import BadRequest, Conflict, NotFound
+from app.core.exceptions import Conflict, NotFound
 from app.core.security import generate_robot_api_key, hash_api_key
 from app.models.enums import RobotStatus, RobotType
 from app.models.robot import Robot
 from app.repositories.delivery import DeliveryRepository
-from app.repositories.location import LocationRepository
 from app.repositories.robot import RobotRepository
 from app.schemas.robot import RobotCreate, RobotUpdate
 
@@ -32,7 +31,6 @@ class RobotService:
 
     def __init__(self, db: Session) -> None:
         self.repo = RobotRepository(db)
-        self.locations = LocationRepository(db)
         self.deliveries = DeliveryRepository(db)
 
     def list(
@@ -72,13 +70,6 @@ class RobotService:
         changes = data.model_dump(exclude_none=True)
         if "name" in changes and changes["name"] != robot.name and self.repo.get_by_name(changes["name"]):
             raise Conflict(f"robot name {changes['name']} already exists", code="robot_name_duplicate")
-        if "home_location_id" in changes:
-            # FK와 관계를 함께 바꾼다 — 응답에 옛 복귀 장소가 남지 않게. 좌표가 없는 장소도 고를 수는 있다(claim이 409)
-            home = self.locations.get(changes.pop("home_location_id"))
-            if home is None:
-                raise BadRequest("home location not found", code="location_not_found")
-            robot.home_location = home
-            robot.home_location_id = home.id
         for field, value in changes.items():
             setattr(robot, field, value)
         return robot

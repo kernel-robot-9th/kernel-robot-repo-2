@@ -139,7 +139,7 @@ export function DeliveryForm({ initial, onDone }: Props) {
 
   return (
     <div className="space-y-3 rounded border border-slate-200 bg-white p-4">
-      <h2 className="font-medium">{initial ? `예약 #${initial.id} 변경` : '새 배송 예약'}</h2>
+      <h2 className="font-medium">{initial ? `신청 NO ${initial.id} 변경` : '새 물품 신청'}</h2>
       {!initial && <VoiceDraftBar onDraft={applyDraft} />}
       <div className="grid grid-cols-2 gap-3">
         <Label text="목적지">
@@ -149,11 +149,11 @@ export function DeliveryForm({ initial, onDone }: Props) {
           </Select>
           {destination === '' && <CandidateChips candidates={locationCandidates} onPick={setDestination} />}
         </Label>
-        <Label text="예약 시각 (미래)">
+        <Label text="보낼 시간">
           <Input type="datetime-local" value={scheduled} onChange={e => setScheduled(e.target.value)} />
         </Label>
       </div>
-      {scheduled !== '' && !isFuture && <p className="text-xs text-red-600">예약 시각은 지금보다 뒤여야 합니다</p>}
+      {scheduled !== '' && !isFuture && <p className="text-xs text-red-600">보낼 시간은 지금보다 뒤여야 합니다</p>}
 
       <div className="space-y-2">
         <span className="text-sm text-slate-600">품목</span>
@@ -163,7 +163,7 @@ export function DeliveryForm({ initial, onDone }: Props) {
               <Select value={row.supply_id} onChange={e => setItem(i, { supply_id: e.target.value === '' ? '' : Number(e.target.value), checked: false })}>
                 <option value="">비품 선택</option>
                 {(supplies.data ?? []).map(s => (
-                  <option key={s.id} value={s.id}>{s.code} · {s.name} (예약 가능 {availableQuantity(s.id)})</option>
+                  <option key={s.id} value={s.id}>{s.code} · {s.name} (신청 가능 {availableQuantity(s.id)})</option>
                 ))}
               </Select>
               <div className="w-24">
@@ -187,7 +187,7 @@ export function DeliveryForm({ initial, onDone }: Props) {
               </label>
             )}
             {row.supply_id !== '' && exceedsStock(row) && (
-              <p className="text-xs text-amber-700">예약 가능한 수량({availableQuantity(row.supply_id)}개)보다 많습니다</p>
+              <p className="text-xs text-amber-700">신청 가능한 수량({availableQuantity(row.supply_id)}개)보다 많습니다</p>
             )}
           </div>
         ))}
@@ -198,7 +198,7 @@ export function DeliveryForm({ initial, onDone }: Props) {
 
       <div className="flex items-center gap-3">
         <Button onClick={submit} disabled={!valid || mutation.isPending}>
-          {mutation.isPending ? '저장 중…' : initial ? '변경 저장' : '예약'}
+          {mutation.isPending ? '저장 중…' : initial ? '변경 저장' : '신청'}
         </Button>
         {initial && <Button variant="secondary" onClick={onDone}>취소</Button>}
       </div>

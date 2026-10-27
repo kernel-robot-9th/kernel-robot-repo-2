@@ -47,7 +47,7 @@ EMR 쪽에서 비어 있는 것: **맵 위 로봇 위치**(Fleet State Manager�
 
 | 방향 | 무엇 | EMR 쪽 코드 |
 |---|---|---|
-| 팀원 FMS → EMR | 배송 목록 보기 `GET /robot/deliveries`, 가져가기 `POST /robot/deliveries/claim`, 도착 `POST /robot/arrived`(Pinky가 약제실 도착 때 직접 부름), 실패 `POST /robot/deliveries/{id}/progress`, 내 정보 `GET /robot/me` | `api/v1/robot_access.py` |
+| 팀원 FMS → EMR | 배송 목록 보기 `GET /robot/deliveries`, 가져가기 `POST /robot/deliveries/claim`, 약제실 도착 `POST /robot/arrived`(Pinky가 약제실 도착 때 직접 부름 — 2026-10-27부터 로그만, 상태 그대로), 병실 도착·실패 `POST /robot/deliveries/{id}/progress`, 내 정보 `GET /robot/me` | `api/v1/robot_access.py` |
 | EMR → Pinky | claim 때 `GET {robot_server_url}/status` — 배터리·오염도·주행 준비, 기준 밖이면 204 + `X-Claim-Skip-Reason` | `clients/robot_server.py`, `services/robot_status.py` |
 | EMR → 팀원 OMX | 관리자가 `POST /api/v1/omx/command` → OMX `POST /command`, 상태 `GET /api/v1/omx/status` → OMX `GET /status` | `clients/omx.py`, `services/omx_control.py` |
 | 팀원 OMX → EMR | 작업이 끝나면 `GET /api/v1/robot/{request_id}/end-point`(인증 없음, 서버 로그만) | `services/omx_signal.py` |
@@ -104,9 +104,9 @@ EMR 쪽에서 비어 있는 것: **맵 위 로봇 위치**(Fleet State Manager�
 
 #### 4.3 배송 배정·진행 `dispatch` — Task Dispatcher · 다르게(로봇 쪽이 가져감)
 - `<api/v1/robot_access.py, router>` : 로봇 전용 API — `/robot/me`, `/robot/deliveries`(목록), claim, `/robot/arrived`, progress(실패), receipt(마커), OMX 완료 신호(4.10)
-- `<services/dispatch.py, DispatchService>` : `claim`(가져가기, 로봇 상태 확인 포함), `list_waiting`(맡지 않고 목록만), `report_arrived_now`(맡은 배송을 도착으로), `report_progress`(도착·실패, 실패면 재고 복구), `confirm_receipt`(일회용 마커)
+- `<services/dispatch.py, DispatchService>` : `claim`(가져가기, 로봇 상태 확인 포함), `list_waiting`(맡지 않고 목록만), `report_at_pharmacy`(약제실 도착 — 로그만, 2026-10-27), `report_progress`(도착·실패, 실패면 재고 복구), `confirm_receipt`(일회용 마커)
 - `<services/dispatch.py, RobotOverview · ClaimResult>` : `/robot/me` 내용, claim 결과(배송 또는 건너뛴 이유)
-- `<repositories/delivery.py, DeliveryRepository.lock_next_claimable>` : 맡을 배송 한 건 잠그기(`FOR UPDATE SKIP LOCKED`, 목적지가 "Pinky 아레나" 맵 장소인 것만)
+- `<repositories/delivery.py, DeliveryRepository.lock_next_claimable>` : 맡을 배송 한 건 잠그기(`FOR UPDATE SKIP LOCKED`, 목적지에 로봇 목적지 이름 `robot_dest`가 있는 것만 — 10-27, 전에는 복귀 장소와 같은 맵)
 - `<schemas/delivery.py, RobotDeliveryOut · DeliveryProgressIn · DeliveryReceiptIn · RobotMeOut>` : 로봇용 응답(목적지 `robot_dest`·`receipt_method`, 마커·간호사 정보 없음)·보고 모양
 - `<emr/backend/scripts/simulate_robot.py · confirm_receipt.py>` : 로봇 흉내 도구(실물 없이 시험)
 - 연결 안 된 파일: `<services/quick_dispatch.py, QuickDispatchService>` — 시험용 "상태 바로 바꾸기" 초안(10-22), 라우터에 붙이지 않았다
@@ -162,7 +162,7 @@ EMR 쪽에서 비어 있는 것: **맵 위 로봇 위치**(Fleet State Manager�
 - `<services/map.py, MapService · MapFile>` : 맵 규칙(이름·파일 중복, 쓰는 장소가 있으면 삭제 막기)
 - `<services/map_files.py, parse_map_yaml · to_png · MapYamlInfo>` : Pinky 맵 yaml 읽기, PGM → PNG 변환
 - `<repositories/map.py, MapRepository>` : 맵 조회(이름·파일 이름으로, 쓰는 장소가 있는지)
-- `<api/v1/locations.py, router>` · `<services/location.py, LocationService>` · `<repositories/location.py, LocationRepository>` : 장소(좌표·방향) 관리, 복귀 장소인 장소는 삭제 막기
+- `<api/v1/locations.py, router>` · `<services/location.py, LocationService>` · `<repositories/location.py, LocationRepository>` : 장소(좌표·방향) 관리. 예전 복귀 장소로 남은 값은 지울 때 비움(`clear_robot_home`, 10-27)
 - `<models/map.py, Map>` · `<models/location.py, Location>` : 맵(resolution·origin·이미지)·장소 테이블. 장소에 Pinky 목적지 이름 `robot_dest`(유일), 로봇 전용 `robot_only`(충전·출발점 — 간호사 예약 목록에 안 보임)
 - `<schemas/map.py, MapCreate · MapOut>` · `<schemas/location.py, LocationCreate · LocationOut>` : 요청·응답 모양
 - `<emr/backend/scripts/import_pinky_dests.py>` : 팀원 Pinky API `/dests`를 읽어 맵 "Pinky 아레나"와 장소로 가져오기(그림 cm → 미터)
@@ -171,9 +171,9 @@ EMR 쪽에서 비어 있는 것: **맵 위 로봇 위치**(Fleet State Manager�
 
 #### 4.8 로봇 관리 `robot` (중간 명칭: Robot Registry) — Fleet State Manager의 바탕
 - `<api/v1/robots.py, router>` : 로봇 등록·수정·삭제, API 키 발급·폐기
-- `<services/robot.py, RobotService>` : 로봇 규칙(종류 변경 불가, 진행 중 배송이 있으면 삭제 막기, 복귀 장소 지정)
+- `<services/robot.py, RobotService>` : 로봇 규칙(종류 변경 불가, 진행 중 배송이 있으면 삭제 막기). 복귀 장소 지정은 10-27 없앰 — 팀원 FMS가 정함
 - `<repositories/robot.py, RobotRepository>` : 로봇 조회(이름·키 해시로, 잠금)
-- `<models/robot.py, Robot>` : 로봇 테이블(종류, 상태(손으로 넣는 값), 키 해시, 복귀 장소, **로봇 서버 주소 `robot_server_url`**)
+- `<models/robot.py, Robot>` : 로봇 테이블(종류, 상태(손으로 넣는 값), 키 해시, **로봇 서버 주소 `robot_server_url`**)
 - `<schemas/robot.py, RobotCreate · RobotUpdate · RobotOut · RobotApiKeyOut>` : 요청·응답 모양(`RobotOut.status_report` = 4.3-2의 마지막 값)
 - `<pages/Sites.tsx, Sites>` · `<features/robots/RobotApiKeyDialog.tsx>` : 장소·맵·로봇·병상 단말 탭, 키를 한 번만 보여 주는 창
 

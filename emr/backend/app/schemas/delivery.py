@@ -163,6 +163,5 @@ class RobotMeOut(OrmOut):
     """GET /robot/me — 시작·재시작할 때, 수령을 기다리는 동안."""
 
     robot: RobotBriefOut
-    home_location: RobotLocationOut | None = Field(description="좌표가 있는 복귀 장소. 없으면 배송을 맡을 수 없다")
     active_delivery: RobotDeliveryOut | None = Field(description="이 로봇이 맡고 있는 dispatched·arrived 배송")
     receipt_wait_seconds: int = Field(description="도착 후 수령을 기다리는 시간(초)")

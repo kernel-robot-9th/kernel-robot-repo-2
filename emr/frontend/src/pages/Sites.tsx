@@ -6,7 +6,7 @@
 // 구성   :
 //   - LocationsTab   POST/PATCH/DELETE /locations
 //   - MapsTab        맵 파일(yaml + pgm/png) 업로드·교체·삭제 (관리자, 2026-10-19). 장소 찍기는 맵 화면
-//   - RobotsTab      POST/PATCH/DELETE /robots, 로봇 API 키 발급·폐기 (관리자, 2026-10-19), 복귀 장소 (2026-10-20),
+//   - RobotsTab      POST/PATCH/DELETE /robots, 로봇 API 키 발급·폐기 (관리자, 2026-10-19), 복귀 장소는 2026-10-27 없앰(팀원 FMS가 정함),
 //                    로봇 서버 주소 입력·claim 때 받은 배터리·오염도 보기 (2026-10-23)
 //   - BedsideTab     병상 단말 등록·병실·키 발급·폐기·삭제 (관리자만, 2026-10-22) — 환자가 /bedside 화면에서 비품 요청
 //   - Sites          탭 전환
@@ -17,7 +17,7 @@ import {
   useIsAdmin, useLocationMutations, useLocations, useMapMutations, useMaps, useMe, useRobotMutations, useRobots,
 } from '../api/hooks'
 import type { BedsideApiKey, BedsideDevice, Location, Robot, RobotApiKey, RobotStatus, RobotType } from '../api/types'
-import { ROBOT_STATUS_LABEL } from '../api/types'
+import { ROBOT_STATUS_LABEL, ROBOT_TYPE_LABEL } from '../api/types'
 import { Badge, Button, Input, Label, LoadError, PageTitle, Select, Table, Td, Th } from '../components/ui'
 import { RobotApiKeyDialog } from '../features/robots/RobotApiKeyDialog'
 import { formatDate, formatTime } from '../lib/dateFormat'
@@ -190,7 +190,6 @@ function MapsTab() {
 // ---------- 로봇 ----------
 function RobotsTab() {
   const robots = useRobots()
-  const locations = useLocations()
   const { create, update, remove, issueApiKey, revokeApiKey } = useRobotMutations()
   const isAdmin = useIsAdmin()
   const [name, setName] = useState('')
@@ -209,7 +208,7 @@ function RobotsTab() {
           <Label text="이름"><Input value={name} onChange={e => setName(e.target.value)} placeholder="amr-1" className="w-40" /></Label>
           <Label text="종류 (등록 후 변경 불가)">
             <Select value={type} onChange={e => setType(e.target.value as RobotType)} className="w-40">
-              <option value="amr">AMR</option><option value="manipulator">매니퓰레이터</option>
+              <option value="amr">{ROBOT_TYPE_LABEL.amr}</option><option value="manipulator">{ROBOT_TYPE_LABEL.manipulator}</option>
             </Select>
           </Label>
           <Button disabled={!name || create.isPending} onClick={() => create.mutate({ name, robot_type: type, status: 'idle' }, { onSuccess: () => setName('') })}>
@@ -221,12 +220,12 @@ function RobotsTab() {
         <LoadError what="로봇 목록" error={robots.error} onRetry={() => void robots.refetch()} />
       ) : (
         <Table>
-          <thead><tr><Th>이름</Th><Th>종류</Th><Th>상태</Th><Th>로봇 서버</Th><Th>배터리·오염도 (claim 때 확인)</Th><Th>복귀 장소</Th><Th>로봇 API 키</Th>{isAdmin && <><Th>상태 변경</Th><Th>{' '}</Th></>}</tr></thead>
+          <thead><tr><Th>이름</Th><Th>종류</Th><Th>상태</Th><Th>로봇 서버</Th><Th>배터리·오염도 (claim 때 확인)</Th><Th>로봇 API 키</Th>{isAdmin && <><Th>상태 변경</Th><Th>{' '}</Th></>}</tr></thead>
           <tbody>
             {(robots.data ?? []).map(r => (
               <tr key={r.id}>
                 <Td>{r.name}</Td>
-                <Td>{r.robot_type === 'amr' ? 'AMR' : '매니퓰레이터'}</Td>
+                <Td>{ROBOT_TYPE_LABEL[r.robot_type]}</Td>
                 <Td><Badge value={r.status} label={ROBOT_STATUS_LABEL[r.status]} /></Td>
                 <Td>
                   {/* 팀원 Pinky API 주소 — claim 때 EMR이 GET {주소}/status로 배터리·오염도·주행 준비를 묻는다. 빈 칸 = 배송 안 맡음 (2026-10-23) */}
@@ -254,28 +253,6 @@ function RobotsTab() {
                     </span>
                   ) : (
                     <span className="text-slate-400">{r.robot_type === 'amr' ? '아직 받은 적 없음' : '—'}</span>
-                  )}
-                </Td>
-                <Td>
-                  {/* 배송을 마치거나 실패하면 돌아가는 곳. 좌표가 있어야 로봇이 배송을 맡는다 (2026-10-20) */}
-                  {isAdmin && r.robot_type === 'amr' ? (
-                    <Select
-                      value={r.home_location_id ?? ''} className="w-40" aria-label={`${r.name} 복귀 장소`}
-                      onChange={e => update.mutate({ id: r.id, body: { home_location_id: Number(e.target.value) } })}
-                    >
-                      {r.home_location_id == null && <option value="" disabled>선택하세요</option>}
-                      {(locations.data ?? []).map(location => (
-                        <option key={location.id} value={location.id}>
-                          {location.name}{location.map_x_m == null ? ' (좌표 없음)' : ''}
-                        </option>
-                      ))}
-                    </Select>
-                  ) : (
-                    <span className={r.home_location_id == null ? 'text-slate-400' : ''}>
-                      {r.home_location_id == null
-                        ? (r.robot_type === 'amr' ? '미지정 — 배송 안 맡음' : '—')
-                        : (locations.data ?? []).find(location => location.id === r.home_location_id)?.name ?? `#${r.home_location_id}`}
-                    </span>
                   )}
                 </Td>
                 <Td>
@@ -413,9 +390,9 @@ export function Sites() {
   const isAdmin = useIsAdmin()
   return (
     <div className="space-y-4">
-      <PageTitle>장소 · 맵 · 로봇 · 병상</PageTitle>
+      <PageTitle>환경 설정</PageTitle>
       {me.data && !isAdmin && (
-        <p className="text-sm text-slate-500">조회만 할 수 있습니다. 장소·맵·로봇 등록·수정·삭제는 관리자만 할 수 있습니다.</p>
+        <p className="text-sm text-slate-500">조회만 할 수 있습니다. 환경 설정(장소·맵·로봇·병상) 등록·수정·삭제는 관리자만 할 수 있습니다.</p>
       )}
       <div className="flex gap-1 border-b border-slate-200">
         {TABS.map(t => (

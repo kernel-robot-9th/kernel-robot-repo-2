@@ -14,7 +14,7 @@ import { bedsideKey, isBedsideKeyError } from '../api/client'
 import { describeError } from '../api/errorMessages'
 import { useBedsideDeliveries, useBedsideMe, useBedsideMutations, useBedsideSupplies } from '../api/hooks'
 import type { BedsideDelivery, BedsideSupply } from '../api/types'
-import { BEDSIDE_MAX_QUANTITY, DELIVERY_FAILURE_REASON_LABEL } from '../api/types'
+import { BEDSIDE_MAX_QUANTITY } from '../api/types'
 import { Button, Input } from '../components/ui'
 import { useNowMs } from '../features/deliveries/useNowMs'
 import { formatHourMinute } from '../lib/dateFormat'
@@ -66,7 +66,7 @@ function RequestPanel({ supplies, roomReady }: { supplies: BedsideSupply[]; room
     <section className="space-y-4" aria-label="비품 요청">
       <h2 className="text-lg font-semibold">필요한 물품을 골라 주세요</h2>
       {!roomReady && (
-        <p className="rounded-lg bg-amber-50 px-4 py-3 text-amber-900">이 병실은 아직 로봇이 갈 수 없습니다. 간호사에게 말씀해 주세요.</p>
+        <p className="rounded-lg bg-amber-50 px-4 py-3 text-amber-900">이 병실은 아직 운반 로봇이 갈 수 없습니다. 간호사에게 말씀해 주세요.</p>
       )}
       <ul className="grid gap-3 sm:grid-cols-2">
         {supplies.map(supply => {
@@ -89,7 +89,7 @@ function RequestPanel({ supplies, roomReady }: { supplies: BedsideSupply[]; room
         })}
         {supplies.length === 0 && <li className="text-slate-500">요청할 수 있는 물품이 없습니다.</li>}
       </ul>
-      <p className="text-sm text-slate-500">한 물품은 {BEDSIDE_MAX_QUANTITY}개까지 요청할 수 있습니다. 요청하면 로봇이 바로 가져다 드립니다.</p>
+      <p className="text-sm text-slate-500">한 물품은 {BEDSIDE_MAX_QUANTITY}개까지 요청할 수 있습니다. 요청하면 운반 로봇이 바로 가져다 드립니다.</p>
       <ErrorNote error={request.error} />
       <Button className="w-full py-4 text-lg" disabled={!chosen.length || !roomReady || request.isPending} onClick={submit}>
         {request.isPending ? '요청하는 중…' : `요청하기${chosen.length ? ` (${chosen.length}가지)` : ''}`}
@@ -106,11 +106,11 @@ function ProgressPanel({ delivery }: { delivery: BedsideDelivery }) {
   const reached = STEPS.findIndex(([status]) => status === delivery.status)
   const items = delivery.items.map(item => `${item.name} ${item.quantity}개`).join(', ')
   const message = {
-    reserved: '요청을 받았습니다. 로봇이 곧 출발합니다.',
-    dispatched: `${delivery.assigned_robot_name ?? '로봇'}이(가) 출발했습니다 (${formatHourMinute(delivery.dispatched_at)}).`,
-    arrived: '로봇이 도착했습니다. 물건을 받으신 뒤 아래 버튼을 눌러 주세요.',
+    reserved: '요청을 받았습니다. 운반 로봇이 곧 출발합니다.',
+    dispatched: `운반 로봇이 ${formatHourMinute(delivery.dispatched_at)}에 출발했습니다.`,
+    arrived: '운반 로봇이 도착했습니다. 물건을 받으신 뒤 아래 버튼을 눌러 주세요.',
     received: '받으셨습니다. 감사합니다.',
-    failed: `배송하지 못했습니다: ${delivery.failure_reason ? DELIVERY_FAILURE_REASON_LABEL[delivery.failure_reason] : ''}. 간호사에게 말씀해 주세요.`,
+    failed: '배송하지 못했습니다. 간호사에게 말씀해 주세요.',   // 간호사용 사유 문구("다시 신청해 주세요")는 환자에게 맞지 않아 뺐다 (2026-10-27)
     cancelled: '취소되었습니다.',
   }[delivery.status]
 
@@ -137,7 +137,7 @@ function ProgressPanel({ delivery }: { delivery: BedsideDelivery }) {
             받았습니다
           </button>
           {delivery.receipt_deadline_at && (
-            <p className="text-center text-sm text-slate-500">{formatHourMinute(delivery.receipt_deadline_at)}까지 누르지 않으면 로봇이 돌아갑니다.</p>
+            <p className="text-center text-sm text-slate-500">{formatHourMinute(delivery.receipt_deadline_at)}까지 눌러 주세요.</p>
           )}
         </>
       )}

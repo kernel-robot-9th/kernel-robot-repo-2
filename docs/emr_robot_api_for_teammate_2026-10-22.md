@@ -1,5 +1,7 @@
 # 팀원 Pinky FMS ↔ EMR 연동 안내 (2026-10-22)
 
+> **최신 정리는 [`fms_emr_api_2026-10-27.md`](fms_emr_api_2026-10-27.md)** (2026-10-27, 복귀 장소 없앰 · **`/robot/arrived`는 약제실 도착 전용, 병실 도착은 progress arrived**). 공유 페이지 https://claude.ai/artifact/TH6bZL1EVRRimPxnGxGrns
+
 로봇 쪽 프로그램(팀원 Pinky FMS)이 EMR 배송을 가져가서 로봇을 보내고, 도착을 알리는 방법이다. 관제 PC 배송 실행기 없이 FMS가 직접 부른다.
 
 - EMR 주소: `http://192.168.129.135:8000/api/v1` (시험 화면 `http://192.168.129.135:8000/docs`)
@@ -19,7 +21,7 @@ EMR에 배송 예약(간호사 화면 또는 POST /deliveries)
 ② FMS: 로봇 주행  POST <Pinky>/goto {"dest": robot_dest}   (약제실 PHARMACY는 "dock": true 권장)
 ③ FMS: POST /robot/arrived                  → 도착 (상태 arrived)
 ④ 간호사가 EMR 화면에서 "받았습니다"        → 수령 (상태 received)
-   FMS는 GET /robot/me의 active_delivery가 null이 되면 수령된 것 → 복귀 (출발점 A = START_A)
+   FMS는 GET /robot/me의 active_delivery가 null이 되면 수령된 것 → 그다음 어디로 갈지는 FMS가 정한다(EMR은 복귀 장소를 정하지 않음, 2026-10-27)
    주행 실패면 ③ 대신 POST /robot/deliveries/{id}/progress {"stage":"failed","failure_reason":"navigation_failed"}
 ```
 
@@ -27,7 +29,7 @@ EMR에 배송 예약(간호사 화면 또는 POST /deliveries)
 
 | 순서 | 요청 | 하는 일 | 응답 |
 |---|---|---|---|
-| 상태 | `GET /robot/me` | 내 로봇·복귀 장소·맡은 배송 | 아래 예 |
+| 상태 | `GET /robot/me` | 내 로봇·맡은 배송 | 아래 예 |
 | 조회 | `GET /robot/deliveries?due_only=true` | **맡지 않고** 예약된 배송 목록만(예약 시각 순). 로봇 배정·상태 변경 없음 — 어느 로봇이 갈지는 FMS가 정한다 | 배송 목록(형식은 claim 응답과 같음, `status: reserved`) |
 | ① | `POST /robot/deliveries/claim` (본문 없음) | 예약 시각이 지난 배송 중 가장 이른 것 하나를 맡는다. 이미 맡은 게 있으면 그것을 다시 준다. 새 배송을 주기 전에 EMR이 Pinky `/status`를 묻는다(아래) | 200 배송 · **204 맡을 것 없음**(로봇 상태 때문이면 헤더 `X-Claim-Skip-Reason`) |
 | ③ | `POST /robot/arrived` (본문 없음) | 맡은 배송을 도착으로 | 200 배송 · 409 `robot_no_active_delivery`(맡은 게 없음) |
@@ -53,7 +55,6 @@ claim이 새 배송을 주지 않는 이유 (`X-Claim-Skip-Reason`): `robot_serv
 ```json
 {
   "robot": {"id": 1, "name": "배송로봇 1호", "robot_type": "amr"},
-  "home_location": {"id": 18, "name": "출발점 A", "robot_dest": "START_A", "map_id": 5, "map_x_m": 1.827, "map_y_m": 0.24, "map_yaw_rad": 3.1416},
   "active_delivery": null,
   "receipt_wait_seconds": 300
 }
@@ -86,7 +87,7 @@ curl $E/robot/me                              # 간호사가 누르면 active_de
 ## 4. 알아 둘 것
 
 - 로봇 한 대는 배송을 하나씩만 맡는다. 맡은 배송이 끝나야(수령·실패) 다음 `claim`이 새 배송을 준다.
-- 맡을 수 있는 배송은 목적지가 "Pinky 아레나" 맵의 장소인 것만이다(EMR 장소 id 8–18: 4인실·1인실·약제실 OMX·수술실·대기 포켓·충전·출발점 A).
+- 맡을 수 있는 배송은 목적지에 **로봇 목적지 이름(`robot_dest`)이 있는 장소**인 것만이다(지금 EMR 장소 id 8–18: 4인실·1인실·약제실 OMX·수술실·대기 포켓·충전·출발점 A). 2026-10-27부터 EMR은 **복귀 장소를 정하지 않는다** — 끝난 뒤 어디로 갈지는 FMS가 정한다(`/robot/me`에 `home_location` 없음).
 - 도착 후 5분(`receipt_wait_seconds`) 안에 "받았습니다"가 없으면 FMS가 `not_received`로 실패를 보고하고 복귀하는 것을 권한다(EMR이 스스로 실패시키지는 않는다).
 - 시험 중 예약: EMR 화면에서 하거나 `POST /deliveries {"destination_location_id": 9, "scheduled_at": "<지금 UTC>", "items": [{"supply_id": 1, "quantity": 1}]}`.
 - 관제 PC 배송 실행기(`robot/src/fms/delivery_executor`)는 **쓰지 않는다**(2026-10-23 결정) — 로봇 쪽 처리(claim·주행·도착)는 FMS가 맡는다.

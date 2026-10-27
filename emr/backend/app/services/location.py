@@ -68,13 +68,13 @@ class LocationService:
         return location
 
     def delete(self, location_id: int) -> None:
-        """장소 삭제. 로봇 복귀 장소이거나(2026-10-20) 예약(취소된 것 포함)이 참조하면 Conflict.
+        """장소 삭제. 예약(취소된 것 포함)이나 병상 단말이 참조하면 Conflict.
+        예전 복귀 장소(2026-10-27부터 안 씀)로 남아 있으면 그 로봇의 값을 비우고 지운다 — DB 칸은 남겨 두어 FK RESTRICT가 막지 않게.
         [입력] location_id
         [출력] 없음
         """
         location = self.get(location_id)
-        if self.repo.is_robot_home(location_id):
-            raise Conflict(f"location {location_id} is a robot home location", code="location_is_robot_home")
+        self.repo.clear_robot_home(location_id)
         if self.repo.is_bedside_room(location_id):   # 2026-10-22
             raise Conflict(f"location {location_id} is a bedside room", code="location_is_bedside_room")
         if self.repo.is_used_by_delivery(location_id):

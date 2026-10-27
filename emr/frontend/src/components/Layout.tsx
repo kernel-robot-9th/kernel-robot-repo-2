@@ -21,11 +21,11 @@ import { SpeechToggle } from '../features/voice/SpeechToggle'
 import { Badge, Button } from './ui'
 
 const NAV: { to: string; label: string; adminOnly?: boolean }[] = [
-  { to: '/deliveries', label: '배송 예약' },
-  { to: '/map', label: '맵' },
-  { to: '/supplies', label: '비품' },
-  { to: '/nurses', label: '간호사' },
-  { to: '/sites', label: '장소·맵·로봇·병상' },
+  { to: '/deliveries', label: '물품 신청' },   // 2026-10-27 '배송 예약'에서 바꿈
+  { to: '/map', label: '병원 지도' },   // 2026-10-27 '맵'에서 바꿈
+  { to: '/supplies', label: '물품 관리' },   // 2026-10-27 '비품'에서 바꿈
+  { to: '/nurses', label: '직원 관리' },   // 2026-10-27 '간호사'에서 바꿈
+  { to: '/sites', label: '환경 설정' },   // 장소·맵·로봇·병상 (2026-10-27 이름 바꿈)
   { to: '/delivery-log', label: '배송 기록', adminOnly: true },   // 2026-10-21
 ]
 
@@ -45,7 +45,7 @@ export function Layout() {
   return (
     <div className="flex min-h-screen">
       <aside className="w-48 border-r border-slate-200 bg-white p-4">
-        <div className="mb-6 text-lg font-bold">EMR 배송</div>
+        <div className="mb-6 text-lg font-bold">병동 호실</div>
         <nav className="flex flex-col gap-1">
           {NAV.filter(n => !n.adminOnly || isAdmin).map(n => (
             <NavLink

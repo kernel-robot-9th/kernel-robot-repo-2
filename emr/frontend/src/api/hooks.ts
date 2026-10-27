@@ -176,7 +176,7 @@ export function useRobotMutations() {
   return {
     create: useMutation({ mutationFn: (b: Pick<Robot, 'name' | 'robot_type' | 'status'>) => api.post<Robot>('/robots', b), onSuccess: invalidate, meta: { action: '로봇 등록' } }),
     update: useMutation({
-      mutationFn: ({ id, body }: { id: number; body: Partial<Pick<Robot, 'name' | 'status' | 'home_location_id' | 'robot_server_url'>> }) =>
+      mutationFn: ({ id, body }: { id: number; body: Partial<Pick<Robot, 'name' | 'status' | 'robot_server_url'>> }) =>
         api.patch<Robot>(`/robots/${id}`, body),
       onSuccess: invalidate,
       meta: { action: '로봇 수정' },
@@ -214,17 +214,17 @@ export function useDeliveryMutations() {
     qc.invalidateQueries({ queryKey: keys.lowStock }),
   ])
   return {
-    create: useMutation({ mutationFn: (b: DeliveryCreate) => api.post<Delivery>('/deliveries', b), onSuccess: invalidate, meta: { action: '배송 예약' } }),
+    create: useMutation({ mutationFn: (b: DeliveryCreate) => api.post<Delivery>('/deliveries', b), onSuccess: invalidate, meta: { action: '물품 신청' } }),
     // 변경·취소는 실패해도(409: 이미 취소됨 등) 목록을 다시 불러와 화면을 서버 상태에 맞춘다
     update: useMutation({
       mutationFn: ({ id, body }: { id: number; body: DeliveryUpdate }) => api.patch<Delivery>(`/deliveries/${id}`, body),
       onSettled: invalidate,
-      meta: { action: '배송 예약 변경' },
+      meta: { action: '물품 신청 변경' },
     }),
     cancel: useMutation({
       mutationFn: (id: number) => api.post<Delivery>(`/deliveries/${id}/cancel`),
       onSettled: invalidate,
-      meta: { action: '배송 예약 취소' },
+      meta: { action: '물품 신청 취소' },
     }),
     // "받았습니다" — 도착한 본인 배송 수령 (2026-10-22, 마커 대신). 실패(409 이미 끝남)해도 목록을 서버 상태에 맞춘다
     confirmReceipt: useMutation({

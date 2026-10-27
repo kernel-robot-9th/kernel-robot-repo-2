@@ -19,7 +19,7 @@ import { useRecorder } from './useRecorder'
 function describeDraft(draft: VoiceDraft): string {
   const items = draft.items.map(item => `${item.supply_name ?? item.spoken_name} ${item.quantity}개`).join(', ')
   const where = draft.location.location_name ?? '목적지 미정'
-  return `${items || '품목 없음'}, ${where}. 확인 후 예약을 눌러 주세요.`
+  return `${items || '품목 없음'}, ${where}. 확인 후 신청을 눌러 주세요.`
 }
 
 export function VoiceDraftBar({ onDraft }: { onDraft: (draft: VoiceDraft) => void }) {
@@ -57,7 +57,7 @@ export function VoiceDraftBar({ onDraft }: { onDraft: (draft: VoiceDraft) => voi
   return (
     <div className="space-y-2 rounded border border-blue-100 bg-blue-50/50 p-3">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm font-medium text-slate-700">말로 예약</span>
+        <span className="text-sm font-medium text-slate-700">말로 신청</span>
         {supported && (
           <Button onClick={() => void toggleRecording()} disabled={busy} variant={recording ? 'danger' : 'primary'}>
             {recording ? '■ 멈추고 보내기' : '🎤 말하기'}
@@ -84,7 +84,7 @@ export function VoiceDraftBar({ onDraft }: { onDraft: (draft: VoiceDraft) => voi
               {lastDraft.warnings.map(warning => <li key={warning}>{VOICE_WARNING_LABEL[warning]}</li>)}
             </ul>
           )}
-          <p className="mt-1 text-xs text-slate-500">아래 폼에 채웠습니다. 확인한 뒤 '예약'을 눌러야 예약됩니다.</p>
+          <p className="mt-1 text-xs text-slate-500">아래 폼에 채웠습니다. 확인한 뒤 '신청'을 눌러야 신청됩니다.</p>
         </div>
       )}
     </div>

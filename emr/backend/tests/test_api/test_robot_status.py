@@ -45,8 +45,8 @@ def test_claim_does_not_ask_when_nothing_is_due_or_already_assigned(client, robo
 
 
 @requires_db
-def test_claim_skips_robot_without_server_url(client, auth_headers, make_robot, home_location, reserve_overdue, robot_server):
-    robot = make_robot("배송로봇 2호", home_location_id=home_location.id, robot_server_url=None)
+def test_claim_skips_robot_without_server_url(client, auth_headers, make_robot, reserve_overdue, robot_server):
+    robot = make_robot("배송로봇 2호", robot_server_url=None)
     reserved = reserve_overdue()
     assert _skipped(client, robot) == "robot_server_not_set"
     assert robot_server["called"] == []

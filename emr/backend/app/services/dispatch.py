@@ -4,7 +4,8 @@
 # 작성일 : 2026-10-20
 # 구성   :
 #   - DispatchService  overview(GET /robot/me), claim(배송 가져가기 — 2026-10-23부터 로봇 서버에 상태를 물어 배터리·오염도·주행 준비 검사),
-#                      report_progress(도착·실패 보고),
+#                      2026-10-27 사용자 결정: 복귀 장소를 쓰지 않는다(어디로 돌아갈지는 팀원 FMS가 정함) — claim은 로봇 목적지(robot_dest)가 있는 장소의 배송만
+#                      report_progress(병실 도착·실패 보고), report_at_pharmacy(약제실 도착 — 로그만, 2026-10-27),
 #                      confirm_receipt(일회용 마커로 수령 확인)
 # 계약: docs/api_contract_delivery_2026-10-20.md. 상태 흐름은 app/models/enums.py DeliveryStatus
 # 성공·거부 모두 structlog로 남긴다(어느 로봇이 어느 배송에 무엇을 했는지). 실제로 상태를 바꾼 출발·도착·수령·실패는
@@ -22,7 +23,6 @@ from sqlalchemy.orm import Session
 from app.core.exceptions import Conflict, Forbidden, NotFound
 from app.models.delivery import RECEIPT_MARKER_ID_MAX, RECEIPT_MARKER_ID_MIN, RECEIPT_WAIT_SECONDS, Delivery
 from app.models.enums import DeliveryEventType, DeliveryFailureReason, DeliveryRequester, DeliveryStatus, ReceiptMethod, RobotType
-from app.models.location import Location
 from app.models.robot import Robot
 from app.repositories.delivery import DeliveryRepository
 from app.repositories.robot import RobotRepository
@@ -35,6 +35,7 @@ log = structlog.get_logger(__name__)
 
 STAGE_ARRIVED = "arrived"
 STAGE_FAILED = "failed"
+STAGE_AT_PHARMACY = "at_pharmacy"   # 로그용 — 배송 상태가 아니다 (2026-10-27)
 
 # 일회용 마커 번호를 고를 때 쓰는 난수 — 운영체제 난수원(예측하기 어렵게)
 _marker_random = random.SystemRandom()
@@ -44,7 +45,6 @@ _marker_random = random.SystemRandom()
 class RobotOverview:
     """GET /robot/me 내용."""
     robot: Robot
-    home_location: Location | None   # 좌표까지 있는 복귀 장소. 없거나 좌표가 없으면 None
     active_delivery: Delivery | None
     receipt_wait_seconds: int
 
@@ -74,17 +74,17 @@ class DispatchService:
         """
         return RobotOverview(
             robot=robot,
-            home_location=self._usable_home(robot),
             active_delivery=self.repo.get_active_for_robot(robot.id),
             receipt_wait_seconds=RECEIPT_WAIT_SECONDS,
         )
 
     def claim(self, robot_id: int) -> ClaimResult:
         """배송 하나를 맡는다. 이미 맡은 배송이 있으면 그것을 그대로 돌려준다(멱등 — 응답을 잃어도 다시 부르면 된다).
-        없으면 reserved이고 예약 시각이 지났고 목적지가 복귀 장소와 같은 맵에 좌표가 있는 것 중 가장 이른 것을 dispatched로.
+        없으면 reserved이고 예약 시각이 지났고 목적지에 로봇 목적지 이름(robot_dest)이 있는 것 중 가장 이른 것을 dispatched로
+        (2026-10-27: 복귀 장소·같은 맵 조건을 없앰 — 팀원 FMS가 /goto {dest}로 갈 수 있는 곳만 내준다).
         줄 배송이 있으면 그 전에 로봇 서버에 지금 상태를 묻는다(배터리·오염도·주행 준비, 2026-10-23) — 기준 밖이면 주지 않는다.
         [입력] robot_id: 키로 확인된 로봇
-        [출력] ClaimResult: 줄 것이 없으면 delivery None, 상태 때문이면 skip_reason까지 (AMR이 아니면 Forbidden, 복귀 장소가 없으면 Conflict)
+        [출력] ClaimResult: 줄 것이 없으면 delivery None, 상태 때문이면 skip_reason까지 (AMR이 아니면 Forbidden)
         """
         robot = self.robots.lock(robot_id)   # 같은 로봇의 claim이 겹쳐도 한 번씩
         if robot is None:
@@ -96,18 +96,14 @@ class DispatchService:
         active = self.repo.get_active_for_robot(robot.id)
         if active is not None:
             return ClaimResult(active)
-        home = self._usable_home(robot)
-        if home is None:
-            attempt.warning("claim_rejected", code="robot_home_not_set")
-            raise Conflict("robot home location is not set or has no map coordinates", code="robot_home_not_set")
         now = datetime.now(UTC)
         # 줄 것이 있을 때만 로봇 서버에 묻는다. 묻는 동안(최대 ROBOT_SERVER_TIMEOUT_SECONDS) 배송 행을 잠가 두지 않으려고 먼저 잠금 없이 본다
-        if self.repo.lock_next_claimable(now, home.map_id, lock=False) is None:
+        if self.repo.lock_next_claimable(now, lock=False) is None:
             return ClaimResult(None)
         skip_reason = self.robot_status.check_before_claim(robot, now)
         if skip_reason is not None:
             return ClaimResult(None, skip_reason)   # 이유는 응답 헤더로
-        delivery = self.repo.lock_next_claimable(now, home.map_id)
+        delivery = self.repo.lock_next_claimable(now)
         if delivery is None:   # 묻는 사이 다른 로봇이 가져갔거나 간호사가 취소함
             return ClaimResult(None)
         delivery.status = DeliveryStatus.DISPATCHED
@@ -181,17 +177,22 @@ class DispatchService:
         """
         return self.repo.list_waiting(datetime.now(UTC) if due_only else None, limit)
 
-    def report_arrived_now(self, robot_id: int) -> Delivery:
-        """"지금 도착했습니다" — 이 로봇이 맡은 배송을 도착으로 (2026-10-22, 팀원 FMS가 배송 id 없이 부른다).
-        report_progress(arrived)와 같다: 멱등, 일회용 마커·알림·배송 기록.
+    def report_at_pharmacy(self, robot_id: int) -> Delivery:
+        """약제실 도착 — 이 로봇이 맡은 배송을 실으러 약제실에 왔다 (2026-10-27 사용자 결정: /robot/arrived는 약제실 전용).
+        서버 로그(robot_at_pharmacy)만 남긴다 — 배송 상태·알림·배송 기록은 그대로(dispatched). 병실 도착은 report_progress(arrived).
+        여러 번 불러도 같다.
         [입력] robot_id: 키로 확인된 로봇
-        [출력] Delivery: arrived (로봇 전용 장소 이동이면 received). 맡은 배송이 없으면 Conflict robot_no_active_delivery
+        [출력] Delivery: dispatched 그대로. 맡은 배송이 없으면 Conflict robot_no_active_delivery, 이미 병실 도착(arrived)이면 delivery_invalid_transition
         """
         active = self.repo.get_active_for_robot(robot_id)
         if active is None:
-            log.warning("progress_rejected", robot_id=robot_id, stage=STAGE_ARRIVED, code="robot_no_active_delivery")
+            log.warning("progress_rejected", robot_id=robot_id, stage=STAGE_AT_PHARMACY, code="robot_no_active_delivery")
             raise Conflict(f"robot {robot_id} has no dispatched or arrived delivery", code="robot_no_active_delivery")
-        return self.report_progress(active.id, robot_id, STAGE_ARRIVED, None)
+        attempt = log.bind(robot_id=robot_id, delivery_id=active.id, stage=STAGE_AT_PHARMACY)
+        if active.status != DeliveryStatus.DISPATCHED:
+            return self._reject_transition(attempt, active, STAGE_AT_PHARMACY)
+        attempt.info("robot_at_pharmacy")
+        return active
 
     def confirm_receipt(self, delivery_id: int, aruco_marker_id: int, robot_id: int) -> Delivery:
         """수령 확인. 도착해 있고 이 로봇이 맡은 배송이며, 읽은 번호가 그 배송의 일회용 마커일 때만 received.
@@ -235,17 +236,6 @@ class DispatchService:
         self.events.record_by_robot(delivery, DeliveryEventType.ARRIVED, delivery.assigned_robot, now)
         self.events.record_by_robot(delivery, DeliveryEventType.RECEIVED, delivery.assigned_robot, now)
         return delivery
-
-    @staticmethod
-    def _usable_home(robot: Robot) -> Location | None:
-        """좌표까지 있는 복귀 장소.
-        [입력] robot
-        [출력] Location | None
-        """
-        home = robot.home_location
-        if home is None or home.map_id is None or home.map_x_m is None:
-            return None
-        return home
 
     def _pick_receipt_marker_id(self) -> int:
         """지금 도착해 있는 다른 배송이 쓰지 않는 일회용 마커 번호를 무작위로 고른다.

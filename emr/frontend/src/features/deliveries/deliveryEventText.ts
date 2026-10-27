@@ -15,19 +15,19 @@ const formatItems = (items: DeliveryEventItem[]) =>
   items.map(item => `${item.name} ×${item.quantity}`).join(', ')
 
 /** 사건 내용 한 줄 (없으면 빈 문자열).
- *  [입력] event / [출력] 예: "301호 · A 약품 ×2 · 예약 시각 26. 10. 21. 오후 5:00" */
+ *  [입력] event / [출력] 예: "301호 · A 약품 ×2 · 보낼 시간 10월 21일 PM 5:00" */
 export function describeEvent(event: DeliveryEvent): string {
   if (event.details == null) return ''
   switch (event.event_type) {
     case 'reserved': {
       const details = event.details as ReservedEventDetails
-      return `${details.destination.name} · ${formatItems(details.items)} · 예약 시각 ${formatDateTime(details.scheduled_at)}`
+      return `${details.destination.name} · ${formatItems(details.items)} · 보낼 시간 ${formatDateTime(details.scheduled_at)}`
     }
     case 'updated': {
       const details = event.details as UpdatedEventDetails
       const changes: string[] = []
       if (details.scheduled_at) {
-        changes.push(`예약 시각 ${formatDateTime(details.scheduled_at.from)} → ${formatDateTime(details.scheduled_at.to)}`)
+        changes.push(`보낼 시간 ${formatDateTime(details.scheduled_at.from)} → ${formatDateTime(details.scheduled_at.to)}`)
       }
       if (details.destination) changes.push(`목적지 ${details.destination.from.name} → ${details.destination.to.name}`)
       if (details.items) changes.push(`품목 ${formatItems(details.items.from)} → ${formatItems(details.items.to)}`)

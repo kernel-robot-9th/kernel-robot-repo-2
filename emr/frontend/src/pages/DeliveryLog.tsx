@@ -60,7 +60,7 @@ export function DeliveryLog() {
     return (
       <div className="space-y-4">
         <PageTitle>배송 기록</PageTitle>
-        <p className="text-sm text-slate-500">배송 기록 전체는 관리자만 볼 수 있습니다. 내 배송의 기록은 '배송 예약' 화면의 '기록'에서 봅니다.</p>
+        <p className="text-sm text-slate-500">배송 기록 전체는 관리자만 볼 수 있습니다. 내 배송의 기록은 '물품 신청' 화면의 '기록'에서 봅니다.</p>
       </div>
     )
   }
@@ -85,7 +85,7 @@ export function DeliveryLog() {
             {(robots.data ?? []).map(robot => <option key={robot.id} value={robot.id}>{robot.name}</option>)}
           </Select>
         </Label>
-        <Label text="예약 간호사">
+        <Label text="신청 간호사">
           <Select value={form.nurseId} onChange={set('nurseId')}>
             <option value="">전체</option>
             {(nurses.data ?? []).map(nurse => <option key={nurse.id} value={nurse.id}>{nurse.name} ({nurse.employee_no})</option>)}
@@ -111,7 +111,7 @@ export function DeliveryLog() {
         <Table>
           <thead>
             <tr>
-              <Th>시각</Th><Th>배송</Th><Th>목적지</Th><Th>예약한 쪽</Th><Th>사건</Th><Th>누가</Th><Th>내용</Th>
+              <Th>시각</Th><Th>배송</Th><Th>목적지</Th><Th>신청한 쪽</Th><Th>사건</Th><Th>누가</Th><Th>내용</Th>
             </tr>
           </thead>
           <tbody>

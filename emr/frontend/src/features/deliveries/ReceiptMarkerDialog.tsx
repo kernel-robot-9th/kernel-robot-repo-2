@@ -60,7 +60,7 @@ export function ReceiptMarkerDialog({ delivery, destinationName, onClose }: {
         </div>
         {byButton ? (
           <>
-            <p className="text-sm text-slate-700">로봇에서 물건을 받은 뒤 아래 버튼을 눌러 주세요. 누르면 로봇이 돌아갑니다.</p>
+            <p className="text-sm text-slate-700">운반 로봇에서 물건을 받은 뒤 아래 버튼을 눌러 주세요.</p>
             <button type="button" disabled={confirmReceipt.isPending} onClick={() => confirmReceipt.mutate(delivery.id)}
               className="w-full rounded-lg bg-green-600 py-4 text-xl font-bold text-white shadow hover:bg-green-700 disabled:opacity-50">
               받았습니다
@@ -73,14 +73,14 @@ export function ReceiptMarkerDialog({ delivery, destinationName, onClose }: {
               <ArucoMarker arucoMarkerId={delivery.receipt_marker_id!} className="h-auto w-full" />
             </div>
             <p className="text-sm text-slate-700">
-              이 화면을 <b>로봇 카메라 앞</b>에 보여 주세요. 로봇이 마커를 읽으면 수령이 끝납니다.
+              이 화면을 <b>운반 로봇 카메라 앞</b>에 보여 주세요. 운반 로봇이 마커를 읽으면 받음이 끝납니다.
               <br /><span className="text-xs text-slate-500">화면 밝기를 높이고, 반사가 없게 정면으로 들어 주세요. 마커 {delivery.receipt_marker_id}번 (이번 배송에만 쓰임)</span>
             </p>
           </>
         )}
         {secondsLeft != null && (
           <p className={`text-sm font-medium tabular-nums ${secondsLeft <= 60 ? 'text-red-700' : 'text-slate-700'}`}>
-            {secondsLeft > 0 ? `수령 마감까지 ${minutes}:${seconds}` : '수령 시간이 지났습니다 — 로봇이 돌아갑니다'}
+            {secondsLeft > 0 ? `받을 수 있는 시간 ${minutes}:${seconds}` : '받는 시간이 지났습니다.'}
           </p>
         )}
         <div className="flex justify-center">

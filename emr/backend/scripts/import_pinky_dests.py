@@ -5,10 +5,10 @@
 # 구성   :
 #   - fetch_pinky()      /dests + 목적지 쌍마다 /plan(경로 계산만, 로봇은 움직이지 않음) → 주행 경로 선분
 #   - render_map()       경로를 흰 선으로 그린 PGM(1 cm/px) + map_server yaml — EMR 맵 화면용 개략도
-#   - sync_emr()         관리자 로그인 → 맵 "Pinky 아레나" 등록/교체 → 장소 등록/수정(robot_dest 기준) → (선택) 로봇 복귀 장소
+#   - sync_emr()         관리자 로그인 → 맵 "Pinky 아레나" 등록/교체 → 장소 등록/수정(robot_dest 기준). 로봇 복귀 장소 설정은 2026-10-27 없앰(팀원 FMS가 정함)
 # 좌표: Pinky 그림 cm(아레나 왼쪽 아래 원점, heading deg) → EMR 미터·라디안 그대로 환산(x/100, y/100, deg→rad). ROS map 프레임이 아니다
 # 표준 라이브러리만 — 호스트에서 바로 돌린다:
-#   EMR_PASSWORD=... python3 backend/scripts/import_pinky_dests.py --pinky http://192.168.129.122:8080 --home START_A --robot-id 1
+#   EMR_PASSWORD=... python3 backend/scripts/import_pinky_dests.py --pinky http://192.168.129.122:8080
 # 계약: docs/api_contract_delivery_2026-10-20.md 4장 · 분석: docs/pinky_fms_api_review_2026-10-22.md
 # =============================================================================
 from __future__ import annotations
@@ -109,9 +109,8 @@ def multipart(fields: dict[str, str], files: dict[str, tuple[str, bytes, str]]) 
     return b"".join(chunks), f"multipart/form-data; boundary={boundary}"
 
 
-def sync_emr(emr: str, token: str, dests: dict[str, Any], pgm: bytes, origin: dict[str, float],
-             home: str | None, robot_id: int | None) -> None:
-    """맵·장소·(선택) 복귀 장소를 EMR에 맞춘다."""
+def sync_emr(emr: str, token: str, dests: dict[str, Any], pgm: bytes, origin: dict[str, float]) -> None:
+    """맵·장소를 EMR에 맞춘다."""
     auth = {"Authorization": f"Bearer {token}"}
     yaml = (f"image: pinky_arena.pgm\nresolution: {RESOLUTION_M_PER_PIXEL}\norigin: [{origin['x_m']}, {origin['y_m']}, 0.0]\n"
             "negate: 0\noccupied_thresh: 0.65\nfree_thresh: 0.25\n").encode()
@@ -134,7 +133,6 @@ def sync_emr(emr: str, token: str, dests: dict[str, Any], pgm: bytes, origin: di
     status, locations = http("GET", f"{emr}/locations?limit=500", headers=auth)
     by_dest = {l["robot_dest"]: l for l in locations if l.get("robot_dest")}
     by_name = {l["name"]: l for l in locations}
-    dest_location_ids: dict[str, int] = {}
     for dest_name, dest in dests.items():
         place = {"name": dest["name"], "map_id": map_id, "map_x_m": round(dest["xy"][0] / 100.0, 4),
                  "map_y_m": round(dest["xy"][1] / 100.0, 4), "map_yaw_rad": round(math.radians(dest["heading"]), 4),
@@ -149,17 +147,10 @@ def sync_emr(emr: str, token: str, dests: dict[str, Any], pgm: bytes, origin: di
         if status not in (200, 201):
             print(f"  ✗ {dest_name} {verb} 실패 HTTP {status} {result}")
             continue
-        dest_location_ids[dest_name] = result["id"]
         print(f"  ✓ 장소 {verb}: {result['name']} (id {result['id']}) ← {dest_name} ({dest['xy'][0]}, {dest['xy'][1]}) cm {dest['heading']}°")
     for location in locations:
         if location.get("robot_dest") and location["robot_dest"] not in dests:
             print(f"  · {location['name']}(id {location['id']})의 robot_dest {location['robot_dest']}는 Pinky에 더는 없음 — 직접 확인")
-
-    if home and robot_id:
-        if home not in dest_location_ids:
-            sys.exit(f"복귀 목적지 {home}가 Pinky 목적지에 없음")
-        status, robot = http("PATCH", f"{emr}/robots/{robot_id}", {"home_location_id": dest_location_ids[home]}, auth)
-        print(f"로봇 {robot_id} 복귀 장소 → {home}: HTTP {status}")
 
 
 def main() -> int:
@@ -167,8 +158,6 @@ def main() -> int:
     parser.add_argument("--pinky", default="http://192.168.129.122:8080")
     parser.add_argument("--emr", default="http://localhost:8000/api/v1")
     parser.add_argument("--employee-no", default="N001", help="관리자 사번")
-    parser.add_argument("--home", help="로봇 복귀 장소로 쓸 Pinky 목적지 (예: START_A)")
-    parser.add_argument("--robot-id", type=int, help="복귀 장소를 바꿀 EMR 로봇 id")
     arguments = parser.parse_args()
     password = os.getenv("EMR_PASSWORD") or getpass.getpass(f"{arguments.employee_no} 비밀번호: ")
     status, login = http("POST", f"{arguments.emr}/auth/login", {"employee_no": arguments.employee_no, "password": password})
@@ -177,7 +166,7 @@ def main() -> int:
     dests, paths = fetch_pinky(arguments.pinky)
     print(f"Pinky 목적지 {len(dests)}곳, 경로 {len(paths)}개 (/plan 계산만)")
     pgm, origin, width, height = render_map(dests, paths)
-    sync_emr(arguments.emr, login["access_token"], dests, pgm, origin, arguments.home, arguments.robot_id)
+    sync_emr(arguments.emr, login["access_token"], dests, pgm, origin)
     return 0
 
 

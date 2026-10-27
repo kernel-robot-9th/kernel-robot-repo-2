@@ -1,5 +1,7 @@
 # EMR ↔ 로봇 전송 데이터 양식과 기능별 화면 (2026-10-23)
 
+> **최신 정리는 [`fms_emr_api_2026-10-27.md`](../fms_emr_api_2026-10-27.md)** (2026-10-27, 복귀 장소 없앰 · **`/robot/arrived`는 약제실 도착 전용, 병실 도착은 progress arrived**). 공유 페이지 https://claude.ai/artifact/TH6bZL1EVRRimPxnGxGrns
+
 로봇 쪽 프로그램(팀원 Pinky FMS)이 EMR과 주고받는 데이터의 형식, 그리고 그 데이터가 EMR 화면에 어떻게 나타나는지를 기능별로 정리했다.
 
 - **2026-10-23 오후 변경**: 배터리·오염도는 로봇이 보내지 않는다. **claim 때 EMR이 로봇 서버(팀원 Pinky API)의 `GET /status`를 직접 묻는다** — 팀원은 `/status`에 `battery_percent`·`contamination_percent` 두 칸을 넣어야 한다(2.1).

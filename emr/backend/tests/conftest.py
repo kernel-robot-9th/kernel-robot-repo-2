@@ -54,7 +54,8 @@ def seed(db: Session) -> dict:
     ward_map = Map(name="3병동", file_name="ward3.yaml", resolution_m_per_pixel=0.05,
                    origin_x_m=-10.0, origin_y_m=-10.0, origin_yaw_rad=0.0)
     db.add(ward_map); db.flush()
-    room_301 = Location(name="301호", map_x_m=12.5, map_y_m=3.2, map_yaw_rad=1.57, map_id=ward_map.id)
+    # 301호는 로봇 목적지 이름이 있어 로봇이 가져갈 수 있다 (2026-10-27: claim은 robot_dest가 있는 장소만)
+    room_301 = Location(name="301호", map_x_m=12.5, map_y_m=3.2, map_yaw_rad=1.57, map_id=ward_map.id, robot_dest="ROOM_301")
     room_302 = Location(name="302호")  # 좌표·맵 미등록
     db.add_all([nurse, medication, blanket, room_301, room_302]); db.flush()
     return {"nurse": nurse, "medication": medication, "blanket": blanket, "ward_map": ward_map,
@@ -116,14 +117,6 @@ def published(monkeypatch) -> list[dict]:
     return messages
 
 
-@pytest.fixture
-def home_location(db: Session, seed: dict) -> Location:
-    """복귀 장소 — 301호와 같은 맵(3병동)에 좌표가 있다."""
-    station = Location(name="간호사스테이션", map_x_m=10.0, map_y_m=3.0, map_yaw_rad=0.0, map_id=seed["ward_map"].id)
-    db.add(station); db.flush()
-    return station
-
-
 ROBOT_SERVER_URL = "http://robot.test:8080"
 
 
@@ -152,20 +145,17 @@ def robot_server(monkeypatch) -> dict:
 
 @pytest.fixture
 def make_robot(client: TestClient, auth_headers: dict[str, str]):
-    """로봇 만들기: make_robot(name, robot_type="amr", home_location_id=None, robot_server_url=ROBOT_SERVER_URL)
+    """로봇 만들기: make_robot(name, robot_type="amr", robot_server_url=ROBOT_SERVER_URL)
     → {"id", "api_key", "headers"}. robot_server_url: claim 때 상태를 물을 로봇 서버(가짜, robot_server 픽스처) — None이면 넣지 않음
     """
-    def _make(name: str, robot_type: str = "amr", home_location_id: int | None = None,
-              robot_server_url: str | None = ROBOT_SERVER_URL) -> dict:
+    def _make(name: str, robot_type: str = "amr", robot_server_url: str | None = ROBOT_SERVER_URL) -> dict:
         robot = client.post(ROBOTS_URL, headers=auth_headers, json={"name": name, "robot_type": robot_type})
         assert robot.status_code == 201, robot.text
         robot_id = robot.json()["id"]
         issued = client.post(f"{ROBOTS_URL}/{robot_id}/api-key", headers=auth_headers)
         assert issued.status_code == 201, issued.text
-        changes = {"home_location_id": home_location_id, "robot_server_url": robot_server_url}
-        changes = {field: value for field, value in changes.items() if value is not None}
-        if changes:
-            patched = client.patch(f"{ROBOTS_URL}/{robot_id}", headers=auth_headers, json=changes)
+        if robot_server_url is not None:
+            patched = client.patch(f"{ROBOTS_URL}/{robot_id}", headers=auth_headers, json={"robot_server_url": robot_server_url})
             assert patched.status_code == 200, patched.text
         api_key = issued.json()["api_key"]
         return {"id": robot_id, "api_key": api_key, "headers": {"X-Robot-Api-Key": api_key}}
@@ -173,9 +163,9 @@ def make_robot(client: TestClient, auth_headers: dict[str, str]):
 
 
 @pytest.fixture
-def robot_with_key(make_robot, home_location: Location) -> dict:
-    """키와 복귀 장소(간호사스테이션)가 있는 AMR. {"id", "api_key", "headers"}"""
-    return make_robot("배송로봇 1호", home_location_id=home_location.id)
+def robot_with_key(make_robot) -> dict:
+    """키가 있는 AMR(로봇 서버 주소는 가짜). {"id", "api_key", "headers"}"""
+    return make_robot("배송로봇 1호")
 
 
 @pytest.fixture

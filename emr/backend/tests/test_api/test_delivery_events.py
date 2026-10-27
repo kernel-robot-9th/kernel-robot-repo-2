@@ -168,9 +168,9 @@ def test_history_is_for_owner_and_admin_only(client, auth_headers, general_nurse
 
 @requires_db
 def test_admin_list_filters_and_requires_admin(
-    client, auth_headers, general_nurse_headers, make_robot, home_location, robot_with_key, reserve_overdue, seed,
+    client, auth_headers, general_nurse_headers, make_robot, robot_with_key, reserve_overdue, seed,
 ):
-    other_robot = make_robot("배송로봇 2호", home_location_id=home_location.id)
+    other_robot = make_robot("배송로봇 2호")
     first = reserve_overdue(minutes_ago=10)                              # N001 예약 → robot_with_key
     second = reserve_overdue(minutes_ago=5, headers=general_nurse_headers)  # N090 예약 → other_robot
     assert client.post(CLAIM, headers=robot_with_key["headers"]).json()["id"] == first["id"]

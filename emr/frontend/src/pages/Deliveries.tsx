@@ -25,7 +25,7 @@ export function Deliveries() {
   const { cancel, confirmReceipt } = useDeliveryMutations()
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<number | null>(null)
-  const [historyId, setHistoryId] = useState<number | null>(null)
+  const [historyId, setHistoryId] = useState<number | null>(null)   // '자세히' 창 — 등록한 시각도 여기서 보인다 (2026-10-27)
 
   const locName = useMemo(() => new Map((locations.data ?? []).map(l => [l.id, l.name])), [locations.data])
   const supName = useMemo(() => new Map((supplies.data ?? []).map(s => [s.id, s.name])), [supplies.data])
@@ -35,7 +35,7 @@ export function Deliveries() {
   const editing = rows.find(d => d.id === editId && d.status === 'reserved')
 
   const cancelDelivery = (deliveryId: number) => {
-    if (!confirm(`#${deliveryId} 예약을 취소할까요?`)) return
+    if (!confirm(`NO ${deliveryId} 신청을 취소할까요?`)) return
     if (deliveryId === editId) setEditId(null)
     cancel.mutate(deliveryId)
   }
@@ -43,24 +43,24 @@ export function Deliveries() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <PageTitle>배송 예약</PageTitle>
-        <Button onClick={() => { setEditId(null); setShowForm(v => !v) }}>{showForm ? '닫기' : '+ 새 예약'}</Button>
+        <PageTitle>물품 신청</PageTitle>
+        <Button onClick={() => { setEditId(null); setShowForm(v => !v) }}>{showForm ? '닫기' : '+ 요청하기'}</Button>
       </div>
 
       {showForm && !editing && <DeliveryForm onDone={() => setShowForm(false)} />}
       {editing && <DeliveryForm key={editing.id} initial={editing} onDone={() => setEditId(null)} />}
 
       {deliveries.isError ? (
-        <LoadError what="배송 예약 목록" error={deliveries.error} onRetry={() => void deliveries.refetch()} />
+        <LoadError what="물품 신청 목록" error={deliveries.error} onRetry={() => void deliveries.refetch()} />
       ) : (
         <Table>
           <thead>
             <tr>
-              <Th>#</Th><Th>예약 시각</Th><Th>목적지</Th><Th>품목</Th><Th>배송 단계</Th><Th>등록</Th><Th>{' '}</Th>
+              <Th>NO</Th><Th>보낼 시간</Th><Th>목적지</Th><Th>품목</Th><Th>배송 단계</Th><Th className="w-56">{' '}</Th>
             </tr>
           </thead>
           <tbody>
-            {deliveries.isPending && <tr><td colSpan={7} className="px-3 py-2 text-slate-500">불러오는 중…</td></tr>}
+            {deliveries.isPending && <tr><td colSpan={6} className="px-3 py-2 text-slate-500">불러오는 중…</td></tr>}
             {rows.map(d => (
               <tr key={d.id} className={d.id === editing?.id ? 'bg-blue-50' : ''}>
                 <Td>{d.id}</Td>
@@ -68,9 +68,9 @@ export function Deliveries() {
                 <Td>{locName.get(d.destination_location_id) ?? `#${d.destination_location_id}`}</Td>
                 <Td>{d.items.map(it => `${supName.get(it.supply_id) ?? `#${it.supply_id}`} ×${it.quantity}`).join(', ')}</Td>
                 <Td><DeliveryProgress delivery={d} /></Td>
-                <Td className="text-slate-500">{formatDateTime(d.created_at)}</Td>
-                <Td>
-                  <div className="flex gap-1">
+                {/* 작업 칸: 고정 폭으로 오른쪽 끝에 붙인다 — 버튼이 몇 개든 '자세히'가 같은 자리 (2026-10-27) */}
+                <Td className="w-56">
+                  <div className="flex justify-end gap-1">
                     {d.status === 'reserved' && (
                       <>
                         <Button variant="secondary" onClick={() => { setShowForm(false); setEditId(d.id) }}>변경</Button>
@@ -83,19 +83,22 @@ export function Deliveries() {
                     {d.status === 'arrived' && d.receipt_method === 'marker' && d.receipt_marker_id != null && (
                       <Button onClick={() => openReceiptMarker(d.id)}>수령 마커</Button>
                     )}
-                    <Button variant="secondary" onClick={() => setHistoryId(d.id)}>기록</Button>
+                    <Button variant="secondary" onClick={() => setHistoryId(d.id)}>자세히</Button>
                   </div>
                 </Td>
               </tr>
             ))}
             {!deliveries.isPending && rows.length === 0 && (
-              <tr><td colSpan={7} className="px-3 py-2 text-slate-500">예약이 없습니다</td></tr>
+              <tr><td colSpan={6} className="px-3 py-2 text-slate-500">신청한 물품이 없습니다</td></tr>
             )}
           </tbody>
         </Table>
       )}
 
-      {historyId != null && <DeliveryHistoryDialog deliveryId={historyId} onClose={() => setHistoryId(null)} />}
+      {historyId != null && (
+        <DeliveryHistoryDialog deliveryId={historyId} onClose={() => setHistoryId(null)}
+          registeredAt={(deliveries.data ?? []).find(delivery => delivery.id === historyId)?.created_at} />
+      )}
     </div>
   )
 }

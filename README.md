@@ -26,7 +26,7 @@ flowchart LR
 
 | 방향 | 내용 |
 |---|---|
-| FMS → EMR | 배송 가져가기(`POST /api/v1/robot/deliveries/claim`), 예약 목록 보기(`GET /robot/deliveries`), 도착(`POST /robot/arrived` — Pinky가 약제실 정밀 주차를 마치면 직접 부름), 실패 보고(`POST /robot/deliveries/{id}/progress`) |
+| FMS → EMR | 배송 가져가기(`POST /api/v1/robot/deliveries/claim`), 예약 목록 보기(`GET /robot/deliveries`), 약제실 도착(`POST /robot/arrived` — Pinky가 약제실 정밀 주차를 마치면 직접 부름, EMR은 로그만), 병실 도착·실패 보고(`POST /robot/deliveries/{id}/progress`) |
 | EMR → FMS | 배정할 때 로봇 서버의 `GET /status`로 배터리·오염도·주행 준비를 확인(로봇별 `robot_server_url`) |
 | (예정) EMR → FMS | 예약 시각에 배송을 묶어 FMS로 보내기 — 별도 브랜치 `fms-order-2026-10-26`에 보관, 팀원 FMS가 준비되면 다시 시작 |
 
