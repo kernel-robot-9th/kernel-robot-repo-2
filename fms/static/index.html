@@ -70,8 +70,8 @@ th { color: var(--quiet); font-weight: 600; border-top: 0; }
     <label>자동 주문 <select id="auto"><option value="0">끔</option><option value="1">분당 1</option><option value="1.5">분당 1.5</option><option value="2">분당 2</option><option value="3">분당 3</option></select></label>
   </div>
   <div class="ctl" style="margin-left:auto">
+    <label title="켜면 OMX 준비·적재 완료를 시뮬레이터가 스스로 보냄. 끄면 아래 '묶음' 버튼이나 관제 PC 가 /api/v1/batches/…/ready·loaded 를 보내야 함"><input type="checkbox" id="autoomx" checked> 가상 OMX</label>
     <label>로봇 <select id="nrob"><option>1</option><option>2</option><option selected>3</option></select></label>
-    <label><input type="checkbox" id="spares" checked> 여분 채우기</label>
     <label>경로 <select id="planner"><option value="cbs">A* + CBS</option><option value="reserve">최단 경로 + 예약</option></select></label>
     <button id="reset">다시 시작</button>
   </div>
@@ -97,6 +97,7 @@ th { color: var(--quiet); font-weight: 600; border-top: 0; }
       <div class="stats" id="stats"></div>
       <div class="next" id="plan" style="margin-top:8px"></div>
     </section>
+    <section class="card" id="batches"><h2>묶음 (관제 PC 신호)</h2></section>
     <section class="card" id="robots"><h2>로봇</h2></section>
     <section class="card">
       <h2>주문</h2>
@@ -110,13 +111,23 @@ th { color: var(--quiet); font-weight: 600; border-top: 0; }
 </main>
 <script>
 const $ = id => document.getElementById(id);
-const ROOM_LABEL = {ROOM1_CUL:'1인실 위-왼', ROOM1_CUR:'1인실 위-오른', ROOM1_CLL:'1인실 아래-왼', ROOM1_CLR:'1인실 아래-오른',
-                    ROOM1_LU:'1인실 왼쪽 위', ROOM1_LD:'1인실 왼쪽 아래',
-                    ROOM4_L:'4인실 왼쪽', ROOM4_R:'4인실 오른쪽', SURGERY:'수술실'};
-const STATE = {idle:'대기', moving:'이동', waiting:'기다림', planned:'계획 대기', docking:'정밀 주차', loading:'적재 중', spinning:'배송 회전', decon:'오염 제거', charging:'충전'};
+const ROOM_LABEL = {ROOM4_L:'101호', ROOM4_R:'102호', ROOM1_LU:'103호', ROOM1_CUL:'104호', ROOM1_CUR:'105호',
+                    ROOM1_LD:'106호', ROOM1_CLL:'107호', ROOM1_CLR:'108호', SURGERY:'수술실'};   // rooms.yaml code (2026-10-27)
+const STATE = {idle:'대기', moving:'이동', waiting:'기다림', planned:'계획 대기', docking:'정밀 주차', loading:'적재 중', reserved:'OMX 준비 기다림', spinning:'배송 회전', pausing:'다음 일 전 쉼', decon:'오염 제거', charging:'충전'};
 const TASK = {delivery:'배송', decon:'오염 제거', charge:'충전', park:'주차', yield:'비켜 주기'};
 const PLACE = {PHARMACY: '약제실', POCKET: 'POCKET', CHARGER: '충전'};
-const OSTATE = {waiting:'대기', assigned:'배정', loaded:'실음', delivered:'완료'};
+const OSTATE = {waiting:'대기', assigned:'배정', loaded:'실음', delivered:'완료', canceled:'취소'};
+const BSTATE = {assigned:'OMX 준비 중', called:'핑키 오는 중', at_pharmacy:'적재 기다림', delivering:'배송 중'};
+function renderBatches() {
+  const bs = (S && S.batches) || [];
+  $('autoomx').checked = !!(S && S.auto_omx);
+  $('batches').innerHTML = '<h2>묶음 (관제 PC 신호)</h2>' + (bs.length ? bs.map(b =>
+    `<div class="rrow"><span><b>${b.batch_id}</b> 로봇 ${b.robot} · ${b.rooms.join(' → ')}</span><span class="state">${BSTATE[b.status] || b.status}` +
+    (b.status === 'assigned' ? ` <button data-b="${b.batch_id}" data-sig="ready">준비 완료</button>` : '') +
+    (b.status === 'at_pharmacy' ? ` <button data-b="${b.batch_id}" data-sig="loaded">적재 완료</button>` : '') +
+    `</span></div>`).join('') : '<div class="next">없음</div>') +
+    (S && S.control_url ? `<div class="next">관제 PC 로 보내는 중: ${S.control_url}</div>` : '');
+}
 const MODE_COL = {line:'#e0a33a', transfer:'#c46bd6', wall:'#e05252', nav:'#4caf6a'};
 let MAP = null, S = null;
 const cv = $('map'), cx = cv.getContext('2d');
@@ -218,7 +229,7 @@ function render() {
       <div class="bars"><span>배터리</span>${bar(r.battery, r.battery <= 20 ? css('--bad') : css('--good'))}<span>${r.battery}</span>
       <span>오염도</span>${bar(r.contam, r.contam >= 100 ? css('--bad') : css('--warn'))}<span>${r.contam}</span>
       <span>적재</span>${bar(r.load / 3 * 100, r.color)}<span>${r.load}/3</span></div>
-      ${r.orders.length ? `<div class="next">주문 ${r.orders.map(o => '#' + o).join(' ')}${next ? ' · 다음: ' + next : ''}${r.spares > 0 ? ' · 여분 ' + r.spares : ''}</div>` : (r.spares > 0 ? `<div class="next">여분 ${r.spares}</div>` : '')}
+      ${r.orders.length ? `<div class="next">주문 ${r.orders.map(o => '#' + o).join(' ')}${next ? ' · 다음: ' + next : ''}</div>` : ''}
       ${r.plan && r.plan.length ? `<div class="next">계획: ${r.plan.filter(g => g.leave == null || g.leave > S.t).map(g =>
           `${ROOM_LABEL[g.node] || PLACE[g.node] || g.node} ${fmt(g.arrive)}~${g.leave == null ? '' : fmt(g.leave)}`).join(' → ')}</div>` : ''}
       ${r.wait ? `<div class="wait">기다림 ${r.wait_s}s · ${r.wait}</div>` : ''}
@@ -232,19 +243,21 @@ function render() {
 }
 
 async function tick() {
-  try { S = await (await fetch('/api/state')).json(); render(); } catch (e) {}
+  try { S = await (await fetch('/api/state')).json(); render(); renderBatches(); } catch (e) {}
 }
 function frame() { draw(); requestAnimationFrame(frame); }
 
 (async () => {
   MAP = await (await fetch('/api/map')).json();
   $('rooms').innerHTML = Object.entries(MAP.rooms).map(([k, c]) =>
-    `<button data-room="${k}">${ROOM_LABEL[k]}<small>오염 +${c}</small></button>`).join('');
+    `<button data-room="${k}">${ROOM_LABEL[k]}<small>${(MAP.room_names || {})[k] || ''} · 오염 +${c}</small></button>`).join('');
   $('rooms').onclick = e => { const b = e.target.closest('button'); if (b) post('/api/orders', {room: b.dataset.room}).then(tick); };
   $('pause').onclick = () => post('/api/control', {paused: !(S && S.paused)}).then(tick);
   $('speed').onchange = e => post('/api/control', {speed: +e.target.value});
   $('auto').onchange = e => post('/api/control', {auto_rate: +e.target.value});
-  $('reset').onclick = () => post('/api/control', {reset: {robots: +$('nrob').value, spares: $('spares').checked, planner: $('planner').value}}).then(tick);
+  $('autoomx').onchange = e => post('/api/control', {auto_omx: e.target.checked}).then(tick);
+  $('batches').onclick = e => { const b = e.target.closest('button[data-b]'); if (b) post(`/api/v1/batches/${b.dataset.b}/${b.dataset.sig}`, {}).then(tick); };
+  $('reset').onclick = () => post('/api/control', {reset: {robots: +$('nrob').value, planner: $('planner').value}}).then(tick);
   await post('/api/control', {speed: +$('speed').value});
   setInterval(tick, 200);
   frame();

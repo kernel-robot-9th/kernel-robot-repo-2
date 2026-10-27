@@ -22,13 +22,11 @@ def main():
     ap.add_argument('--robots', type=int, default=3)
     ap.add_argument('--seed', type=int, default=1)
     ap.add_argument('--dt', type=float, default=0.1)
-    ap.add_argument('--no-spares', action='store_true', help='약제실에서 주문 수만큼만 싣기')
     ap.add_argument('--planner', default='cbs', choices=['cbs', 'reserve'], help='cbs = A*+CBS, reserve = 최단 경로+예약')
     ap.add_argument('--legs', type=int, default=None, help='CBS 가 내다보는 목적지 수 (기본 FMS.PLAN_LEGS)')
     a = ap.parse_args()
 
     f = FMS(n_robots=a.robots, seed=a.seed)
-    f.p.fill_spares = not a.no_spares
     f.p.planner = a.planner
     if a.legs:
         f.PLAN_LEGS = a.legs
@@ -70,7 +68,7 @@ def main():
                     passing.discard(key)
     ev = [e for e in f.events if e['kind'] in ('violation', 'warn')]
     s = f.snapshot()
-    print(f'시간 {a.minutes:.0f}분, 로봇 {a.robots}대, 주문 {len(f.orders)}건 (분당 {a.rate}), 여분 {"끔" if a.no_spares else "켬"}, 경로 {a.planner}, seed {a.seed}')
+    print(f'시간 {a.minutes:.0f}분, 로봇 {a.robots}대, 주문 {len(f.orders)}건 (분당 {a.rate}), 경로 {a.planner}, seed {a.seed}')
     print(f"배송 완료 {s['stats']['delivered']}, 대기 주문 {s['waiting']}, 평균 배송 시간 {s['stats']['avg_delivery_s']}s")
     print(f"위반 {s['stats']['violations']}, 충돌 {s['stats']['collisions']}, 실은 로봇 나란히 {n_pass}")
     print('로봇별 가장 오래 기다림(s):', {k: round(v, 1) for k, v in max_wait.items()})

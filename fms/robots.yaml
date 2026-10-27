@@ -1,0 +1,6 @@
+# 관제 PC 로봇 번호 ↔ 핑키 (API v1 의 robot / name). FMS 가 이 표로 맞춘다 (2026-10-27 사용자: "robot 1" 로 쓰고 FMS 에서 표).
+# 시뮬레이터는 위에서부터 로봇 수만큼 쓴다.
+robots:
+  - {robot: 1, name: pinky_6364}
+  - {robot: 2, name: pinky_2}
+  - {robot: 3, name: pinky_3}

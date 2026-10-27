@@ -23,6 +23,7 @@ PHARMACY, POCKET, CHARGER, SURGERY = 'PHARMACY', 'POCKET', 'CHARGER', 'SURGERY'
 ROOM_INFO = yaml.safe_load(open(os.path.join(HERE, 'rooms.yaml')))['rooms']    # 병실 → 이름·오염도·별칭 (관제 PC 이름)
 ROOM_CONTAM = {k: v['contam'] for k, v in ROOM_INFO.items()}   # 1인실 +10, 4인실 +50, 수술실 0 (오염도 0 으로만 진입)
 ROOMS = list(ROOM_CONTAM)
+ROBOT_TABLE = yaml.safe_load(open(os.path.join(HERE, 'robots.yaml')))['robots']   # 관제 PC 로봇 번호 ↔ 이름
 ROOM_KEYS = ('room', 'dest', 'location', '병실', '병실위치', '병실 위치', '목적지', '위치')
 ITEM_KEYS = ('item', 'items', '물품', '품목')
 
@@ -42,8 +43,42 @@ def resolve_room(name):
     k = ROOM_ALIAS.get(_norm(name))
     if k is None:
         raise ValueError(f'모르는 병실 "{name}". 쓸 수 있는 이름: ' +
-                         ', '.join(f"{k}({v['name']})" for k, v in ROOM_INFO.items()))
+                         ', '.join(sorted(str(v.get('code', k)) for v in ROOM_INFO.values())))
     return k
+
+
+class Conflict(Exception):
+    """API 409: 지금 상태에서는 할 수 없는 요청"""
+    def __init__(self, code, message):
+        super().__init__(message)
+        self.code = code
+
+
+def room_code(node):
+    """그래프 노드 → 관제 PC 방 번호 (101호 …, 수술실, 약제실)"""
+    if node == PHARMACY:
+        return '약제실'
+    return str(ROOM_INFO[node].get('code', node)) if node in ROOM_INFO else node
+
+
+def room_or_none(node):
+    """병실·약제실이면 방 번호, 아니면 None (API 의 room 필드)"""
+    return room_code(node) if (node in ROOM_INFO or node == PHARMACY) else None
+
+
+def place_of(node):
+    """사람이 읽는 위치 이름"""
+    if node in ROOM_INFO or node == PHARMACY:
+        return room_code(node)
+    named = {'POCKET': 'POCKET(대기)', 'CHARGER': '충전기'}
+    if node in named:
+        return named[node]
+    head = node[:1]
+    if node[:2] in ('B1', 'B2') or node.startswith('GB'):
+        return '아래 복도'
+    if node[:2] in ('T1', 'T2') or node.startswith('GT'):
+        return '위 복도'
+    return {'L': '왼쪽 협로', 'R': '오른쪽 협로', 'S': '단일차선 협로'}.get(head, node)
 
 
 def parse_request(body):
@@ -80,8 +115,10 @@ class Params:
         self.spin_s = 8.0          # 병실 제자리 360° 회전 = 배송 완료
         self.dwell_s = 5.0         # POCKET 5초 = 오염도 0
         self.charge_s = 10.0       # CHARGER 도착 10초 뒤 배터리 100
-        self.cap = 3               # 적재 용량
-        self.fill_spares = True    # 약제실에서 3개까지 채움 (여분)
+        self.cap = 3               # 적재 용량 (실는 개수 = 맡은 주문 수. 여분은 싣지 않음 — 2026-10-27 사용자)
+        self.pause_s = (1.0, 5.0)  # 병실 회전 뒤 다음 일까지 쉬는 시간 (무작위, 초) — 2026-10-27 사용자
+        self.prep_s = 15.0         # 가상 OMX 물품 준비 (배차 → ready). 실제로는 관제 PC 가 POST .../ready
+        self.auto_omx = True       # 가상 관제 PC/OMX: ready·loaded 를 시간 지나면 스스로 보냄. 외부 관제 PC 를 붙이면 끔
         self.battery_per_room = 10
         self.pharmacy_min_battery = 20   # 이 값 이하면 약제실 방문 금지
         self.contam_max = 100
@@ -205,19 +242,43 @@ class Graph:
 class Order:
     _n = 0
 
-    def __init__(self, room, t, item='약'):
+    def __init__(self, room, t, item='약', request_id=None, stamp=None):
         Order._n += 1
         self.id = Order._n
         self.room = room
         self.item = item
         self.created = t
-        self.state = 'waiting'     # waiting → assigned → loaded → delivered
+        self.state = 'waiting'     # waiting → assigned → loaded → delivered (또는 canceled / failed)
         self.robot = None
         self.done_t = None
+        self.request_id = request_id
+        self.batch = None
+        self.created_at, self.delivered_at, self.fail_reason = stamp, None, None
+
+    @property
+    def oid(self):
+        return f'o-{self.id}'
 
     def as_dict(self):
         return dict(id=self.id, room=self.room, item=self.item, state=self.state, robot=self.robot,
                     created=round(self.created, 1), done=None if self.done_t is None else round(self.done_t, 1))
+
+
+class Batch:
+    """배차 때 정해지는 묶음 (핑키 1대 + 주문 ≤3). 정해지면 바뀌지 않는다.
+    assigned → (관제 PC ready) called → (정밀 주차 끝) at_pharmacy → (관제 PC loaded) delivering → completed"""
+    _n = 0
+
+    def __init__(self, robot, orders, rooms, t):
+        Batch._n += 1
+        self.id = Batch._n
+        self.robot, self.orders, self.rooms, self.created = robot, list(orders), list(rooms), t
+        self.status = 'assigned'
+        self.status_t = t          # 지금 상태가 된 시각 (가상 OMX 타이머)
+
+    @property
+    def bid(self):
+        return f'b-{self.id}'
 
 
 class Robot:
@@ -230,7 +291,7 @@ class Robot:
         self.step = None            # 지금 단계 dict
         self.queue = []             # 다음 단계들
         self.timer = 0.0
-        self.loaded_done = True     # 이번 배송에서 약제실 적재가 끝났는지 (약제실 안 가는 배송 = True)
+        self.loaded_done = True     # 이번 배송에서 약제실 적재가 끝났는지
         # 이동 상태
         self.path, self.k, self.res_to, self.edge_t = [], 0, 0, 0.0
         self.extra_nodes = set()    # 이번 구간에서 가로지르는 차선 노드
@@ -240,14 +301,13 @@ class Robot:
         self.blocked_by = set()
         self.depart = None          # CBS 계획: path[i] 에서 떠나도 되는 시각 (없으면 바로)
         self.plan_wait = False
+        self.num, self.name = None, rid        # 관제 PC 로봇 번호, 이름 (robots.yaml)
+        self.heading = 0.0          # deg, 마지막으로 달린 엣지 방향
+        self.batch = None
 
     @property
     def loaded(self):
         return self.load > 0
-
-    @property
-    def spares(self):
-        return self.load - len(self.assigned) if self.loaded_done else 0
 
     @property
     def idle(self):
@@ -277,7 +337,8 @@ class Robot:
         k = self.step['kind']
         if k == 'move':
             return 'waiting' if self.wait_s > 0 else ('planned' if self.plan_wait else 'moving')
-        return {'dock': 'docking', 'load': 'loading', 'spin': 'spinning', 'dwell': 'decon', 'charge': 'charging'}[k]
+        return {'dock': 'docking', 'load': 'loading', 'spin': 'spinning', 'pause': 'pausing', 'dwell': 'decon',
+                'charge': 'charging', 'wait_ready': 'reserved'}[k]
 
 
 # ----------------------------------------------------------------------------------------------------------
@@ -289,7 +350,15 @@ class FMS:
         self.t = 0.0
         starts = ['B1_20', 'T1_20', 'B2_20', 'T2_20']
         self.robots = [Robot(f'R{i + 1}', starts[i], self.g, COLORS[i]) for i in range(n_robots)]
+        for i, r in enumerate(self.robots):
+            row = ROBOT_TABLE[i] if i < len(ROBOT_TABLE) else {'robot': i + 1, 'name': f'pinky_{i + 1}'}
+            r.num, r.name = row['robot'], row['name']
         self.orders = []
+        self.batches = []
+        self.by_request = {}         # request_id → 주문 (같은 요청 두 번 = 한 번)
+        self.outbox = []             # API v1 이벤트 (관제 PC 로 보낼 것). sim_server 가 가져가 보낸다
+        self._seq = 0
+        self.clock = None            # () → ISO 시각 문자열 (sim_server 가 넣음). 없으면 시뮬레이션 초
         self.events = []
         self.stats = dict(delivered=0, violations=0, collisions=0, near=0)
         self._next_dispatch = 0.0
@@ -306,13 +375,102 @@ class FMS:
             self.stats['violations'] += 1
         del self.events[:-300]
 
+    # ---- API v1 보기 (관제 PC 로 나가는 모양) ----
+    @staticmethod
+    def task_name(r):
+        if r.step and r.step.get('sidestep'):
+            return 'yield'
+        return r.task or 'none'
+
+    def robot_status(self, r):
+        moving = r.step and r.step['kind'] == 'move' and r.path
+        path = r.path[r.k:] if moving else []
+        st = r.state_name()
+        dest = r.step['to'] if r.step and r.step['kind'] == 'move' else None
+        return dict(robot=r.num, name=r.name, online=True,
+                    state={'planned': 'moving'}.get(st, st), task=self.task_name(r),
+                    pose=dict(x=round(r.pos[0], 1), y=round(r.pos[1], 1), heading=round(r.heading, 1)),
+                    node=r.node, next_node=path[1] if len(path) > 1 else None, place=place_of(r.node),
+                    destination=None if dest is None else dict(node=dest, room=room_or_none(dest)),
+                    path=path, battery=r.battery, contamination=r.contam, load=r.load, capacity=self.p.cap,
+                    batch_id=r.batch.bid if r.batch else None, orders=[o.oid for o in r.assigned])
+
+    def order_api(self, o):
+        st = {'waiting': 'queued'}.get(o.state, o.state)
+        r = next((x for x in self.robots if x.id == o.robot), None)
+        return dict(order_id=o.oid, request_id=o.request_id, room=room_code(o.room), item=o.item, status=st,
+                    batch_id=o.batch.bid if o.batch else None, robot=r.num if r else None,
+                    created_at=o.created_at, delivered_at=o.delivered_at, fail_reason=o.fail_reason)
+
+    def batch_api(self, b):
+        return dict(batch_id=b.bid, status=b.status, robot=b.robot.num, name=b.robot.name,
+                    orders=[dict(order_id=o.oid, room=room_code(o.room), item=o.item, status=self.order_api(o)['status'])
+                            for o in b.orders],
+                    count=len(b.orders), rooms=[room_code(x) for x in b.rooms])
+
+    def find_order(self, oid):
+        return next((o for o in self.orders if o.oid == oid), None)
+
+    def find_batch(self, bid):
+        return next((b for b in self.batches if b.bid == bid), None)
+
+    def state_v1(self):
+        return dict(time=self.stamp(), robots=[self.robot_status(r) for r in self.robots],
+                    orders=[self.order_api(o) for o in self.orders if o.state not in ('delivered', 'canceled', 'failed')],
+                    batches=[self.batch_api(b) for b in self.batches if b.status not in ('completed', 'failed')],
+                    last_seq=self._seq)
+
+    # ---- API v1 이벤트 (FMS → 관제 PC) ----
+    def stamp(self):
+        return self.clock() if self.clock else f'{self.t:.1f}'
+
+    def emit(self, type_, **kw):
+        self._seq += 1
+        ev = dict(event_id=f'e-{self._seq}', seq=self._seq, time=self.stamp(), type=type_, **kw)
+        self.outbox.append(ev)
+        del self.outbox[:-2000]
+        return ev
+
     # ---- 주문 (관제 PC → FMS) ----
-    def add_order(self, room, item='약'):
+    def add_order(self, room, item='약', request_id=None):
+        """주문 1건. 같은 request_id 가 이미 있으면 그 주문을 그대로 돌려준다 (새로 안 만듦)"""
+        if request_id is not None and request_id in self.by_request:
+            return self.by_request[request_id]
         room = resolve_room(room)
-        o = Order(room, self.t, item)
+        o = Order(room, self.t, item, request_id, self.stamp())
         self.orders.append(o)
-        self.log(f'관제 PC → FMS: 주문 #{o.id} {ROOM_INFO[room]["name"]} ({item})')
+        if request_id is not None:
+            self.by_request[request_id] = o
+        self.log(f'관제 PC → FMS: 주문 #{o.id} {room_code(room)} ({item})')
+        self.emit('order_created', order_id=o.oid, request_id=request_id, room=room_code(room), item=item)
         return o
+
+    def cancel_order(self, o):
+        if o.state != 'waiting':
+            raise Conflict('order_locked', f'주문 {o.oid} 는 이미 묶음 {o.batch.bid if o.batch else ""} 에 들어가 취소할 수 없음')
+        o.state = 'canceled'
+        self.log(f'관제 PC → FMS: 주문 #{o.id} 취소')
+        self.emit('order_canceled', order_id=o.oid)
+        return o
+
+    def batch_ready(self, b):
+        """관제 PC: OMX 물품 준비 끝 → 핑키를 약제실로"""
+        if b.status != 'assigned':
+            raise Conflict('bad_batch_state', f'묶음 {b.bid} 상태가 {b.status} (assigned 일 때만 ready)')
+        r = b.robot
+        b.status, b.status_t = 'called', self.t
+        eta = self.g.dist(r.node, PHARMACY) / self.p.speed + self.p.dock_s
+        self.log(f'관제 PC → FMS: 묶음 {b.bid} 준비 완료 → {r.id} 약제실로')
+        self.emit('robot_called', batch_id=b.bid, robot=r.num, eta_s=round(eta))
+        return round(eta)
+
+    def batch_loaded(self, b):
+        """관제 PC: OMX 가 핑키에 다 실음 → 병실로 출발"""
+        if b.status != 'at_pharmacy':
+            raise Conflict('bad_batch_state', f'묶음 {b.bid} 상태가 {b.status} (at_pharmacy 일 때만 loaded)')
+        b.status, b.status_t = 'delivering', self.t
+        self.log(f'관제 PC → FMS: 묶음 {b.bid} 적재 완료')
+        self.emit('batch_departed', batch_id=b.bid, robot=b.robot.num, rooms=[room_code(x) for x in b.rooms])
 
     # ---- 단계 만들기 ----
     def visit_steps(self, start, rooms, c0):
@@ -490,25 +648,24 @@ class FMS:
         for r in self.robots:                               # 노는 로봇: 충전·오염 제거 먼저
             if not r.idle:
                 continue
-            if r.battery <= p.pharmacy_min_battery and not (r.spares > 0 and r.battery >= p.battery_per_room):
+            if r.battery <= p.pharmacy_min_battery:
                 st = ([dict(kind='move', to=POCKET, also={'charger'}), dict(kind='dwell')] if r.contam > 0 else []) + \
                      [dict(kind='move', to=CHARGER), dict(kind='charge')]
                 self.start_task(r, 'charge', st, f'배터리 {r.battery} → 충전')
             elif r.contam > 0:
                 self.start_task(r, 'decon', [dict(kind='move', to=POCKET), dict(kind='dwell')], f'오염도 {r.contam} → POCKET')
 
+        # 배차 때 묶음이 정해지면 그 목록은 바꾸지 않는다 (배송 중인 로봇에 끼워 넣기 없음 — 2026-10-27 사용자).
+        # 새 주문은 노는 로봇이 생길 때까지 기다린다.
         waiting = sorted([o for o in self.orders if o.state == 'waiting'], key=lambda o: o.created)
-        for o in waiting:                                   # 1) 배송 중인 로봇에 끼워 넣기 (여분 / 아직 약제실 전)
-            self.try_insert(o)
-        waiting = [o for o in waiting if o.state == 'waiting']
-        while waiting:                                      # 2) 노는 로봇에 새 묶음
+        while waiting:                                      # 1) 노는 로봇에 새 묶음
             if not self.new_bundle(waiting):
                 break
             waiting = [o for o in waiting if o.state == 'waiting']
 
         taken = {r.step['to'] for r in self.robots if r.step and r.step['kind'] == 'move'} | \
                 {s['to'] for r in self.robots for s in r.queue if s['kind'] == 'move'}
-        for r in self.robots:                               # 3) 남는 로봇은 주차 자리로
+        for r in self.robots:                               # 2) 남는 로봇은 주차 자리로
             if r.idle and r.node not in PARKING:
                 spot = self.free_parking(r, taken)
                 if spot:
@@ -539,61 +696,6 @@ class FMS:
             spots.append(s)
         return min(spots, key=lambda s: self.g.dist(r.node, s)) if spots else None
 
-    def try_insert(self, o):
-        """배송 중인 로봇에 주문 끼워 넣기: 약제실 가기 전(용량 남음) 또는 여분이 있을 때"""
-        best = None
-        for r in self.robots:
-            if r.task != 'delivery':
-                continue
-            if r.loaded_done and r.spares <= 0:
-                continue
-            if not r.loaded_done and len(r.assigned) >= self.p.cap:
-                continue
-            cur, q = r.step, r.queue
-            prefix = [s for s in q if not s.get('visit')]
-            visits = [s for s in q if s.get('visit')]
-            spins = [s['room'] for s in visits if s['kind'] == 'spin']
-            fixed, same = [], False
-            if cur and cur.get('visit') and cur['kind'] == 'move' and cur['to'] in ROOM_CONTAM:
-                x = cur['to']
-                fixed, spins = visits[:1], spins[1:]          # 가고 있는 병실의 회전은 그대로
-                start, c0 = x, r.contam + ROOM_CONTAM[x]
-                same = (o.room == x)
-            elif cur and cur['kind'] == 'spin':
-                if cur['room'] == o.room:
-                    continue                                    # 이미 그 병실에서 회전 중
-                start, c0 = cur['room'], r.contam
-            elif cur and cur.get('visit'):                      # 수술실 앞 POCKET 들르는 중
-                fixed = visits[:1] if cur['kind'] == 'move' else []
-                spins = [s['room'] for s in visits[len(fixed):] if s['kind'] == 'spin']
-                start, c0 = POCKET, 0
-            elif not r.loaded_done:
-                start, c0 = PHARMACY, r.contam
-            else:
-                start, c0 = r.node, r.contam
-            rooms = spins if (same or o.room in spins) else spins + [o.room]
-            tail = fixed + self.visit_steps(start, rooms, c0)
-            if not self.feasible(r, prefix + tail):
-                continue
-            def route_len(st):
-                here, L = start, 0.0
-                for x in st:
-                    if x['kind'] == 'move':
-                        L += self.g.dist(here, x['to'])
-                        here = x['to']
-                return L
-            cost = route_len(tail) - route_len(fixed + self.visit_steps(start, spins, c0))
-            if best is None or cost < best[0]:
-                best = (cost, r, prefix + tail)
-        if best:
-            _, r, q = best
-            r.queue = q
-            o.state, o.robot = ('loaded' if r.loaded_done else 'assigned'), r.id
-            r.assigned.append(o)
-            self.log(f'주문 #{o.id} {o.room} → {r.id} 에 끼워 넣음' + (' (여분)' if r.loaded_done else ' (약제실 가는 중)'))
-            return True
-        return False
-
     def new_bundle(self, waiting):
         p = self.p
         seed = waiting[0]
@@ -601,16 +703,12 @@ class FMS:
         for r in self.robots:
             if not r.idle or (r.contam > 0) or r.battery < p.battery_per_room:
                 continue
-            spares = r.load                                   # 노는 로봇의 실린 약 = 전부 여분
-            use_pharmacy = spares == 0
-            if use_pharmacy and r.battery <= p.pharmacy_min_battery:
+            if r.battery <= p.pharmacy_min_battery:
                 continue
-            cost = self.g.dist(r.node, PHARMACY if use_pharmacy else seed.room)
-            cands.append((cost, r, use_pharmacy))
-        for _, r, use_pharmacy in sorted(cands, key=lambda c: c[0]):
-            cap = p.cap if use_pharmacy else r.load
-            start = PHARMACY if use_pharmacy else r.node
-            prefix = [dict(kind='move', to=PHARMACY), dict(kind='dock'), dict(kind='load')] if use_pharmacy else []
+            cands.append((self.g.dist(r.node, PHARMACY), r))
+        for _, r in sorted(cands, key=lambda c: c[0]):
+            cap, start = p.cap, PHARMACY
+            prefix = [dict(kind='wait_ready'), dict(kind='move', to=PHARMACY), dict(kind='dock'), dict(kind='load')]
             bundle, here = [seed], seed.room
             if not self.feasible(r, prefix + self.visit_steps(start, [seed.room], r.contam), include_current=False):
                 continue
@@ -627,12 +725,20 @@ class FMS:
                 else:
                     break
             steps = prefix + self.visit_steps(start, [b.room for b in bundle], r.contam)
-            r.loaded_done = not use_pharmacy
+            r.loaded_done = False
+            rooms = [s['room'] for s in steps if s['kind'] == 'spin']
+            b = Batch(r, bundle, rooms, self.t)
+            self.batches.append(b)
+            for s in steps:
+                if s['kind'] in ('wait_ready', 'load'):
+                    s['batch'] = b
             for o in bundle:
-                o.state, o.robot = ('loaded' if not use_pharmacy else 'assigned'), r.id
-            r.assigned = list(bundle)
-            self.start_task(r, 'delivery', steps, f'배송 {[f"#{o.id} {o.room}" for o in bundle]}' +
-                            ('' if use_pharmacy else ' (실린 여분으로)'))
+                o.state, o.robot, o.batch = 'assigned', r.id, b
+            r.assigned, r.batch = list(bundle), b
+            self.emit('batch_assigned', batch_id=b.bid, robot=r.num, name=r.name,
+                      orders=[dict(order_id=o.oid, room=room_code(o.room), item=o.item) for o in bundle],
+                      count=len(bundle), rooms=[room_code(x) for x in rooms])
+            self.start_task(r, 'delivery', steps, f'배송 {b.bid} {[f"#{o.id} {o.room}" for o in bundle]} (OMX 준비 기다림)')
             return True
         return False
 
@@ -648,13 +754,21 @@ class FMS:
         r.timer = 0.0
         if r.step is None:
             if r.task == 'delivery':
-                self.log(f'{r.id}: 배송 끝 (실린 여분 {r.load})')
-            r.task = None
+                self.log(f'{r.id}: 배송 끝')
+            r.task, r.batch = None, None
             return
         k = r.step['kind']
         if k == 'move':
             self.next_step_init_move(r)
+            if r.step['to'] != r.node:
+                to = r.step['to']
+                self.emit('robot_departed', robot=r.num, task=self.task_name(r), **{'from': r.node},
+                          to=dict(node=to, room=room_or_none(to)))
         elif k == 'load':
+            b = r.step.get('batch')
+            if b:
+                b.status, b.status_t = 'at_pharmacy', self.t
+                self.emit('robot_at_pharmacy', batch_id=b.bid, robot=r.num)
             self.log(f'{r.id} → 관제 PC: 약제실 정밀 주차 끝 (적재 기다림)')
 
     def other_holds(self, r):
@@ -741,13 +855,14 @@ class FMS:
                 stack.append(w)
         return True
 
-    ACT_KINDS = ('dock', 'load', 'spin', 'dwell', 'charge')
+    ACT_KINDS = ('wait_ready', 'dock', 'load', 'spin', 'pause', 'dwell', 'charge')
     PLAN_LEGS = 2                  # CBS 가 내다보는 목적지 수 (지금 목적지 + 다음 목적지)
 
     def act_time(self, s, elapsed=0.0):
         """작업 단계 시간 (초). 적재는 관제 PC/OMX 를 기다리므로 예상값"""
         p = self.p
-        t = {'dock': p.dock_s, 'load': p.load_s, 'spin': p.spin_s, 'dwell': p.dwell_s, 'charge': p.charge_s}[s['kind']]
+        t = {'dock': p.dock_s, 'load': p.load_s, 'spin': p.spin_s, 'dwell': p.dwell_s, 'charge': p.charge_s,
+             'pause': s.get('dur', sum(p.pause_s) / 2), 'wait_ready': p.prep_s}[s['kind']]
         return max(1.0, t - elapsed)
 
     def legs_for(self, r, first_goal, first_dwell, seq):
@@ -766,7 +881,7 @@ class FMS:
             else:
                 dwell += self.act_time(s)
                 if s['kind'] == 'load':
-                    load = p.cap if p.fill_spares else max(load, len(assigned))
+                    load = max(load, len(assigned))
                 elif s['kind'] == 'spin':
                     load -= sum(1 for o in assigned if o.room == s['room'])
                     assigned = [o for o in assigned if o.room != s['room']]
@@ -1001,6 +1116,7 @@ class FMS:
                 f = r.edge_t / self.g.edge[(a, b)]['L']
                 (xa, ya), (xb, yb) = self.g.xy(a), self.g.xy(b)
                 r.pos = (xa + (xb - xa) * f, ya + (yb - ya) * f)
+                r.heading = math.degrees(math.atan2(yb - ya, xb - xa))
             else:
                 r.pos = self.g.xy(a)
             if r.k >= len(r.path) - 1:
@@ -1009,30 +1125,50 @@ class FMS:
             r.timer += dt
             if r.timer >= p.dock_s:
                 self.next_step(r)
+        elif k == 'wait_ready':                         # 배차됨, 관제 PC 의 ready(OMX 준비 끝) 기다림 — 제자리
+            r.timer += dt
+            b = s.get('batch')
+            if b and b.status == 'assigned' and p.auto_omx and self.t - b.status_t >= p.prep_s:
+                self.batch_ready(b)                     # 가상 관제 PC
+            if b is None or b.status != 'assigned':
+                self.next_step(r)
         elif k == 'load':
             r.timer += dt
-            if r.timer >= p.load_s:                     # 가상 관제 PC/OMX 가 적재 완료를 보냄
-                need = len(r.assigned) - r.load
-                n = (p.cap - r.load) if p.fill_spares else max(0, need)
+            b = s.get('batch')
+            if b and b.status == 'at_pharmacy' and p.auto_omx and self.t - b.status_t >= p.load_s:
+                self.batch_loaded(b)                    # 가상 관제 PC/OMX 가 적재 완료를 보냄
+            if b is None or b.status == 'delivering':
+                n = max(0, len(r.assigned) - r.load)
                 r.load += n
                 r.loaded_done = True
                 for o in r.assigned:
                     o.state = 'loaded'
-                self.log(f'관제 PC → FMS: {r.id} 적재 완료 {n}개 (실림 {r.load}, 주문 {len(r.assigned)})')
+                self.log(f'{r.id}: 적재 {n}개 (실림 {r.load}, 주문 {len(r.assigned)}) → 병실로')
                 self.next_step(r)
         elif k == 'spin':
             r.timer += dt
             if r.timer >= p.spin_s:
                 done = [o for o in r.assigned if o.room == s['room']]
                 for o in done:
-                    o.state, o.done_t = 'delivered', self.t
+                    o.state, o.done_t, o.delivered_at = 'delivered', self.t, self.stamp()
                     r.assigned.remove(o)
                     r.load -= 1
                     self.stats['delivered'] += 1
+                    self.emit('order_delivered', order_id=o.oid, room=room_code(o.room), robot=r.num,
+                              batch_id=o.batch.bid if o.batch else None)
+                b = r.batch
+                if b and b.status != 'completed' and all(o.state == 'delivered' for o in b.orders):
+                    b.status, b.status_t = 'completed', self.t
+                    self.emit('batch_completed', batch_id=b.bid, robot=r.num)
                 r.battery -= p.battery_per_room
                 if r.load < 0 or r.battery < 0:
                     self.log(f'{r.id}: 적재 {r.load} / 배터리 {r.battery} 음수', 'violation')
                 self.log(f'{r.id}: {s["room"]} 배송 완료 {[f"#{o.id}" for o in done]} → 관제 PC (배터리 {r.battery})')
+                r.step = dict(kind='pause', dur=self.rng.uniform(*p.pause_s))   # 한 바퀴 뒤 1~5초 쉬고 다음 일
+                r.timer = 0.0
+        elif k == 'pause':
+            r.timer += dt
+            if r.timer >= s['dur']:
                 self.next_step(r)
         elif k == 'dwell':
             r.timer += dt
@@ -1056,6 +1192,7 @@ class FMS:
         r.depart, r.plan_wait = None, False
         if to == PHARMACY and r.battery <= self.p.pharmacy_min_battery:
             self.log(f'{r.id}: 배터리 {r.battery} 로 약제실 도착', 'violation')
+        self.emit('robot_arrived', robot=r.num, node=to, room=room_or_none(to))
         if to in ROOM_CONTAM and r.step.get('visit'):
             if to == SURGERY and r.contam > 0:
                 self.log(f'{r.id}: 오염도 {r.contam} 로 수술실 진입', 'violation')
@@ -1109,7 +1246,7 @@ class FMS:
             n, e, z = r.holds()
             rs.append(dict(id=r.id, color=r.color, x=round(r.pos[0], 2), y=round(r.pos[1], 2), node=r.node,
                            state=r.state_name(), task=r.task, battery=r.battery, contam=r.contam, load=r.load,
-                           spares=max(0, r.spares), orders=[o.id for o in r.assigned],
+                           orders=[o.id for o in r.assigned],
                            step=None if r.step is None else {k: v for k, v in r.step.items() if k in ('kind', 'to', 'room')},
                            queue=[{k: v for k, v in s.items() if k in ('kind', 'to', 'room')} for s in r.queue],
                            path=r.path[r.k:] if r.step and r.step['kind'] == 'move' and r.path else [],

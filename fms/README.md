@@ -1,50 +1,95 @@
-# FMS 시뮬레이터 (가상 핑키)
+# FMS 시뮬레이터 + 관제 PC API v1
 
-설계 문서: https://claude.ai/artifact/HUtGfUd8E16rrR7mptVymC (비공개 — 공유받은 사람만 열림)
+실제 로봇 없이 FMS(배차·배송 묶음·오염도·배터리·구간 예약·교행 금지)를 가상 핑키 3대로 돌려 보는 서버다.
+**관제 PC 팀은 이 서버에 API v1 로 붙어서 개발·시험하면 된다.** 실제 FMS 도 같은 API 를 연다.
 
-같은 저장소의 `driving/` 이 있어야 돈다: 주행 그래프 `driving/graph/graph.yaml`, 벽 `driving/tools/real_walls.yaml`.
-그래프를 바꾸려면 `driving/graph/graph_spec.yaml` 을 고치고 `python3 driving/graph/build_graph.py`.
+- API 문서: [`API.md`](API.md) (Swagger: 서버를 띄우고 `http://<FMS>:8770/docs`)
+- 지도: 같은 저장소 `driving/graph/graph.yaml`(주행 그래프), `driving/tools/real_walls.yaml`(벽)을 그대로 읽는다 → **`driving/` 폴더도 있어야 돈다**.
+  그래프를 바꾸려면 `driving/graph/graph_spec.yaml` 을 고치고 `python3 driving/graph/build_graph.py`.
 
-실제 로봇 없이 FMS 규칙(배차·배송 묶음·오염도·배터리·구간 예약·교행 금지)을 가상 핑키로 돌려 본다.
-지도는 `driving/graph/graph.yaml`(차선까지 그대로), 벽은 `driving/tools/real_walls.yaml` — 복사하지 않고 `driving/` 것을 읽는다.
+## 1. 실행
 
-## 실행
-
-```bash
-python3 fms/sim_server.py            # http://localhost:8770, 다른 PC 에서: --host 0.0.0.0
-python3 fms/run_headless.py --minutes 120 --rate 2 --seed 1   # 화면 없이 시험 (--planner reserve 로 예전 방식)
-```
-
-## 관제 PC 요청 (형식 미정 → 넓게 받음)
-
-`POST /api/orders` 에 JSON 객체 하나, 목록, 또는 `{"orders": [...]}`. 병실 키는 `room`·`dest`·`location`·`병실`·`병실위치`·`목적지`·`위치`,
-물품 키는 `item`·`물품`·`품목` (없으면 "약"). 물품이 무엇이든 약제실(OMX)에서 싣는다.
+필요한 것: Python 3.8 이상, PyYAML (`pip install pyyaml`). 그 밖엔 표준 라이브러리만 쓴다.
 
 ```bash
-curl -X POST -H "Content-Type: application/json" -d '{"병실위치":"4인실 왼쪽","물품":"약"}' http://localhost:8770/api/orders
+git clone git@github.com:kernel-robot-9th/kernel-robot-repo-2.git
+cd kernel-robot-repo-2
+git checkout fms
+python3 fms/sim_server.py                     # 내 PC 에서만: http://localhost:8770
+python3 fms/sim_server.py --host 0.0.0.0      # 다른 PC(관제 PC)에서도 접속
 ```
 
-병실 이름 → 그래프 노드는 `rooms.yaml` (노드 이름·한글 이름·`aliases`, 띄어쓰기·대소문자 무시). 관제 PC 가 쓰는 이름(예: "1병실")이
-정해지면 그 병실의 `aliases` 에 더하면 된다. 모르는 이름은 400 + 쓸 수 있는 이름 목록.
+| 옵션 | 뜻 |
+| --- | --- |
+| `--host 0.0.0.0` | 같은 공유기의 다른 PC 에서 접속 허용 (기본은 이 PC 만) |
+| `--port 8770` | 포트 |
+| `--control-url http://<관제 PC IP>:8000` | 로봇 상태(1초마다)와 이벤트를 이 주소로 POST (`/api/v1/fms/robot-status`, `/api/v1/fms/events`) |
+| `--no-auto-omx` | 가상 OMX 끔: OMX 준비 완료(`ready`)·적재 완료(`loaded`)를 관제 PC 가 보내야 핑키가 움직인다 |
 
-- 화면: 병실 버튼 = 주문 1건 (관제 PC → FMS). 자동 주문(분당 N건), 배속, 로봇 수, 여분 채우기, 다시 시작.
-- 굵은 색 = 로봇이 예약한 구간, 점선 = 남은 경로, 바깥 고리 = 약 실음, 네모 = 주차 자리.
-- `run_headless.py` 는 위반(오염도·배터리·수술실), 몸체 충돌, 실은 로봇끼리 나란히, 가장 오래 기다린 시간을 센다.
+## 2. 관제 PC 와 붙여 보기
 
-## 파일
+```bash
+# FMS 쪽 (시뮬레이터를 돌리는 PC)
+python3 fms/sim_server.py --host 0.0.0.0 --control-url http://<관제 PC IP>:8000 --no-auto-omx
+```
+
+관제 PC 쪽 순서 (자세한 형식은 [`API.md`](API.md)):
+
+1. 배송 요청: `POST http://<FMS IP>:8770/api/v1/orders` `{"request_id": "pc-0001", "room": "101호", "item": "진통제"}`
+2. FMS 가 `batch_assigned` 이벤트로 묶음(주문 목록 + 맡은 핑키)을 보낸다 → OMX 가 물품 준비
+3. 준비가 끝나면 `POST /api/v1/batches/{batch_id}/ready` → 핑키가 약제실로 온다
+4. `robot_at_pharmacy` 이벤트가 오면 OMX 가 싣고 `POST /api/v1/batches/{batch_id}/loaded` → 핑키가 병실로 간다
+5. 병실마다 `order_delivered`, 마지막에 `batch_completed`. 로봇 위치·상태는 1초마다 `robot-status` 로 온다
+
+관제 PC 서버 없이 확인만 하려면: `curl http://<FMS IP>:8770/api/v1/events?after=0` (최근 이벤트), `curl …/api/v1/state` (지금 상태).
+
+방 번호: 101호~108호, 수술실 (약제실은 상태 표시용, 주문 목적지 아님). 로봇 번호 1~3 ↔ 핑키 이름은 [`robots.yaml`](robots.yaml).
+
+## 3. 화면 (http://<FMS IP>:8770)
+
+- **주문 넣기**: 방 버튼 하나 = 주문 1건. **자동 주문**(분당 N건), **배속**, **로봇 수**, **경로**(A*+CBS / 최단 경로+예약), **다시 시작**.
+- **가상 OMX** 체크: 켜면 `ready`(배차 15초 뒤)·`loaded`(주차 10초 뒤)를 시뮬레이터가 스스로 보낸다.
+  끄면 **묶음** 칸에 "준비 완료"·"적재 완료" 버튼이 생겨 사람이 관제 PC 대신 누를 수 있다. 진짜 관제 PC 를 붙일 땐 끈다.
+- 지도: 굵은 색 = 로봇이 예약한 구간, 점선 = 남은 경로, 바깥 고리 = 물품 실음, 네모 = 주차 자리.
+- 로봇 카드: 상태(이동·OMX 준비 기다림·정밀 주차·적재·배송 회전·충전 …), 배터리, 오염도, 적재, 맡은 주문, 계획(목적지별 도착~떠날 시각).
+
+## 4. 화면 없이 시험
+
+```bash
+python3 fms/run_headless.py --minutes 120 --rate 2 --seed 1     # --robots 2, --planner reserve(예전 방식), --legs 1
+```
+
+위반(오염도·배터리·수술실), 몸체 충돌, 실은 로봇끼리 나란히, 가장 오래 기다린 시간, 평균 배송 시간을 센다.
+
+## 5. 파일
 
 | 파일 | 내용 |
 | --- | --- |
-| `fms_core.py` | Graph(차선·zone·가까운 노드), Robot(가상 핑키), FMS(배차·끼워 넣기·경로·예약·교착 풀기), 요청 해석 |
+| `sim_server.py` | HTTP 서버(표준 라이브러리) + 시뮬레이션 스레드. API v1(`/api/v1/…`), 관제 PC 로 보내기, 화면용 `/api/map`·`/api/state`·`/api/orders`·`/api/control` |
+| `fms_core.py` | Graph(차선·zone·가까운 노드), Robot(가상 핑키), Batch(묶음), FMS(배차·경로·예약·교착 풀기·이벤트) |
 | `planner.py` | 시공간 A* + CBS (못 풀면 우선순위 계획) |
-| `rooms.yaml` | 병실 이름·오염도·관제 PC 별칭 |
-| `sim_server.py` | 표준 라이브러리 HTTP 서버 + 시뮬레이션 스레드. `GET /api/map`, `GET /api/state`, `POST /api/orders {room}`, `POST /api/control {speed, paused, auto_rate, reset:{robots, spares}}` |
+| `API.md`, `openapi_v1.py` | 관제 PC ↔ FMS API v1 문서와 OpenAPI 명세 (`/docs`) |
+| `rooms.yaml` | 방 번호(`code`) ↔ 그래프 노드, 오염도, 별칭 |
+| `robots.yaml` | 관제 PC 로봇 번호 ↔ 핑키 이름 |
 | `static/index.html` | 화면 |
 | `run_headless.py` | 화면 없는 시험기 |
 
+## 6. 주요 규칙 (2026-10-27)
+
+- 주문 1건 = 물품 1개. 핑키 한 대가 한 번에 최대 3건(묶음). 맡은 주문 수만큼만 싣고, 배차 때 정한 묶음은 바꾸지 않는다.
+- 핑키는 배차되면 제자리에서 OMX 준비(`ready`)를 기다린 뒤 약제실로 간다.
+- 병실에 도착하면 제자리 한 바퀴 = 배송 완료. 다음 일이 있으면 1~5초 쉬고 출발.
+- 오염도: 1인실 +10, 4인실 +50, 100 까지. POCKET 5초 = 0. 수술실은 오염도 0 에서만.
+- 배터리: 병실 하나당 −10, 20 이하면 약제실 금지·충전. 충전 = CHARGER 도착 10초 뒤 100.
+- 협로 1대, 교행통로에서 실은 로봇끼리 교행 금지(같은 방향 따라가기 허용), 방 사이로 다니지 않음.
+
+---
+
+# 개발 메모
+
 ## 가상 시간 (fms_core.Params)
 
-속도 10 cm/s, 정밀 주차 20 s, 적재 10 s(관제 PC/OMX 가상), 병실 회전 8 s, POCKET 5 s, 충전 10 s, 적재 3개.
+속도 10 cm/s, OMX 준비 15 s·적재 10 s(가상 OMX 일 때), 정밀 주차 20 s, 병실 회전 8 s + 쉬기 1~5 s, POCKET 5 s, 충전 10 s, 적재 최대 3개.
 
 ## 경로 계획: A* + CBS (`planner.py`, 기본값)
 
@@ -69,9 +114,10 @@ curl -X POST -H "Content-Type: application/json" -d '{"병실위치":"4인실 �
 
 ## 규칙 구현 요약
 
-- **배차**: 새 주문은 먼저 배송 중인 로봇에 끼워 넣기(약제실 가기 전 용량 남음 / 여분). 안 되면 가장 오래된 주문을 씨앗으로
-  노는 로봇에 묶음(가까운 병실부터, 최대 3). 오염도·배터리를 배차 때 미리 계산(`feasible`). 수술실은 오염도 0 에서만
-  (맨 앞, 또는 POCKET 들렀다가). 실린 여분만으로 갈 수 있으면 약제실을 안 간다.
+- **배차**: 가장 오래된 주문을 씨앗으로 노는 로봇에 묶음(가까운 병실부터, 최대 3). 배차 때 정한 목록은 바꾸지 않는다 —
+  배송 중인 로봇에 끼워 넣기 없음, 여분 없음(맡은 주문 수만큼만 싣는다). 새 주문은 노는 로봇을 기다린다 (2026-10-27 사용자).
+  오염도·배터리를 배차 때 미리 계산(`feasible`). 수술실은 오염도 0 에서만 (맨 앞, 또는 POCKET 들렀다가).
+- **병실**: 도착하면 제자리 한 바퀴(`spin_s`) = 배송 완료, 그 뒤 1~5초 무작위로 쉬고(`pause_s`) 다음 일.
 - **노는 로봇**: 배터리 ≤ 20 → 충전(오염돼 있으면 POCKET 먼저, 충전기 자리를 출발 때 잡음), 오염도 > 0 → POCKET, 그 밖엔 주차 자리.
 - **예약**: 경로를 "멈춰도 되는 곳(차선 노드) 또는 목적지"까지 덩어리로 전부 잡거나 아무것도 안 잡는다.
   - 노드 1대. 14.5 cm 안의 노드, 엣지가 14.5 cm 안으로 지나가는 노드도 같이 비어야 한다
@@ -90,10 +136,13 @@ curl -X POST -H "Content-Type: application/json" -d '{"병실위치":"4인실 �
 
 ## 시험 결과 (2026-10-26, 각 120분)
 
+> 아래는 여분·끼워 넣기가 있던 때의 결과. 2026-10-27 둘 다 빼고 병실 회전 뒤 1~5초 쉬기를 넣은 뒤: 3대, 분당 2건, 20분, seed 1 →
+> 평균 배송 151.9 s, 위반·충돌·나란히 0 (예전 같은 조건 71 s). 분당 2건이면 3대로 빠듯하다.
+
 | 조건 | 주문 | 배송 | 평균 배송 | 가장 긴 대기 | 위반·충돌·나란히 |
 | --- | --- | --- | --- | --- | --- |
 | 3대, 분당 1.5 (40분 × 5 seed) | 50~70 | 48~67 (나머지는 배송 중) | 62~68 s | 57 s | 0 |
-| 3대, 분당 2, 여분 끔 (3 seed) | 231~257 | 229~254 | 87~93 s | 68 s | 0 |
+| 3대, 분당 2, 여분 끔 (3 seed, 10-26) | 231~257 | 229~254 | 87~93 s | 68 s | 0 |
 | 2대, 분당 1.5, 여분 켬 (3 seed) | 179~184 | 175~183 | 71~81 s | 43 s | 0 |
 | 3대, 분당 3, 여분 켬 (3 seed) | 355~400 | 347~375 | 154~245 s | 110 s | 0 |
 
@@ -110,4 +159,5 @@ curl -X POST -H "Content-Type: application/json" -d '{"병실위치":"4인실 �
 
 ## 아직 안 한 것
 
-실패 처리, 실제 로봇 연결(`/segments`·하트비트 — 설계 문서 "FMS API"), 회전·가감속 시간, 넓은 Nav2 구간의 실제 간격.
+실패 처리(`order_failed`·`robot_error`), `ready`·`loaded` 시간 초과, 실제 로봇 연결(`/segments`·하트비트 — 설계 문서 "FMS API"),
+회전·가감속 시간, 넓은 Nav2 구간의 실제 간격.
