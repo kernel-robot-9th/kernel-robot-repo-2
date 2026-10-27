@@ -1,0 +1,13 @@
+# 관제 PC 요청의 병실 이름 → FMS 그래프 노드
+# 관제 PC 요청 형식이 정해지면 그쪽에서 쓰는 이름을 aliases 에 더한다 (대소문자·띄어쓰기 무시).
+# contam = 방문(도착) 때 오염도 증가. 물품은 무엇이든 약제실(OMX)에서 싣는다.
+rooms:
+  ROOM1_CUL: {name: 1인실 가운데 위-왼, contam: 10, aliases: [1인실 위-왼]}
+  ROOM1_CUR: {name: 1인실 가운데 위-오른, contam: 10, aliases: [1인실 위-오른]}
+  ROOM1_CLL: {name: 1인실 가운데 아래-왼, contam: 10, aliases: [1인실 아래-왼]}
+  ROOM1_CLR: {name: 1인실 가운데 아래-오른, contam: 10, aliases: [1인실 아래-오른]}
+  ROOM1_LU: {name: 1인실 왼쪽 위, contam: 10, aliases: []}
+  ROOM1_LD: {name: 1인실 왼쪽 아래, contam: 10, aliases: []}
+  ROOM4_L: {name: 4인실 왼쪽, contam: 50, aliases: []}
+  ROOM4_R: {name: 4인실 오른쪽, contam: 50, aliases: []}
+  SURGERY: {name: 수술실, contam: 0, aliases: []}
