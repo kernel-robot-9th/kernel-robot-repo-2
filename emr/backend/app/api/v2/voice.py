@@ -68,15 +68,16 @@ def parse_text(db: DB, nurse: CurrentNurse, parser: VoiceParserDep, data: VoiceT
     summary="문장 → 안내 음성 (WAV)",
     description=(
         "문장을 읽은 음성을 `audio/wav`(24kHz 모노 16비트)로 돌려준다 — 안내 방송용. Gemini TTS, 같은 문장·목소리는 서버 메모리 캐시"
-        "(최근 64개, 헤더 `X-Voice-Cache: hit|miss`). 문장은 Google 클라우드로 나가므로 **환자 정보는 넣지 않는다**. 2026-10-26"
+        "(최근 64개, 헤더 `X-Voice-Cache: hit|miss`). `voice`는 `female`(기본 Kore)·`male`(기본 Algenib) 또는 Gemini 목소리 이름, "
+        "실제로 쓴 이름은 헤더 `X-Voice-Name`. 문장은 Google 클라우드로 나가므로 **환자 정보는 넣지 않는다**. 2026-10-26·27"
     ),
     responses={**VOICE_RESPONSES, 200: {"content": {"audio/wav": {}}, "description": "WAV 음성"}},
 )
 def speak(nurse: CurrentNurse, synthesizer: SpeechSynthesizerDep, data: VoiceSpeakIn) -> Response:
     """
-    [입력] data.text: 읽을 문장 / data.voice: 목소리 이름(선택) / nurse: 로그인
+    [입력] data.text: 읽을 문장 / data.voice: "female"·"male" 또는 목소리 이름(선택) / nurse: 로그인
     [출력] Response: audio/wav
     """
-    audio, cached = SpeechService(synthesizer).speak(data.text, data.voice)
+    audio, cached, voice = SpeechService(synthesizer).speak(data.text, data.voice)
     return Response(content=audio, media_type="audio/wav",
-                    headers={"X-Voice-Cache": "hit" if cached else "miss", "Cache-Control": "no-store"})
+                    headers={"X-Voice-Cache": "hit" if cached else "miss", "X-Voice-Name": voice, "Cache-Control": "no-store"})

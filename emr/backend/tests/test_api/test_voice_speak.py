@@ -90,3 +90,24 @@ def test_bad_body_is_422(client, auth_headers, use_synth, body):
 def test_pcm_is_wrapped_as_wav():
     data = pcm_to_wav(b"\x01\x00" * 10)
     assert data[:4] == b"RIFF"
+
+
+@pytest.mark.parametrize(("voice", "expected"), [("male", "VOICE_TTS_VOICE_MALE"), ("FEMALE", "VOICE_TTS_VOICE_FEMALE"),
+                                                 (None, "VOICE_TTS_VOICE")])
+def test_gender_names_map_to_configured_voices(client, auth_headers, use_synth, voice, expected):
+    from app.core.config import settings
+
+    fake = use_synth()
+    body = {"text": "안내"} if voice is None else {"text": "안내", "voice": voice}
+    response = client.post(SPEAK_URL, json=body, headers=auth_headers)
+    assert response.status_code == 200
+    assert fake.calls[0][1] == getattr(settings, expected) == response.headers["x-voice-name"]
+
+
+def test_gender_name_and_voice_name_share_cache(client, auth_headers, use_synth):
+    from app.core.config import settings
+
+    fake = use_synth()
+    client.post(SPEAK_URL, json={"text": "안내", "voice": "male"}, headers=auth_headers)
+    second = client.post(SPEAK_URL, json={"text": "안내", "voice": settings.VOICE_TTS_VOICE_MALE}, headers=auth_headers)
+    assert second.headers["x-voice-cache"] == "hit" and len(fake.calls) == 1

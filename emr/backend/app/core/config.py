@@ -63,7 +63,11 @@ class Settings(BaseSettings):
     VOICE_TIMEOUT_SECONDS: float = 20.0     # 이 안에 답하지 않으면 voice_unavailable(503)
     # 안내 음성 POST /voice/speak (2026-10-26) — 켜고 끄기·키는 위와 같다
     VOICE_TTS_MODEL: str = "gemini-3.8-flash-tts"   # 10-26 이 서버에서 동작 확인
-    VOICE_TTS_VOICE: str = "Kore"                   # [검토 필요] 기본 목소리 — 요청마다 voice로 바꿀 수 있다
+    VOICE_TTS_VOICE: str = "Kore"                   # voice를 안 보내면 쓰는 목소리 — 요청마다 voice로 바꿀 수 있다
+    # voice에 "female"·"male"을 보내면 쓰는 목소리 (2026-10-27 사용자 결정: 여성 Kore, 남성 Algenib — 듣기 비교와 음 높이 199Hz·131Hz로 고름.
+    # Orus·Fenrir·Puck는 Google 표에는 남성이지만 160~180Hz로 높아 여성처럼 들려 뺐다)
+    VOICE_TTS_VOICE_FEMALE: str = "Kore"
+    VOICE_TTS_VOICE_MALE: str = "Algenib"
     VOICE_TTS_STYLE: str = "병원 안내 방송처럼 차분하고 또박또박, 자연스러운 속도로"
 
     def db_host_for_log(self) -> str:

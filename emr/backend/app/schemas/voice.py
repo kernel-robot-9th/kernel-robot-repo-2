@@ -41,7 +41,8 @@ class VoiceSpeakIn(BaseModel):
 
     text: str = Field(min_length=1, max_length=300, examples=["4인실 왼쪽에 배송 로봇이 도착했습니다."])
     voice: str | None = Field(default=None, pattern=r"^[A-Za-z]{2,32}$",
-                              description="Gemini 목소리 이름(예: Kore, Charon). 없으면 서버 기본(VOICE_TTS_VOICE)")
+                              description="\"female\"(여성, 기본 Kore)·\"male\"(남성, 기본 Algenib) 또는 Gemini 목소리 이름(예: Charon). "
+                                          "없으면 서버 기본(VOICE_TTS_VOICE)", examples=["male"])
 
 
 class VoiceCandidateOut(BaseModel):
