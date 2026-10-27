@@ -1,0 +1,22 @@
+# Nav2 ② FollowPath 구성 (map_server + amcl + controller + velocity_smoother, 맵 map_drawn) — 사용자 systemd 서비스
+# bringup 의 /scan 이 나온 뒤 시작. bringup 을 멈추거나 다시 띄우면 같이 따라감 (PartOf)
+# ⚠️ 뜰 때마다 AMCL 은 설정 파일의 시작 위치(A)로 시작 → 로봇이 A 가 아니면 /set_pose 로 넣을 것
+#   systemctl --user status|restart|stop pinky-nav2      journalctl --user -u pinky-nav2 -f
+[Unit]
+Description=Pinky Nav2 FollowPath stack
+After=pinky-bringup.service
+Wants=pinky-bringup.service
+PartOf=pinky-bringup.service
+
+[Service]
+ExecStartPre=%h/pinky_map_rev3/api/run_ros.sh --wait-scan 120
+ExecStart=%h/pinky_map_rev3/api/run_ros.sh %h/pinky_map_rev3/launch/nav2_followpath.launch.py
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=150
+KillSignal=SIGINT
+TimeoutStopSec=20
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target

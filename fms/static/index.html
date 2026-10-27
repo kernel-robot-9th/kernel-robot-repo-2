@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FMS 시뮬레이터</title>
+<style>
+:root {
+  --bg: #f6f6f3; --panel: #ffffff; --ink: #1d1d1b; --quiet: #6b6b66; --line: #e2e1dc;
+  --wall: #2b2b28; --edge: #c9c8c2; --accent: #2e86de; --warn: #c97a00; --bad: #c0392b; --good: #1e8449;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #161615; --panel: #1f1f1d; --ink: #ecebe6; --quiet: #9b9a94; --line: #34332f;
+          --wall: #d8d7d0; --edge: #4a4944; --accent: #5aa9ff; --warn: #f0a531; --bad: #ff6b5b; --good: #4cd17c; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 13px/1.45 system-ui, -apple-system, "Noto Sans KR", sans-serif; }
+header { display: flex; align-items: center; gap: 14px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); flex-wrap: wrap; }
+header h1 { font-size: 15px; margin: 0; font-weight: 650; }
+header .t { font-variant-numeric: tabular-nums; color: var(--quiet); }
+.ctl { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+button, select { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 4px 9px; cursor: pointer; }
+button:hover { border-color: var(--quiet); }
+button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+main { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 12px; padding: 12px; }
+@media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.card h2 { font-size: 12px; text-transform: none; color: var(--quiet); margin: 0 0 8px; font-weight: 600; }
+#mapwrap { position: relative; }
+canvas { width: 100%; height: auto; display: block; }
+.side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.rooms { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.rooms button { padding: 6px 4px; font-size: 12px; }
+.rooms button small { display: block; color: var(--quiet); font-size: 10.5px; }
+.robot { display: grid; grid-template-columns: 14px 1fr; gap: 8px; padding: 7px 0; border-top: 1px solid var(--line); }
+.robot:first-of-type { border-top: 0; }
+.dot { width: 12px; height: 12px; border-radius: 50%; margin-top: 3px; }
+.rrow { display: flex; justify-content: space-between; gap: 8px; }
+.rrow b { font-weight: 650; }
+.state { color: var(--quiet); }
+.bars { display: grid; grid-template-columns: 52px 1fr 34px; gap: 3px 6px; align-items: center; margin-top: 4px; font-size: 11.5px; color: var(--quiet); }
+.bar { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
+.bar i { display: block; height: 100%; }
+.wait { color: var(--warn); font-size: 11.5px; }
+.next { color: var(--quiet); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.stats div { text-align: center; }
+.stats b { display: block; font-size: 17px; font-variant-numeric: tabular-nums; }
+.stats span { font-size: 11px; color: var(--quiet); }
+.stats .bad b { color: var(--bad); }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+td, th { padding: 3px 4px; text-align: left; border-top: 1px solid var(--line); }
+th { color: var(--quiet); font-weight: 600; border-top: 0; }
+.log { max-height: 220px; overflow: auto; font-size: 12px; }
+.log div { padding: 2px 0; border-top: 1px dashed var(--line); }
+.log .warn { color: var(--warn); }
+.log .violation { color: var(--bad); font-weight: 600; }
+.log span { color: var(--quiet); font-variant-numeric: tabular-nums; margin-right: 6px; }
+.legend { display: flex; gap: 12px; flex-wrap: wrap; color: var(--quiet); font-size: 11.5px; margin-top: 6px; }
+.legend i { display: inline-block; width: 16px; height: 3px; vertical-align: middle; margin-right: 4px; border-radius: 2px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>FMS 시뮬레이터</h1>
+  <span class="t" id="clock">0:00</span>
+  <div class="ctl">
+    <button id="pause">일시정지</button>
+    <label>배속 <select id="speed"><option>1</option><option>2</option><option selected>5</option><option>10</option><option>20</option></select></label>
+    <label>자동 주문 <select id="auto"><option value="0">끔</option><option value="1">분당 1</option><option value="1.5">분당 1.5</option><option value="2">분당 2</option><option value="3">분당 3</option></select></label>
+  </div>
+  <div class="ctl" style="margin-left:auto">
+    <label title="켜면 OMX 준비·적재 완료를 시뮬레이터가 스스로 보냄. 끄면 아래 '묶음' 버튼이나 관제 PC 가 /api/v1/batches/…/ready·loaded 를 보내야 함"><input type="checkbox" id="autoomx" checked> 가상 OMX</label>
+    <label>로봇 <select id="nrob"><option>1</option><option>2</option><option selected>3</option></select></label>
+    <label>경로 <select id="planner"><option value="cbs">A* + CBS</option><option value="reserve">최단 경로 + 예약</option></select></label>
+    <button id="reset">다시 시작</button>
+  </div>
+</header>
+<main>
+  <section class="card" id="mapwrap">
+    <canvas id="map" width="1050" height="1000"></canvas>
+    <div class="legend">
+      <span><i style="background:#e0a33a"></i>차선 (교행통로)</span>
+      <span><i style="background:#c46bd6"></i>차선 ↔ 문</span>
+      <span><i style="background:#e05252"></i>협로 (벽 따라가기)</span>
+      <span><i style="background:#4caf6a"></i>Nav2</span>
+      <span>굵은 색 = 로봇이 예약한 구간 · 점선 = 남은 경로 · 바깥 고리 = 약 실음</span>
+    </div>
+  </section>
+  <div class="side">
+    <section class="card">
+      <h2>주문 넣기 (관제 PC → FMS)</h2>
+      <div class="rooms" id="rooms"></div>
+    </section>
+    <section class="card">
+      <h2>통계</h2>
+      <div class="stats" id="stats"></div>
+      <div class="next" id="plan" style="margin-top:8px"></div>
+    </section>
+    <section class="card" id="batches"><h2>묶음 (관제 PC 신호)</h2></section>
+    <section class="card" id="robots"><h2>로봇</h2></section>
+    <section class="card">
+      <h2>주문</h2>
+      <table><thead><tr><th>#</th><th>병실</th><th>상태</th><th>로봇</th><th>걸린 시간</th></tr></thead><tbody id="orders"></tbody></table>
+    </section>
+    <section class="card">
+      <h2>기록</h2>
+      <div class="log" id="log"></div>
+    </section>
+  </div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const ROOM_LABEL = {ROOM4_L:'101호', ROOM4_R:'102호', ROOM1_LU:'103호', ROOM1_CUL:'104호', ROOM1_CUR:'105호',
+                    ROOM1_LD:'106호', ROOM1_CLL:'107호', ROOM1_CLR:'108호', SURGERY:'수술실'};   // rooms.yaml code (2026-10-27)
+const STATE = {idle:'대기', moving:'이동', waiting:'기다림', planned:'계획 대기', docking:'정밀 주차', loading:'적재 중', reserved:'OMX 준비 기다림', spinning:'배송 회전', pausing:'다음 일 전 쉼', decon:'오염 제거', charging:'충전'};
+const TASK = {delivery:'배송', decon:'오염 제거', charge:'충전', park:'주차', yield:'비켜 주기'};
+const PLACE = {PHARMACY: '약제실', POCKET: 'POCKET', CHARGER: '충전'};
+const OSTATE = {waiting:'대기', assigned:'배정', loaded:'실음', delivered:'완료', canceled:'취소'};
+const BSTATE = {assigned:'OMX 준비 중', called:'핑키 오는 중', at_pharmacy:'적재 기다림', delivering:'배송 중'};
+function renderBatches() {
+  const bs = (S && S.batches) || [];
+  $('autoomx').checked = !!(S && S.auto_omx);
+  $('batches').innerHTML = '<h2>묶음 (관제 PC 신호)</h2>' + (bs.length ? bs.map(b =>
+    `<div class="rrow"><span><b>${b.batch_id}</b> 로봇 ${b.robot} · ${b.rooms.join(' → ')}</span><span class="state">${BSTATE[b.status] || b.status}` +
+    (b.status === 'assigned' ? ` <button data-b="${b.batch_id}" data-sig="ready">준비 완료</button>` : '') +
+    (b.status === 'at_pharmacy' ? ` <button data-b="${b.batch_id}" data-sig="loaded">적재 완료</button>` : '') +
+    `</span></div>`).join('') : '<div class="next">없음</div>') +
+    (S && S.control_url ? `<div class="next">관제 PC 로 보내는 중: ${S.control_url}</div>` : '');
+}
+const MODE_COL = {line:'#e0a33a', transfer:'#c46bd6', wall:'#e05252', nav:'#4caf6a'};
+let MAP = null, S = null;
+const cv = $('map'), cx = cv.getContext('2d');
+const PAD = 26, SC = 4.6;                 // cm → px
+const P = (x, y) => [PAD + x * SC, PAD + (200 - y) * SC];
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+async function post(url, body) { await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)}); }
+
+function fmt(t) { t = Math.floor(t); const h = Math.floor(t / 3600), m = Math.floor(t / 60) % 60, s = t % 60;
+  return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(s).padStart(2, '0'); }
+
+function draw() {
+  if (!MAP) return;
+  cv.width = Math.round((210 * SC + PAD * 2)); cv.height = Math.round(200 * SC + PAD * 2);
+  cx.clearRect(0, 0, cv.width, cv.height);
+  // 벽
+  cx.lineCap = 'round'; cx.lineJoin = 'round';
+  cx.strokeStyle = css('--wall'); cx.lineWidth = 2.5;
+  for (const pl of MAP.walls) { cx.beginPath(); pl.forEach((p, i) => { const [X, Y] = P(p[0], p[1]); i ? cx.lineTo(X, Y) : cx.moveTo(X, Y); }); cx.stroke(); }
+  // 그래프
+  const N = MAP.nodes;
+  for (const e of MAP.edges) {
+    const [x0, y0] = P(...N[e.a].xy), [x1, y1] = P(...N[e.b].xy);
+    cx.strokeStyle = MODE_COL[e.mode]; cx.globalAlpha = 0.35; cx.lineWidth = 2;
+    cx.beginPath(); cx.moveTo(x0, y0); cx.lineTo(x1, y1); cx.stroke();
+  }
+  cx.globalAlpha = 1;
+  if (S) {
+    // 예약한 구간·남은 경로
+    for (const r of S.robots) {
+      if (r.path.length > 1) {
+        cx.strokeStyle = r.color; cx.lineWidth = 2; cx.setLineDash([5, 5]); cx.globalAlpha = 0.8;
+        cx.beginPath(); r.path.forEach((n, i) => { const [X, Y] = P(...N[n].xy); i ? cx.lineTo(X, Y) : cx.moveTo(X, Y); }); cx.stroke();
+        cx.setLineDash([]);
+        cx.lineWidth = 7; cx.globalAlpha = 0.45;
+        cx.beginPath(); r.path.slice(0, r.res_to + 1).forEach((n, i) => { const [X, Y] = P(...N[n].xy); i ? cx.lineTo(X, Y) : cx.moveTo(X, Y); }); cx.stroke();
+        cx.globalAlpha = 1;
+      }
+      for (const n of r.held.nodes) {
+        const [X, Y] = P(...N[n].xy);
+        cx.strokeStyle = r.color; cx.lineWidth = 1.5; cx.globalAlpha = 0.6;
+        cx.beginPath(); cx.arc(X, Y, 5, 0, 7); cx.stroke(); cx.globalAlpha = 1;
+      }
+    }
+  }
+  // 노드
+  for (const [k, n] of Object.entries(N)) {
+    const [X, Y] = P(...n.xy);
+    const stop = n.type === 'stop';
+    cx.fillStyle = stop ? css('--ink') : css('--quiet');
+    cx.beginPath(); cx.arc(X, Y, stop ? 3.2 : 1.8, 0, 7); cx.fill();
+    if (stop) {
+      cx.font = '11px system-ui, sans-serif'; cx.fillStyle = css('--quiet');
+      const lab = ROOM_LABEL[k] || ({PHARMACY: '약제실', POCKET: 'POCKET', CHARGER: '충전'}[k] || k);
+      cx.textAlign = 'center'; cx.fillText(lab, X, Y + (n.xy[1] > 170 ? -10 : 15));
+    }
+  }
+  for (const k of MAP.parking) { const [X, Y] = P(...N[k].xy); cx.strokeStyle = css('--quiet'); cx.lineWidth = 1; cx.strokeRect(X - 6, Y - 6, 12, 12); }
+  if (!S) return;
+  // 로봇
+  for (const r of S.robots) {
+    const [X, Y] = P(r.x, r.y);
+    if (r.load > 0) { cx.strokeStyle = r.color; cx.lineWidth = 2.5; cx.beginPath(); cx.arc(X, Y, 7 * SC, 0, 7); cx.stroke(); }
+    cx.fillStyle = r.color; cx.globalAlpha = 0.9; cx.beginPath(); cx.arc(X, Y, 5.5 * SC, 0, 7); cx.fill(); cx.globalAlpha = 1;
+    cx.fillStyle = '#fff'; cx.font = '600 12px system-ui, sans-serif'; cx.textAlign = 'center'; cx.textBaseline = 'middle';
+    cx.fillText(r.id, X, Y - 4); cx.font = '10px system-ui, sans-serif'; cx.fillText(r.load ? '약 ' + r.load : '', X, Y + 8);
+    cx.textBaseline = 'alphabetic';
+    if (r.state === 'spinning' || r.state === 'docking' || r.state === 'loading' || r.state === 'decon' || r.state === 'charging') {
+      cx.strokeStyle = css('--ink'); cx.lineWidth = 2;
+      const a = (performance.now() / 300) % (2 * Math.PI);
+      cx.beginPath(); cx.arc(X, Y, 5.5 * SC + 4, a, a + 1.4); cx.stroke();
+    }
+  }
+}
+
+function bar(v, col) { return `<div class="bar"><i style="width:${Math.max(0, Math.min(100, v))}%;background:${col}"></i></div>`; }
+
+function render() {
+  if (!S) return;
+  $('clock').textContent = fmt(S.t);
+  $('pause').textContent = S.paused ? '계속' : '일시정지';
+  $('pause').classList.toggle('on', S.paused);
+  const st = S.stats;
+  $('stats').innerHTML = `<div><b>${st.delivered}</b><span>배송 완료</span></div><div><b>${S.waiting}</b><span>대기 주문</span></div>` +
+    `<div><b>${st.avg_delivery_s}s</b><span>평균 배송</span></div>` +
+    `<div class="${st.violations || st.collisions ? 'bad' : ''}"><b>${st.violations}</b><span>위반·충돌</span></div>`;
+  const pl = S.planner;
+  $('plan').textContent = pl.mode === 'cbs'
+    ? `경로 계획 ${pl.replans}번 (CBS ${pl.cbs} · 우선순위 ${pl.prioritized} · 못 풂 ${pl.failed})` +
+      (pl.last ? ` · 마지막: ${pl.last.why}, 충돌 ${pl.last.conflicts}개, ${pl.last.ms}ms` : '')
+    : '경로: 최단 경로 + 구간 예약';
+  let h = '<h2>로봇</h2>';
+  for (const r of S.robots) {
+    const step = r.step ? (r.step.kind === 'move' ? '→ ' + (ROOM_LABEL[r.step.to] || r.step.to) : (r.step.room ? ROOM_LABEL[r.step.room] : '')) : '';
+    const next = r.queue.filter(q => q.kind === 'spin').map(q => ROOM_LABEL[q.room]).join(', ');
+    h += `<div class="robot"><div class="dot" style="background:${r.color}"></div><div>
+      <div class="rrow"><span><b>${r.id}</b> <span class="state">${STATE[r.state] || r.state}${r.task ? ' · ' + TASK[r.task] : ''}</span></span><span class="state">${step}</span></div>
+      <div class="bars"><span>배터리</span>${bar(r.battery, r.battery <= 20 ? css('--bad') : css('--good'))}<span>${r.battery}</span>
+      <span>오염도</span>${bar(r.contam, r.contam >= 100 ? css('--bad') : css('--warn'))}<span>${r.contam}</span>
+      <span>적재</span>${bar(r.load / 3 * 100, r.color)}<span>${r.load}/3</span></div>
+      ${r.orders.length ? `<div class="next">주문 ${r.orders.map(o => '#' + o).join(' ')}${next ? ' · 다음: ' + next : ''}</div>` : ''}
+      ${r.plan && r.plan.length ? `<div class="next">계획: ${r.plan.filter(g => g.leave == null || g.leave > S.t).map(g =>
+          `${ROOM_LABEL[g.node] || PLACE[g.node] || g.node} ${fmt(g.arrive)}~${g.leave == null ? '' : fmt(g.leave)}`).join(' → ')}</div>` : ''}
+      ${r.wait ? `<div class="wait">기다림 ${r.wait_s}s · ${r.wait}</div>` : ''}
+    </div></div>`;
+  }
+  $('robots').innerHTML = h;
+  $('orders').innerHTML = S.orders.slice().reverse().slice(0, 14).map(o =>
+    `<tr><td>${o.id}</td><td>${ROOM_LABEL[o.room]}${o.item && o.item !== '약' ? ' · ' + o.item : ''}</td><td>${OSTATE[o.state]}</td><td>${o.robot || ''}</td>` +
+    `<td>${o.done != null ? Math.round(o.done - o.created) + 's' : Math.round(S.t - o.created) + 's'}</td></tr>`).join('');
+  $('log').innerHTML = S.events.map(e => `<div class="${e.kind}"><span>${fmt(e.t)}</span>${e.msg}</div>`).join('');
+}
+
+async function tick() {
+  try { S = await (await fetch('/api/state')).json(); render(); renderBatches(); } catch (e) {}
+}
+function frame() { draw(); requestAnimationFrame(frame); }
+
+(async () => {
+  MAP = await (await fetch('/api/map')).json();
+  $('rooms').innerHTML = Object.entries(MAP.rooms).map(([k, c]) =>
+    `<button data-room="${k}">${ROOM_LABEL[k]}<small>${(MAP.room_names || {})[k] || ''} · 오염 +${c}</small></button>`).join('');
+  $('rooms').onclick = e => { const b = e.target.closest('button'); if (b) post('/api/orders', {room: b.dataset.room}).then(tick); };
+  $('pause').onclick = () => post('/api/control', {paused: !(S && S.paused)}).then(tick);
+  $('speed').onchange = e => post('/api/control', {speed: +e.target.value});
+  $('auto').onchange = e => post('/api/control', {auto_rate: +e.target.value});
+  $('autoomx').onchange = e => post('/api/control', {auto_omx: e.target.checked}).then(tick);
+  $('batches').onclick = e => { const b = e.target.closest('button[data-b]'); if (b) post(`/api/v1/batches/${b.dataset.b}/${b.dataset.sig}`, {}).then(tick); };
+  $('reset').onclick = () => post('/api/control', {reset: {robots: +$('nrob').value, planner: $('planner').value}}).then(tick);
+  await post('/api/control', {speed: +$('speed').value});
+  setInterval(tick, 200);
+  frame();
+})();
+</script>
+</body>
+</html>
