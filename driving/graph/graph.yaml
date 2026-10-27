@@ -183,7 +183,7 @@ nodes:
     type: stop
     xy: [35, 178]
     heading: 90
-    name: 4인실 왼쪽
+    name: 101호 4인실 왼쪽
   PHARMACY:
     type: stop
     xy: [98.9, 178.8]
@@ -194,37 +194,37 @@ nodes:
     type: stop
     xy: [175, 178]
     heading: 90
-    name: 4인실 오른쪽
+    name: 102호 4인실 오른쪽
   ROOM1_LU:
     type: stop
     xy: [15, 112]
     heading: 180
-    name: 1인실 왼쪽 위
+    name: 103호 1인실 왼쪽 위
   ROOM1_LD:
     type: stop
     xy: [15, 50]
     heading: 180
-    name: 1인실 왼쪽 아래
+    name: 106호 1인실 왼쪽 아래
   ROOM1_CUL:
     type: stop
     xy: [65, 108]
     heading: 90
-    name: 1인실 가운데 위-왼
+    name: 104호 1인실 가운데 위-왼
   ROOM1_CUR:
     type: stop
     xy: [97, 115]
     heading: 270
-    name: 1인실 가운데 위-오른
+    name: 105호 1인실 가운데 위-오른
   ROOM1_CLL:
     type: stop
     xy: [72, 45]
     heading: 90
-    name: 1인실 가운데 아래-왼
+    name: 107호 1인실 가운데 아래-왼
   ROOM1_CLR:
     type: stop
     xy: [105, 52]
     heading: 180
-    name: 1인실 가운데 아래-오른
+    name: 108호 1인실 가운데 아래-오른
   SURGERY:
     type: stop
     xy: [180, 50]
