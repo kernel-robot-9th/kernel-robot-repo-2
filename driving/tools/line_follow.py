@@ -21,23 +21,46 @@ from tf2_ros import Buffer, TransformException, TransformListener
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 # 토픽 배열 순서 [adc2, adc1, adc0] = [왼쪽, 가운데, 오른쪽] (로봇 진행 방향 기준)
-WHITE = (640.0, 1870.0, 450.0)
-FLOOR = (1900.0, 2720.0, 2000.0)
-SENSOR_Y = (0.02, 0.0, -0.02)    # m, 센서 옆 위치 (왼쪽 +), 회전 시험에서 추정
+WHITE = (640.0, 1870.0, 450.0)    # 흰 테이프 값 (10-26, 10-27 회전 시험 둘 다 같음)
+# 바닥 값은 자리마다 다름 (10-26 B2: 1900/2720/2000, 10-27 B1 x≈150: 2450/3000/2250, 가장 어두운 곳 2755/-/2970).
+# 고정 바닥값이 실제보다 낮으면 테이프 반쯤 밟은 옆 센서가 0 으로 읽혀 가운데-옆 사이에 사각지대 → 10-27 B1 에서 lost.
+# → 채널마다 최근 FLOOR_WIN 초 최댓값을 바닥으로 씀 (FLOOR_MIN~FLOOR_MAX 로 자름. 테이프 위에 오래 있으면 FLOOR_MIN)
+FLOOR = (2450.0, 3000.0, 2250.0)        # 기록 없을 때 시작값
+FLOOR_MIN = (1700.0, 2700.0, 1500.0)
+FLOOR_MAX = 3300.0
+FLOOR_WIN = 2.0                          # s
+SENSOR_Y = (0.02, 0.0, -0.02)    # m, 센서 옆 위치 (왼쪽 +), 회전 시험에서 추정 (10-27 다시 재도 비율 같음: 옆 간격 ≈ 0.7 × 축-센서 거리)
 # I2C 충돌로 한 번씩 튀는 값(3400~3800) -> 채널마다 최근 3개 중앙값. (고정 기준 3000 은 어두운 바닥 3125 를 버려서 10-26 폐기)
 LOST_W = 0.3                     # 흰 정도 합이 이보다 작으면 테이프 없음
 DY_TAU = 0.15                    # s, 변화율 저역 통과 시상수
 MAX_DEV = 0.03                   # m, AMCL 기준 출발 직선에서 옆으로 이만큼 벗어나면 중단
 
 
+class FloorTrack:
+    """채널마다 최근 FLOOR_WIN 초 최댓값 = 지금 바닥 값"""
+    def __init__(self):
+        self.hist = []
+        self.now = FLOOR
+
+    def update(self, v):
+        t = time.time()
+        self.hist = [h for h in self.hist if t - h[0] < FLOOR_WIN] + [(t, v)]
+        self.now = tuple(min(FLOOR_MAX, max(lo, max(h[1][i] for h in self.hist))) for i, lo in enumerate(FLOOR_MIN))
+
+
+FLOOR_NOW = FloorTrack()
+
+
 class IrFilter:
-    """채널마다 최근 3개 원값의 중앙값 (한 번 튀는 값 제거, 50ms 늦음)"""
+    """채널마다 최근 3개 원값의 중앙값 (한 번 튀는 값 제거, 50ms 늦음). 바닥 값 추적도 여기서 갱신"""
     def __init__(self):
         self.buf = []
 
     def __call__(self, data):
         self.buf = (self.buf + [tuple(float(v) for v in data[:3])])[-3:]
-        return tuple(sorted(c)[len(c) // 2] for c in zip(*self.buf))
+        v = tuple(sorted(c)[len(c) // 2] for c in zip(*self.buf))
+        FLOOR_NOW.update(v)
+        return v
 
 
 def yaw_of(q):
@@ -83,7 +106,7 @@ class LineFollow(Node):
 
 def tape_pos(ir):
     """흰 정도 (왼, 가운데, 오른) 와 테이프 옆 위치 m (왼쪽 +). 테이프 없으면 위치 None"""
-    w = [min(1.0, max(0.0, (f - v) / (f - wh))) for v, wh, f in zip(ir, WHITE, FLOOR)]
+    w = [min(1.0, max(0.0, (f - v) / (f - wh))) for v, wh, f in zip(ir, WHITE, FLOOR_NOW.now)]
     s = sum(w)
     if s < LOST_W:
         return w, None

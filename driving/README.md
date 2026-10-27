@@ -18,9 +18,12 @@ Pinky Pro 가 병원 아레나(210 × 200 cm)를 주행 그래프대로 달리�
 | 파일 | 하는 일 |
 |---|---|
 | `corridor_drive.py` | 협로 라이다 벽 따라가기 (벽 없는 구간은 AMCL), 접촉 검사, `--stop-on-tape` 로 협로에서 나올 때 IR 로 차선 테이프 위에 멈춤 |
-| `line_follow.py` | IR 3채널 라인트레이싱 (센서별 보정, PD 조향, 튀는 값 중앙값 필터) |
-| `lane_drive.py` | 교행 복도 단계 실행: 테이프 따라가기 / 제자리 회전 / 테이프 없는 차선 바꾸기, 구간별 시간 기록 |
+| `line_follow.py` | IR 3채널 라인트레이싱 (센서별 보정, PD 조향, 튀는 값 중앙값 필터, 바닥 값은 채널마다 최근 2초 최댓값으로 따라감) |
+| `lane_drive.py` | 교행 복도 단계 실행: 테이프 따라가기 / 제자리 회전 / 테이프 없는 차선 바꾸기, 구간별 시간 기록. 테이프를 놓치면 마지막 본 쪽으로 돌며 0.8초 다시 찾음 |
+| `edge_run.py` | 엣지 시간 측정: 영역 안 모든 방향 엣지를 덮는 경로를 짜서 엣지마다 실제 주행 방식(line / transfer / wall)으로 달리며 회전·이동 시간을 따로 기록 (`edge_logs/`) |
+| `edge_costs.py` | 측정 기록 → 방향별 엣지 이동 시간(중앙값) + 회전 시간 식. `--write` 로 `graph/edge_times.yaml` (FMS 경로 계획용) |
 | `ir_sweep.py` | IR 보정: 제자리 ±30° 회전하며 센서별 흰색·바닥 값 측정 |
+| `ir_watch.sh` (+ `ir_watch.py`) | PC 에서 실행하면 로봇 IR 3채널 값을 실시간으로 보여 줌 (막대, 최소/최대, 채널 차이). IR 노드가 없으면 띄움 |
 | `precise_dock.py`, `aruco_ref.py`, `dock_test.sh` | 카메라 ArUco 정밀 주차 (1 cm · 3°), 기준 자세 가르치기, 반복 시험 |
 | `set_pose.py`, `global_find.py`, `now_pose.py`, `scan_fit.py` | AMCL 시작 위치 넣기와 스캔 확인, 스캔만으로 위치 찾기 |
 | `make_drawn_map.py`, `real_walls.yaml` 외 지도 스크립트 | 실측 벽으로 지도(map_drawn) 만들기, SLAM 맵 정합·보정·검증 |

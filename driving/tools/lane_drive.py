@@ -26,11 +26,13 @@ KP, KD = 8.0, 15.0          # line_follow.py 10-26 보정 시험 값
 WMAX = 0.4
 MAX_DEV = 0.04              # m, 차선 축에서 AMCL 옆 벗어남 한도 (테이프가 지도 축과 1~2° 어긋남)
 TAPE_SEEN = 1.5             # 흰 정도 합 (세 센서가 테이프를 가로로 밟음)
+LOST_S = 0.8                # s, 테이프를 이만큼 못 찾으면 lost (그동안 마지막 본 쪽으로 제자리 회전)
 
 
 class Driver:
     def __init__(self):
         self.n = LineFollow()
+        self.trace = []   # follow 중 (시각, 남은 cm, IR 3, 흰 정도 3, 테이프 위치 cm) — edge_run 이 엣지마다 저장
         t_end = time.time() + 5
         while time.time() < t_end and (self.n.odom is None or self.n.ir is None or self.n.map_pose() is None):
             rclpy.spin_once(self.n, timeout_sec=0.05)
@@ -105,12 +107,14 @@ class Driver:
                 continue
             dt = self.n.ir_t - last_t if last_t else 0.05
             last_t = self.n.ir_t
-            _, yt = tape_pos(self.n.ir)
-            if yt is None:
+            wts, yt = tape_pos(self.n.ir)
+            self.trace.append((round(time.time(), 3), round(remain() * 100, 1), *self.n.ir, *(round(x, 2) for x in wts),
+                               None if yt is None else round(yt * 100, 2)))
+            if yt is None:   # 놓침: 멈춰서 마지막으로 본 쪽으로 천천히 돌며 다시 찾음 (10-27)
                 lost_since = lost_since or time.time()
-                if time.time() - lost_since > 0.3:
+                if time.time() - lost_since > LOST_S:
                     status = 'lost'; break
-                self.n.cmd(0.0, 0.0); continue
+                self.n.cmd(0.0, math.copysign(0.25, y_prev) if y_prev and abs(y_prev) > 0.003 else 0.0); continue
             lost_since = None
             if y_prev is not None:
                 k = min(1.0, dt / (DY_TAU + dt))
