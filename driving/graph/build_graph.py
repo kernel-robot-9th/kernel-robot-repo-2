@@ -27,6 +27,7 @@ HEADER = """\
 # 좌표: 그림 cm (왼쪽 아래 원점, y 위), 위치 = 라이다 중심, 방향 deg (0 = +x, 90 = +y)
 # 자동으로 생기는 것: 차선 노드 <차선>_<x> (예: B1_130) 와 차선 엣지(line), 경계점(gate) <-> 같은 x 의 차선들(transfer),
 #   같은 갈림목 x 의 이웃 차선끼리 차선 바꾸기(transfer, 예: B1_40-B2_40)
+# lane_skip: 못 가는 차선 노드 목록 — 그 노드와 거기 붙는 자동 엣지를 만들지 않음 (예: T2_20 콘센트 자리)
 # 노드 type: gate(복도 경계 바로 밖, jct = [복도, x] 갈림목과 연결) / way(경유점) / stop(목적지, heading)
 # 엣지 mode
 #   line     교행 복도 흰 테이프 따라가기 (IR). 차선 방향 고정 없음 — 관제가 차선을 골라 예약
@@ -57,6 +58,8 @@ def dump_spec(spec, path=SPEC):
     out += [f'  {k}: {_flow(v)}' for k, v in spec['lanes'].items()]
     out.append('junctions:        # 복도 위 갈림목 x → 차선마다 노드 (예: B1_130, B2_130)')
     out += [f'  {k}: {_flow(sorted(v))}' for k, v in spec['junctions'].items()]
+    if spec.get('lane_skip'):
+        out.append(f"lane_skip: {_flow(spec['lane_skip'])}   # 못 가는 차선 노드 — 노드·차선 엣지·transfer 를 만들지 않음 (T2_20: 콘센트 자리, 10-28 사용자)")
     if spec.get('junction_info'):
         out.append('junction_info:    # 갈림목(차선 노드)에 붙이는 속성. role: wait = 대기(비켜 주기) 자리')
         for c, d in spec['junction_info'].items():
@@ -97,8 +100,9 @@ def build(spec):
         edges.append(dict(a=a, b=b, mode=mode, zone=zone, length_cm=round(math.hypot(pb[0] - pa[0], pb[1] - pa[1]), 1),
                           gap_bare_cm=round(dist - BODY_R['bare'], 1), gap_bowl_cm=round(dist - BODY_R['bowl'], 1), gap_at=at, **kw))
 
+    skip = set(spec.get('lane_skip') or [])            # 못 가는 차선 노드 (예: T2_20 콘센트 자리, 10-28 사용자)
     for lane, L in spec['lanes'].items():
-        xs = sorted(spec['junctions'].get(L['corridor'], []))
+        xs = [x for x in sorted(spec['junctions'].get(L['corridor'], [])) if f'{lane}_{x:g}' not in skip]
         info = spec.get('junction_info', {}).get(L['corridor'], {})
         for x in xs:
             nodes[f'{lane}_{x:g}'] = dict(xy=[x, L['y']], type='lane', lane=lane, **info.get(f'{x:g}', {}))
@@ -108,6 +112,8 @@ def build(spec):
         lanes = sorted((ln for ln, L in spec['lanes'].items() if L['corridor'] == cor), key=lambda ln: spec['lanes'][ln]['y'])
         for x in sorted(xs):
             for l0, l1 in zip(lanes, lanes[1:]):
+                if f'{l0}_{x:g}' in skip or f'{l1}_{x:g}' in skip:
+                    continue
                 add_edge(f'{l0}_{x:g}', f'{l1}_{x:g}', 'transfer', f'jct_{cor}{x:g}', crosses=[], auto=True)
     for k, n in spec['nodes'].items():
         if k in nodes:
@@ -124,6 +130,8 @@ def build(spec):
             errors.append(f'경계점 {k}: jct {n.get("jct")} 에 해당하는 갈림목 없음'); continue
         lanes.sort(key=lambda ln: abs(spec['lanes'][ln]['y'] - n['xy'][1]))
         for i, ln in enumerate(lanes):
+            if f'{ln}_{x:g}' in skip:
+                continue
             add_edge(k, f'{ln}_{x:g}', 'transfer', f'jct_{cor}{x:g}', crosses=lanes[:i], auto=True)
     for e in spec['edges']:
         e = dict(e)
@@ -132,6 +140,9 @@ def build(spec):
             errors.append(f'엣지 {a}-{b}: mode {mode} 은 {MODES} 중 하나')
         add_edge(a, b, mode, zone, **e)
     return nodes, edges, errors
+
+
+KFONT = '/usr/share/fonts/truetype/nanum/NanumBarunGothicBold.ttf'   # graph.png 목적지 이름(한글)
 
 
 def diagram_px(x, y, S=1):
@@ -151,6 +162,7 @@ def draw(nodes, edges, out):
     for e in edges:
         c = (170, 170, 170) if e.get('deferred') else COL.get(e['mode'], (0, 0, 0))
         cv2.line(img, px(*nodes[e['a']]['xy']), px(*nodes[e['b']]['xy']), c, W.get(e['mode'], 2), cv2.LINE_AA)
+    stop_labels = []
     for k, n in nodes.items():
         p = px(*n['xy']); t = n['type']
         dim = n.get('deferred')
@@ -162,6 +174,11 @@ def draw(nodes, edges, out):
             if n.get('role') == 'wait':
                 cv2.circle(img, p, 13, (0, 150, 240), 3, cv2.LINE_AA)
             cv2.circle(img, p, {'lane': 6, 'gate': 7, 'way': 6}[t], (170, 170, 170) if dim else {'lane': (0, 90, 160), 'gate': (120, 0, 120), 'way': (60, 60, 60)}[t], -1, cv2.LINE_AA)
+        if t == 'stop':   # 목적지: 방 번호(101호…)·수술실·약제실 + 노드 이름 — 한글이라 아래에서 PIL 로 씀
+            nm = n.get('name', '')
+            code = nm.split()[0] if nm[:3].isdigit() or nm.startswith('수술실') else ('약제실' if k == 'PHARMACY' else '')
+            stop_labels.append(((p[0] + 16, p[1] - 30), f'{code}  {k}' if code else k))
+            continue
         if t != 'lane' or n['lane'] in ('B1', 'T2'):
             lab = k if t != 'lane' else k.split('_')[1]
             off = (10, -10) if t != 'lane' else ((-14, 34) if n['lane'] == 'B1' else (-14, -14))
@@ -173,6 +190,17 @@ def draw(nodes, edges, out):
         cv2.putText(img, lab, (img.shape[1] - 330, y0 + 8), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 0), 2); y0 += 32
     cv2.line(img, (img.shape[1] - 400, y0), (img.shape[1] - 340, y0), (170, 170, 170), 6)
     cv2.putText(img, 'deferred', (img.shape[1] - 330, y0 + 8), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 0), 2)
+    if stop_labels:
+        from PIL import Image, ImageDraw, ImageFont
+        pil = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+        d = ImageDraw.Draw(pil)
+        try:
+            font = ImageFont.truetype(KFONT, 26)
+        except OSError:
+            font = ImageFont.load_default()
+        for xy, lab in stop_labels:
+            d.text(xy, lab, font=font, fill=(0, 0, 0), stroke_width=3, stroke_fill=(255, 255, 255))
+        img = cv2.cvtColor(np.array(pil), cv2.COLOR_RGB2BGR)
     cv2.imwrite(out, img)
 
 

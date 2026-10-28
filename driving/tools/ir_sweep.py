@@ -2,6 +2,9 @@
 # 센서들이 테이프를 가로질러 지나가므로 채널별 흰색/바닥 값, 실제 가운데 채널, 센서 간격을 알 수 있다.
 # **로봇에서** 실행 (IR 노드 pinky_sensor_adc 가 /ir_sensor/range 를 내고 있어야 함). 로봇이 움직임!
 #   python3 ir_sweep.py --amp 30 --speed 0.2          # 0 -> +30 -> -30 -> 0 (odom 각도, 실제는 8~15% 더 돎)
+#   python3 ir_sweep.py --amp 45 --save               # 로봇별 보정: 테이프 위에서 차선 방향으로 놓고 실행 →
+#       채널마다 흰색 = 하위 3%, 바닥 = 상위 10% 값을 ~/.config/pinky/ir_cal.json 에 저장 (line_follow 가 읽음).
+#       로봇마다 센서 감도가 달라 고정값을 쓰지 않는다 (10-27 사용자). 세 채널 동시 >3300 (I2C 잡음) 줄은 뺌
 # 결과: ir_logs/ir_sweep_<시각>.csv (t, yaw_deg, ch_a, ch_b, ch_c = 토픽 배열 순서 [adc2, adc1, adc0])
 import argparse
 import math
@@ -53,6 +56,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--amp', type=float, default=30.0, help='좌우 진폭 deg (odom)')
     ap.add_argument('--speed', type=float, default=0.2, help='최대 각속도 rad/s')
+    ap.add_argument('--save', action='store_true', help='흰색·바닥 값을 ~/.config/pinky/ir_cal.json 에 저장')
     a = ap.parse_args()
 
     rclpy.init()
@@ -93,6 +97,29 @@ def main():
             f.write(f'{r[0]:.3f},{r[1] - math.degrees(y0):.2f},{r[2]},{r[3]},{r[4]}\n')
     print(f'{len(n.rows)} 줄 저장: {path}')
     n.destroy_node(); rclpy.shutdown()
+    return save_cal(n.rows) if a.save else 0
+
+
+def save_cal(rows, min_contrast=400):
+    import json
+    vals = [r[2:5] for r in rows if not all(v > 3300 for v in r[2:5])]
+    if len(vals) < 50:
+        print('보정 실패: 값이 너무 적음'); return 2
+    white, floor = [], []
+    for c in range(3):
+        v = sorted(x[c] for x in vals)
+        white.append(float(v[int(0.03 * (len(v) - 1))])); floor.append(float(v[int(0.90 * (len(v) - 1))]))
+    names = ('왼', '가운데', '오른')
+    for nm, w, f in zip(names, white, floor):
+        print(f'  {nm:3s} 흰색 {w:6.0f}  바닥 {f:6.0f}  대비 {f - w:6.0f}')
+    bad = [nm for nm, w, f in zip(names, white, floor) if f - w < min_contrast]
+    if bad:
+        print(f'보정 실패: {bad} 채널 대비 < {min_contrast} — 테이프 위 차선 방향으로 놓였는지 확인'); return 2
+    serial = next((ln.split(':')[1].strip() for ln in open('/proc/cpuinfo') if ln.startswith('Serial')), '?')
+    path = os.path.expanduser('~/.config/pinky/ir_cal.json')
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    json.dump(dict(serial=serial, time=time.strftime('%Y-%m-%d %H:%M'), white=white, floor=floor), open(path, 'w'), indent=1)
+    print(f'보정 저장: {path} (serial {serial})')
     return 0
 
 
