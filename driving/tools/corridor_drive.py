@@ -87,7 +87,8 @@ def wrap(a):
 
 
 class CorridorDrive:
-    def __init__(self, node, side='right', offset_cm=10.0, speed=0.08, cmd_topic='cmd_vel_nav', tf_buffer=None, body_r=BODY_R):
+    def __init__(self, node, side='right', offset_cm=10.0, speed=0.08, cmd_topic='cmd_vel_nav', tf_buffer=None, body_r=BODY_R,
+                 use_wall=True):
         """tf_buffer: 늘 돌고 있는 다른 노드의 TF 버퍼를 같이 씀 (API 서버). 없으면 이 노드에 TF 리스너를 만든다 —
         이 노드는 run() 동안만 spin 되므로, 오래 쉬었다 다시 쓰면 옛 TF 와 새 TF 가 섞여 조회가 깨진다 (10-22 API 실패)"""
         from geometry_msgs.msg import Twist
@@ -96,6 +97,7 @@ class CorridorDrive:
         from tf2_ros import Buffer, TransformListener
         self.node, self.side, self.d_ref, self.v = node, side, offset_cm / 100, speed
         self.body_r = body_r   # 접촉·앞 검사용 몸체 반경 (기본 그릇 Ø14, 빈 로봇이면 0.055)
+        self.use_wall = use_wall   # False = 벽 맞춤 없이 AMCL 축선만 (방 안·계단 통로 등 Nav2 대신 직선, 10-28)
         self.Twist = Twist
         self.pub = node.create_publisher(Twist, cmd_topic, 10)
         self.scan = None
@@ -175,7 +177,7 @@ class CorridorDrive:
         e_map = -(x - p0[0]) * uy + (y - p0[1]) * ux          # 축선 왼쪽 +
         th_map = wrap(th - math.atan2(uy, ux))
         P = self.points()
-        w = fit_wall(P, self.side, self.d_ref)
+        w = fit_wall(P, self.side, self.d_ref) if self.use_wall else None
         if w is not None and abs(w['d'] - self.d_ref) > 0.05:
             w = None  # 기대 거리에서 5cm 넘게 벗어난 직선은 다른 물체로 본다
         if w is not None:

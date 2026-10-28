@@ -79,12 +79,6 @@ nodes:
     xy: [190, 137.5]
     type: lane
     lane: T1
-  T2_20:
-    xy: [20, 152.5]
-    type: lane
-    lane: T2
-    role: wait
-    note: '대기: 왼쪽 협로에서 나오는 로봇에게 비켜 주기'
   T2_40:
     xy: [40, 152.5]
     type: lane
@@ -376,15 +370,6 @@ edges:
   gap_bowl_cm: 9.1
   gap_at: [175, 138]
   auto: true
-- a: T2_20
-  b: T2_40
-  mode: line
-  zone: corr_T2
-  length_cm: 20.0
-  gap_bare_cm: 6.7
-  gap_bowl_cm: 5.2
-  gap_at: [40, 152]
-  auto: true
 - a: T2_40
   b: T2_98.9
   mode: line
@@ -479,16 +464,6 @@ edges:
   gap_bare_cm: 2.0
   gap_bowl_cm: 0.5
   gap_at: [195, 8]
-  crosses: []
-  auto: true
-- a: T1_20
-  b: T2_20
-  mode: transfer
-  zone: jct_T20
-  length_cm: 15.0
-  gap_bare_cm: 2.5
-  gap_bowl_cm: 1.0
-  gap_at: [20, 138]
   crosses: []
   auto: true
 - a: T1_40

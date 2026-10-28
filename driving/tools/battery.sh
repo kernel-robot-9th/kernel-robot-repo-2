@@ -3,7 +3,7 @@
 #   tools/battery.sh               # 한 번
 #   tools/battery.sh -w            # 10초마다 계속 (Ctrl+C 로 끝)
 #   tools/battery.sh -w 30 192.168.129.107   # 30초마다, 다른 로봇 (ROS_DOMAIN_ID 는 로봇 ~/.bashrc 값)
-HOST=192.168.129.68   # 지금 쓰는 로봇 pinky_6364
+HOST=10.42.0.171   # 지금 쓰는 로봇 pinky_6364 (10-28 iptime team2 망. 10-27 까지 FASTCAMPUS 192.168.129.68)
 WATCH=0; EVERY=10
 if [ "$1" = "-w" ]; then
   WATCH=1; shift

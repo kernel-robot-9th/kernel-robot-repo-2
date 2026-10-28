@@ -97,7 +97,7 @@ def parse_request(body):
         item = next((q[k] for k in ITEM_KEYS if k in q), '약')
         out.append((resolve_room(room), item))
     return out
-PARKING = ['B1_20', 'B2_20', 'T1_20', 'T2_20', 'B1_195']   # 노는 로봇 주차 자리 (통행을 안 막는 복도 끝).
+PARKING = ['B1_20', 'B2_20', 'T1_20', 'B1_195']   # 노는 로봇 주차 자리 (통행을 안 막는 복도 끝). T2_20 은 콘센트 자리라 그래프에서 뺌 (10-28)
 # B2_195 는 수술실 입구(GB180)에 너무 가까워 뺌.
 # CHARGER 는 막다른 곳이라 뺌. 같은 x 의 두 차선 자리(짝)에 약 실은 로봇 둘을 세우면 그 복도 끝을 아무도 못 지나가므로 짝은 하나만
 EAST_LANE = {'B': 'B1', 'T': 'T1'}                           # 우측통행: 동쪽(+x)으로 갈 때 쓰는 차선 (아래쪽 차선)
@@ -348,7 +348,7 @@ class FMS:
         self.g = graph or Graph()
         self.rng = random.Random(seed)
         self.t = 0.0
-        starts = ['B1_20', 'T1_20', 'B2_20', 'T2_20']
+        starts = ['B1_20', 'T1_20', 'B2_20', 'B1_195']
         self.robots = [Robot(f'R{i + 1}', starts[i], self.g, COLORS[i]) for i in range(n_robots)]
         for i, r in enumerate(self.robots):
             row = ROBOT_TABLE[i] if i < len(ROBOT_TABLE) else {'robot': i + 1, 'name': f'pinky_{i + 1}'}
