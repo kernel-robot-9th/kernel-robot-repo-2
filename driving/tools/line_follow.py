@@ -21,12 +21,23 @@ from tf2_ros import Buffer, TransformException, TransformListener
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 # 토픽 배열 순서 [adc2, adc1, adc0] = [왼쪽, 가운데, 오른쪽] (로봇 진행 방향 기준)
-WHITE = (640.0, 1870.0, 450.0)    # 흰 테이프 값 (10-26, 10-27 회전 시험 둘 다 같음)
+WHITE = (640.0, 1870.0, 450.0)    # 보정 파일이 없을 때만 쓰는 값 (pinky_6364 10-26 회전 시험)
 # 바닥 값은 자리마다 다름 (10-26 B2: 1900/2720/2000, 10-27 B1 x≈150: 2450/3000/2250, 가장 어두운 곳 2755/-/2970).
 # 고정 바닥값이 실제보다 낮으면 테이프 반쯤 밟은 옆 센서가 0 으로 읽혀 가운데-옆 사이에 사각지대 → 10-27 B1 에서 lost.
 # → 채널마다 최근 FLOOR_WIN 초 최댓값을 바닥으로 씀 (FLOOR_MIN~FLOOR_MAX 로 자름. 테이프 위에 오래 있으면 FLOOR_MIN)
-FLOOR = (2450.0, 3000.0, 2250.0)        # 기록 없을 때 시작값
+FLOOR = (2450.0, 3000.0, 2250.0)        # 기록 없을 때 시작값 (보정 파일 없을 때)
 FLOOR_MIN = (1700.0, 2700.0, 1500.0)
+# 로봇별 보정 (ir_sweep.py --save → ~/.config/pinky/ir_cal.json). 로봇마다 센서 감도가 달라 고정값 대신 이것을 씀 (10-27 사용자)
+CAL_PATH = os.path.expanduser('~/.config/pinky/ir_cal.json')
+CAL_SRC = '기본값 (pinky_6364 10-26) — ir_sweep.py --save 로 이 로봇을 보정할 것'
+try:
+    import json as _json
+    _c = _json.load(open(CAL_PATH))
+    WHITE, FLOOR = tuple(_c['white']), tuple(_c['floor'])
+    FLOOR_MIN = tuple(w + 0.6 * (f - w) for w, f in zip(WHITE, FLOOR))   # 바닥 추적 하한: 흰색-바닥 사이 60% 지점
+    CAL_SRC = f"{CAL_PATH} ({_c.get('serial')} {_c.get('time')})"
+except (OSError, ValueError, KeyError):
+    pass
 FLOOR_MAX = 3300.0
 FLOOR_WIN = 2.0                          # s
 SENSOR_Y = (0.02, 0.0, -0.02)    # m, 센서 옆 위치 (왼쪽 +), 회전 시험에서 추정 (10-27 다시 재도 비율 같음: 옆 간격 ≈ 0.7 × 축-센서 거리)

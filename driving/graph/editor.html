@@ -200,8 +200,9 @@ function render() {
   autoEdges.forEach((e) => drawEdge(e.a, e.b, e, `${e.a}|${e.b}`, true));
   spec.edges.forEach((e, i) => drawEdge(e.a, e.b, e, i, false));
   // 차선 노드
+  const laneSkip = new Set(spec.lane_skip || []);   // 못 가는 차선 노드 (graph_spec lane_skip, 예: T2_20 콘센트 자리)
   for (const [ln, L] of Object.entries(spec.lanes)) for (const x of spec.junctions[L.corridor] || []) {
-    const id = laneNodeId(ln, x); const isSel = sel && sel.kind === 'lane' && sel.id === id;
+    const id = laneNodeId(ln, x); if (laneSkip.has(id)) continue; const isSel = sel && sel.kind === 'lane' && sel.id === id;
     const g = el('g', { class: 'node' }, root);
     if (isSel) el('circle', { cx: x, cy: sy(L.y), r: 2.4, class: 'sel-ring' }, g);
     if (jinfo(L.corridor, x).role === 'wait') el('circle', { cx: x, cy: sy(L.y), r: 2.2, fill: 'none', stroke: 'var(--m-line)', 'stroke-width': 0.5 }, g);
