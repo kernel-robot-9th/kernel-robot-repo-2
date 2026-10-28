@@ -5,6 +5,7 @@
 
 - Graph      : driving/graph/graph.yaml 을 차선까지 그대로 읽는다 (보류 노드·엣지 제외)
 - Robot      : 가상 핑키. FMS 가 내준 구간(노드 목록)만 일정 속도로 달린다
+               실물(real=True): 핑키 /status 의 위치·online 만 따라감 (pinky_link.py, 명령은 아직 안 보냄)
 - FMS        : 주문 → 배송 묶음·배차 → 경로 → 구간 예약 → 상태(오염도·배터리·적재) 관리
 """
 import heapq
@@ -14,6 +15,7 @@ import random
 
 import yaml
 
+from pinky_link import PinkyLink
 from planner import INF, Item, Planner, space_conflict
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -304,6 +306,7 @@ class Robot:
         self.num, self.name = None, rid        # 관제 PC 로봇 번호, 이름 (robots.yaml)
         self.heading = 0.0          # deg, 마지막으로 달린 엣지 방향
         self.batch = None
+        self.real = None            # 실물이면 PinkyLink
 
     @property
     def loaded(self):
@@ -343,23 +346,35 @@ class Robot:
 
 # ----------------------------------------------------------------------------------------------------------
 class FMS:
-    def __init__(self, n_robots=3, params=None, seed=None, graph=None):
+    def __init__(self, n_robots=3, params=None, seed=None, graph=None, real=False):
+        """real=True: robots.yaml 에서 url 이 있는 핑키만 (n_robots 무시), 지금 위치에서 시작. 위치·online 만 읽고 배차는 안 함"""
         self.p = params or Params()
         self.g = graph or Graph()
         self.rng = random.Random(seed)
         self.t = 0.0
+        self.events = []
+        rows = [row for row in ROBOT_TABLE if row.get('url')] if real else None
+        if real:
+            if not rows:
+                raise RuntimeError('robots.yaml 에 url 이 있는 로봇이 없음')
+            n_robots = len(rows)
         starts = ['B1_20', 'T1_20', 'B2_20', 'T2_20']
-        self.robots = [Robot(f'R{i + 1}', starts[i], self.g, COLORS[i]) for i in range(n_robots)]
-        for i, r in enumerate(self.robots):
-            row = ROBOT_TABLE[i] if i < len(ROBOT_TABLE) else {'robot': i + 1, 'name': f'pinky_{i + 1}'}
-            r.num, r.name = row['robot'], row['name']
+        self.robots = [Robot(f'R{i + 1}', starts[i % len(starts)], self.g, COLORS[i]) for i in range(n_robots)]
+        try:
+            for i, r in enumerate(self.robots):
+                row = rows[i] if real else (ROBOT_TABLE[i] if i < len(ROBOT_TABLE) else {'robot': i + 1, 'name': f'pinky_{i + 1}'})
+                r.num, r.name = row['robot'], row['name']
+                if real:
+                    self.attach_real(r, row['url'])
+        except RuntimeError:
+            self.close()
+            raise
         self.orders = []
         self.batches = []
         self.by_request = {}         # request_id → 주문 (같은 요청 두 번 = 한 번)
         self.outbox = []             # API v1 이벤트 (관제 PC 로 보낼 것). sim_server 가 가져가 보낸다
         self._seq = 0
         self.clock = None            # () → ISO 시각 문자열 (sim_server 가 넣음). 없으면 시뮬레이션 초
-        self.events = []
         self.stats = dict(delivered=0, violations=0, collisions=0, near=0)
         self._next_dispatch = 0.0
         self.auto_rate = 0.0         # 분당 자동 주문 수
@@ -367,6 +382,36 @@ class FMS:
         self.planner = Planner(self.g, self.p.speed, step=self.p.plan_step, near_cm=NEAR_CM, wrong_lane=self.p.wrong_lane)
         self.plan_stats = dict(replans=0, cbs=0, prioritized=0, failed=0, last=None)
         self.last_plans = {}
+
+    # ---- 실물 핑키 (연결: 위치·online 만) ----
+    def attach_real(self, r, url):
+        """핑키 /status 를 읽어 가장 가까운 그래프 노드에서 시작. 위치를 못 읽으면 RuntimeError"""
+        link = PinkyLink(r.name, url)
+        if not link.fetch() or not link.pose():
+            link.stop()
+            p = (link.status or {}).get('pose') or {}
+            raise RuntimeError(f'{r.name} ({url}) 위치를 못 읽음 (pose age_s={p.get("age_s")})'
+                               ' — pinky-api·bringup·Nav2 와 /set_pose 확인')
+        r.real = link
+        d = self.real_sync(r)
+        self.log(f'{r.id} = 실물 {r.name} ({url}): 지금 {place_of(r.node)} {r.node} ({d:.0f}cm)', 'warn' if d > 15 else 'info')
+        if not link.status.get('nav2_ready'):
+            self.log(f'{r.id}: {r.name} Nav2 가 아직 안 뜸 (nav2_ready=false)', 'warn')
+
+    def real_sync(self, r):
+        """/status 위치 → pos·heading·가장 가까운 노드. 반환 그 노드까지 거리 cm (위치 없으면 None)"""
+        p = r.real.pose()
+        if not p:
+            return None
+        xy = (p['x'], p['y'])
+        r.node = min(self.g.nodes, key=lambda n: math.dist(xy, self.g.xy(n)))
+        r.pos, r.heading = xy, p['heading']
+        return math.dist(xy, self.g.xy(r.node))
+
+    def close(self):
+        for r in self.robots:
+            if r.real:
+                r.real.stop()
 
     # ---- 기록 ----
     def log(self, msg, kind='info'):
@@ -387,7 +432,7 @@ class FMS:
         path = r.path[r.k:] if moving else []
         st = r.state_name()
         dest = r.step['to'] if r.step and r.step['kind'] == 'move' else None
-        return dict(robot=r.num, name=r.name, online=True,
+        return dict(robot=r.num, name=r.name, online=r.real.online if r.real else True,
                     state={'planned': 'moving'}.get(st, st), task=self.task_name(r),
                     pose=dict(x=round(r.pos[0], 1), y=round(r.pos[1], 1), heading=round(r.heading, 1)),
                     node=r.node, next_node=path[1] if len(path) > 1 else None, place=place_of(r.node),
@@ -645,8 +690,8 @@ class FMS:
     def dispatch(self):
         p = self.p
         self.break_deadlocks()
-        for r in self.robots:                               # 노는 로봇: 충전·오염 제거 먼저
-            if not r.idle:
+        for r in self.robots:                               # 노는 로봇: 충전·오염 제거 먼저 (실물은 아직 명령 안 함)
+            if not r.idle or r.real:
                 continue
             if r.battery <= p.pharmacy_min_battery:
                 st = ([dict(kind='move', to=POCKET, also={'charger'}), dict(kind='dwell')] if r.contam > 0 else []) + \
@@ -666,7 +711,7 @@ class FMS:
         taken = {r.step['to'] for r in self.robots if r.step and r.step['kind'] == 'move'} | \
                 {s['to'] for r in self.robots for s in r.queue if s['kind'] == 'move'}
         for r in self.robots:                               # 2) 남는 로봇은 주차 자리로
-            if r.idle and r.node not in PARKING:
+            if r.idle and not r.real and r.node not in PARKING:
                 spot = self.free_parking(r, taken)
                 if spot:
                     taken.add(spot)
@@ -701,7 +746,7 @@ class FMS:
         seed = waiting[0]
         cands = []
         for r in self.robots:
-            if not r.idle or (r.contam > 0) or r.battery < p.battery_per_room:
+            if not r.idle or r.real or (r.contam > 0) or r.battery < p.battery_per_room:
                 continue
             if r.battery <= p.pharmacy_min_battery:
                 continue
@@ -1060,7 +1105,7 @@ class FMS:
         r.wait_why = why
         r.blocked_by = set(blockers)
         for o in blockers:                                      # 노는 로봇이 막으면 비켜 주기
-            if o.idle and o.task is None:
+            if o.idle and o.task is None and not o.real:
                 avoid = set(r.path or []) | {r.step['to'], o.node} | self.g.near[r.step['to']]
                 spot = self.free_parking(o, set(), avoid)
                 if spot is None:
@@ -1077,6 +1122,9 @@ class FMS:
 
     def tick_robot(self, r, dt):
         p, s = self.p, r.step
+        if r.real:
+            self.real_sync(r)
+            return
         if s is None:
             return
         k = s['kind']

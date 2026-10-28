@@ -25,6 +25,7 @@ python3 fms/sim_server.py --host 0.0.0.0      # 다른 PC(관제 PC)에서도 �
 | `--port 8770` | 포트 |
 | `--control-url http://<관제 PC IP>:8000` | 로봇 상태(1초마다)와 이벤트를 이 주소로 POST (`/api/v1/fms/robot-status`, `/api/v1/fms/events`) |
 | `--no-auto-omx` | 가상 OMX 끔: OMX 준비 완료(`ready`)·적재 완료(`loaded`)를 관제 PC 가 보내야 핑키가 움직인다 |
+| `--real` | **실물 핑키 연결**: [`robots.yaml`](robots.yaml) 에 `url` 이 있는 핑키만 쓴다. 로봇마다 `/status` 를 0.3초마다 읽어 위치·online 을 화면·관제 PC 상태에 보여 준다 (가장 가까운 그래프 노드). 위치가 없거나 낡으면(`pose.age_s` > 2 s) 시작을 거절. **읽기만** — 배차·`/goto` 는 아직 안 함 |
 
 ## 2. 관제 PC 와 붙여 보기
 
@@ -68,6 +69,7 @@ python3 fms/run_headless.py --minutes 120 --rate 2 --seed 1     # --robots 2, --
 | `sim_server.py` | HTTP 서버(표준 라이브러리) + 시뮬레이션 스레드. API v1(`/api/v1/…`), 관제 PC 로 보내기, 화면용 `/api/map`·`/api/state`·`/api/orders`·`/api/control` |
 | `fms_core.py` | Graph(차선·zone·가까운 노드), Robot(가상 핑키), Batch(묶음), FMS(배차·경로·예약·교착 풀기·이벤트) |
 | `planner.py` | 시공간 A* + CBS (못 풀면 우선순위 계획) |
+| `pinky_link.py` | `--real`: 실물 핑키 REST API 연결 (로봇마다 스레드 하나로 `/status` 읽기) |
 | `API.md`, `openapi_v1.py` | 관제 PC ↔ FMS API v1 문서와 OpenAPI 명세 (`/docs`) |
 | `rooms.yaml` | 방 번호(`code`) ↔ 그래프 노드, 오염도, 별칭 |
 | `robots.yaml` | 관제 PC 로봇 번호 ↔ 핑키 이름 |

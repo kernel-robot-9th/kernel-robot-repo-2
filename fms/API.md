@@ -62,8 +62,8 @@ FMS는 로봇 상태(1초마다)와 이벤트를 관제 PC 주소로 직접 POST
 | robot | name |
 | --- | --- |
 | 1 | pinky_6364 |
-| 2 | pinky_2 (정해지면 바꿈) |
-| 3 | pinky_3 (정해지면 바꿈) |
+| 2 | pinky_ee3e |
+| 3 | pinky_62f4 |
 
 ## 관제 PC → FMS
 

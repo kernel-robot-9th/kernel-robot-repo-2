@@ -2,5 +2,5 @@
 # 시뮬레이터는 위에서부터 로봇 수만큼 쓴다.
 robots:
   - {robot: 1, name: pinky_6364}
-  - {robot: 2, name: pinky_2}
-  - {robot: 3, name: pinky_3}
+  - {robot: 2, name: pinky_ee3e, url: "http://10.42.0.79:8080"}
+  - {robot: 3, name: pinky_62f4, url: "http://10.42.0.131:8080"}

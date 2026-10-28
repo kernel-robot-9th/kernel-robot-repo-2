@@ -3,6 +3,7 @@
 가상 핑키가 FMS 의 배차·예약 규칙대로 움직인다. 주문 버튼 / 자동 주문 / 배속 / 다시 시작.
 API v1 (관제 PC ↔ FMS): fms/API.md, Swagger = /docs. --control-url 을 주면 로봇 상태(1초마다)와 이벤트를 그 주소로 POST.
 가상 관제 PC(OMX ready·loaded 자동)는 기본 켜짐 — 진짜 관제 PC 를 붙이면 화면에서 끄거나 POST /api/control {"auto_omx": false}.
+--real: robots.yaml 에서 url 이 있는 실물 핑키에 연결해 위치·online 을 보여 준다 (읽기만, 아직 명령은 안 보냄).
 """
 import argparse
 import datetime
@@ -56,19 +57,23 @@ def load_walls():
 
 
 class Sim:
-    def __init__(self, control_url=None):
+    def __init__(self, control_url=None, real=False):
         self.lock = threading.Lock()
         self.speed = 1.0
         self.paused = False
+        self.real = real                # 실물 핑키 연결 (robots.yaml url)
         self.f = None
         self.reset(3)
         self.push = Pusher(self, control_url)
         threading.Thread(target=self.loop, daemon=True).start()
 
     def reset(self, n, auto=0.0, planner='cbs', auto_omx=None):
+        f = FMS(n_robots=n, params=Params(planner=planner), real=self.real)
         with self.lock:
             old = self.f
-            self.f = FMS(n_robots=n, params=Params(planner=planner))
+            if old is not None:
+                old.close()
+            self.f = f
             self.f.auto_rate = auto
             self.f.clock = now_iso
             if old is not None:
@@ -303,7 +308,7 @@ class H(BaseHTTPRequestHandler):
                               r.get('planner', SIM.f.p.planner))
                 return self.send(200, {'ok': True})
             self.send(404, {'error': 'not found'})
-        except (KeyError, ValueError) as e:
+        except (KeyError, ValueError, RuntimeError) as e:
             self.send(400, {'error': str(e)})
 
 
@@ -314,8 +319,12 @@ def main():
     ap.add_argument('--host', default='127.0.0.1', help='다른 PC 에서 붙으려면 0.0.0.0')
     ap.add_argument('--control-url', default=None, help='관제 PC 주소 (예: http://192.168.129.135:8000). 로봇 상태·이벤트를 여기로 POST')
     ap.add_argument('--no-auto-omx', action='store_true', help='가상 관제 PC 끔: ready·loaded 를 진짜 관제 PC 가 보냄')
+    ap.add_argument('--real', action='store_true', help='robots.yaml 에 url 이 있는 실물 핑키에 연결 (위치·online 만 읽음)')
     a = ap.parse_args()
-    SIM = Sim(a.control_url)
+    try:
+        SIM = Sim(a.control_url, real=a.real)
+    except RuntimeError as e:
+        raise SystemExit(f'실물 핑키 연결 실패: {e}')
     SIM.f.p.auto_omx = not a.no_auto_omx
     g = SIM.f.g
     segs, ghost = load_walls()
@@ -329,6 +338,8 @@ def main():
     srv = ThreadingHTTPServer((a.host, a.port), H)
     print(f'FMS 시뮬레이터: http://{a.host}:{a.port}  (API v1 Swagger: /docs, 관제 PC 로 보내기: {SIM.push.url or "끔"}, '
           f'가상 OMX {"켬" if SIM.f.p.auto_omx else "끔"})')
+    if a.real:
+        print('실물: ' + ', '.join(f'{r.name} ({r.real.url}) @ {r.node}' for r in SIM.f.robots), flush=True)
     srv.serve_forever()
 
 
