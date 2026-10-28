@@ -53,7 +53,7 @@ EMR 쪽에서 비어 있는 것: **지도 위 로봇 위치**(FMS가 1초마다 
 |---|---|
 | Presentation | EMR 웹(React 19 + Vite, `:5173`). 간호사·관리자가 같은 화면을 쓰고 역할로 메뉴를 나눈다. 병상 단말은 같은 웹의 `/bedside`(병상 단말 키) |
 | Application | EMR API(FastAPI + SQLAlchemy 2, `:8000`) + PostgreSQL 16(`:5432`). Docker로 상시 기동 |
-| Robot | **팀원 FMS API v1**(`:8770` — 10-27 시험은 시뮬레이터 `fms/sim_server.py`, 실물은 Pinky Nav2) · **팀원 OMX API**(`192.168.129.86:8000`, YOLO + click pick, 양팔 탑재). 둘 다 이 저장소 밖 |
+| Robot | **팀원 FMS API v1**(`:8770` — 10-27 시험은 시뮬레이터 `fms/sim_server.py`, 실물은 Pinky Nav2) · **팀원 OMX API**(`10.42.0.147:8000`, YOLO + click pick, 양팔 탑재). 둘 다 이 저장소 밖 |
 
 **EMR ⇄ 로봇 연결 (모두 HTTP)**
 

@@ -41,10 +41,11 @@ def test_admin_sends_color_counts_with_generated_request_id(client, auth_headers
     assert body["command"] == {"blue": 2, "green": 1} and body["sent_at"]
 
 
-def test_missing_color_is_sent_as_zero(client, auth_headers, omx_sent):
-    """빠진 색은 0으로 채워 두 키를 모두 보낸다."""
+def test_zero_count_color_is_left_out(client, auth_headers, omx_sent):
+    """개수가 0인 색은 OMX에 보내지 않는다(10-28 사용자 "갯수가 0이면 생략")."""
     assert client.post(COMMAND_URL, json={"command": {"green": 1}}, headers=auth_headers).status_code == 200
-    assert omx_sent[0]["command"] == {"blue": 0, "green": 1}
+    assert client.post(COMMAND_URL, json={"command": {"blue": 0, "green": 2}}, headers=auth_headers).status_code == 200
+    assert [sent["command"] for sent in omx_sent] == [{"green": 1}, {"green": 2}]
 
 
 def test_request_ids_differ(client, auth_headers, omx_sent):

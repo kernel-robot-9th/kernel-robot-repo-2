@@ -15,15 +15,21 @@
 # =============================================================================
 from __future__ import annotations
 
-from fastapi import APIRouter, Path, Query, Request, Response, status
+from typing import Any
 
+import structlog
+from fastapi import APIRouter, Body, Path, Query, Request, Response, status
+
+from app.core.config import settings
 from app.core.deps import DB, ROBOT_RESPONSES, CurrentRobot
 from app.schemas.delivery import DeliveryProgressIn, DeliveryReceiptIn, RobotDeliveryOut, RobotMeOut
 from app.schemas.robot import OmxEndPointOut
 from app.services.dispatch import DispatchService
+from app.services.fms_events import FmsEventHandler
 from app.services.omx_signal import OmxSignalService
 
 router = APIRouter(responses=ROBOT_RESPONSES)
+log = structlog.get_logger(__name__)
 NOT_ASSIGNED = "delivery_not_assigned_to_robot(이 로봇이 맡은 배송이 아님)"
 CLAIM_SKIP_REASON_HEADER = "X-Claim-Skip-Reason"
 
@@ -111,14 +117,25 @@ def list_deliveries(
     "/arrived", response_model=RobotDeliveryOut, summary="약제실 도착",
     description="이 로봇이 맡은 배송(dispatched)을 실으러 **약제실에 도착**했다고 알린다. 배송 id가 필요 없다 — 팀원 Pinky FMS가 약제실 정밀 주차를 "
                 "마치면 부른다. 본문 없음, 여러 번 불러도 같다. **EMR은 서버 로그만 남긴다** — 배송 상태는 dispatched 그대로, 간호사 알림·배송 기록 없음. "
-                "**병실 도착은 `POST /robot/deliveries/{id}/progress {stage: arrived}`**. 2026-10-22, 2026-10-27 약제실 전용으로 바꿈(사용자 결정)",
+                "**병실 도착은 `POST /robot/deliveries/{id}/progress {stage: arrived}`**. 2026-10-22, 2026-10-27 약제실 전용으로 바꿈(사용자 결정). "
+                "**2026-10-28**: 설정 `FMS_PHARMACY_SIGNAL=pinky`(FMS가 가상인 동안)면 실물 Pinky의 이 신호(본문 = Pinky ArrivedSignal)를 "
+                "'정밀 주차 끝'으로 보고, 기다리던 OMX 묶음에 내려놓기(/pinky)를 시작한다",
     responses={409: {"description": "맡은 배송 없음 (robot_no_active_delivery) · 이미 병실 도착(delivery_invalid_transition)"}},
 )
-def report_at_pharmacy(db: DB, robot: CurrentRobot) -> RobotDeliveryOut:
+def report_at_pharmacy(db: DB, robot: CurrentRobot, signal: dict[str, Any] | None = Body(default=None)) -> RobotDeliveryOut:
     """
-    [입력] robot: 키로 확인된 로봇
+    [입력] robot: 키로 확인된 로봇 / signal: Pinky ArrivedSignal {event, dest, job_id, dock_error, …} (없어도 됨)
     [출력] RobotDeliveryOut: dispatched 그대로
     """
+    signal = signal or {}
+    if settings.FMS_OMX_ENABLED and settings.FMS_PHARMACY_SIGNAL == "pinky" and signal.get("dest", "PHARMACY") == "PHARMACY":
+        events = FmsEventHandler(db)
+        batch = events.pinky_docked_at_pharmacy()
+        log.info("pinky_arrived_signal", robot_id=robot.id, job_id=signal.get("job_id"), dock_error=signal.get("dock_error"),
+                 batch_id=batch.batch_id if batch else None)
+        delivery = events.delivery_for_batch(batch) if batch is not None else None
+        if delivery is not None:
+            return RobotDeliveryOut.model_validate(delivery)
     return RobotDeliveryOut.model_validate(DispatchService(db).report_at_pharmacy(robot.id))
 
 

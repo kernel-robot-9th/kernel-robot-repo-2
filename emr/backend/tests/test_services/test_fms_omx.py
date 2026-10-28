@@ -23,7 +23,7 @@ def arm(monkeypatch, make_robot) -> dict:
     """가짜 FMS(주문·ready·loaded)와 가짜 OMX(/command·/pinky·/status). calls에 부른 순서대로 쌓인다.
     arm["status"]를 바꾸면 OMX /status 응답이 바뀐다."""
     robot = make_robot("배송로봇 1호")
-    state: dict = {"calls": [], "status": dict(IDLE), "orders": 0}
+    state: dict = {"calls": [], "status": dict(IDLE), "orders": 0, "fms_batch_status": "at_pharmacy", "robot": robot}
 
     def _create_order(base_url, request_id, room, item, timeout_seconds):
         state["orders"] += 1
@@ -44,6 +44,8 @@ def arm(monkeypatch, make_robot) -> dict:
 
     monkeypatch.setattr("app.services.fms_order.create_order", _create_order)
     monkeypatch.setattr("app.services.fms_omx.batch_step", _batch_step)
+    monkeypatch.setattr("app.services.fms_omx.get_batch",
+                        lambda base_url, batch_id, timeout_seconds: {"batch_id": batch_id, "status": state["fms_batch_status"]})
     monkeypatch.setattr("app.services.fms_omx.send_command", _send_command)
     monkeypatch.setattr("app.services.fms_omx.send_pinky", _send_pinky)
     monkeypatch.setattr("app.services.fms_omx.get_status", lambda base_url, timeout_seconds: dict(state["status"]))
@@ -75,7 +77,7 @@ def test_two_medicines_go_command_ready_pinky_loaded(client, db, arm, reserve_ov
     assert (batch.blue_count, batch.green_count, batch.step) == (2, 0, "pick")
 
     _round(db)   # 집기 명령 — 묶음 하나에 한 번
-    assert arm["calls"] == [("omx", "command", {"blue": 2, "green": 0}, f"emr-b{batch.id}")]
+    assert arm["calls"] == [("omx", "command", {"blue": 2}, f"emr-b{batch.id}")]   # 0인 green은 뺀다(10-28)
     assert batch.step == "picking"
     _round(db)   # 아직 running
     assert batch.step == "picking"
@@ -150,4 +152,101 @@ def test_sentence_mode_sends_gauze_sentence_once(client, db, arm, reserve_overdu
     batch = _assign(client, db, "b-1", ["o-1", "o-2"])
     _round(db)
     assert arm["calls"] == [("omx", "command", "pick and place blue gauze", f"emr-b{batch.id}")]
+
+
+@requires_db
+def test_omx_format_not_supported_skips_loading(client, db, arm, reserve_overdue, monkeypatch):
+    """10-28 사용자 "OMX 양식이 없으면 생략": /command가 422면 OMX 적재 없이 ready → 정밀 주차 → loaded (/pinky 없음)."""
+    from app.clients.omx import OmxRejected
+
+    def _reject(base_url, command, request_id, timeout_seconds):
+        arm["calls"].append(("omx", "command", command, request_id))
+        raise OmxRejected(422, [{"msg": "Input should be a valid string"}])
+
+    monkeypatch.setattr("app.services.fms_omx.send_command", _reject)
+    reserve_overdue(quantity=1)
+    batch = _assign(client, db, "b-1", ["o-1"])
+    _round(db)
+    assert batch.step == "ready" and batch.omx_request_id is None and "422" in batch.error
+    _round(db)
+    assert arm["calls"][-1] == ("fms", "ready", "b-1") and batch.step == "called"
+    _event(client, "robot_at_pharmacy", batch_id="b-1", robot=1)
+    _round(db)
+    assert batch.step == "loaded"
+    _round(db)
+    assert [call[1] for call in arm["calls"]] == ["command", "ready", "loaded"] and batch.step == "delivering"
+
+
+@requires_db
+def test_skipped_batch_does_not_block_next_batch_on_omx(client, db, arm, reserve_overdue, monkeypatch):
+    """생략한 묶음이 Pinky를 기다리는 동안에도 다른 묶음은 OMX를 쓸 수 있다."""
+    from app.clients.omx import OmxRejected
+
+    calls = {"n": 0}
+    real_send = __import__("app.services.fms_omx", fromlist=["send_command"]).send_command
+
+    def _first_rejected(base_url, command, request_id, timeout_seconds):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise OmxRejected(422, "format")
+        return real_send(base_url, command, request_id, timeout_seconds)
+
+    monkeypatch.setattr("app.services.fms_omx.send_command", _first_rejected)
+    reserve_overdue(quantity=1, minutes_ago=2)
+    first = _assign(client, db, "b-1", ["o-1"])
+    _round(db)
+    _round(db)   # first: ready → called (Pinky 기다림, OMX는 안 씀)
+    assert first.step == "called"
+    reserve_overdue(quantity=1, minutes_ago=1)
+    second = _assign(client, db, "b-2", ["o-2"])
+    _round(db)
+    assert second.step == "picking"
+
+
+def _hold(arm, batch) -> None:
+    arm["status"] = {"request_id": f"emr-b{batch.id}", "state": "completed", "pinky": "holding"}
+
+
+@requires_db
+def test_pinky_signal_mode_puts_down_after_real_pinky_docks(client, db, arm, reserve_overdue, monkeypatch):
+    """10-28 사용자 "정밀 주차 완료 후": FMS_PHARMACY_SIGNAL=pinky면 FMS robot_at_pharmacy가 아니라
+    실물 Pinky의 POST /robot/arrived(정밀 주차 끝)를 받은 뒤에 /pinky."""
+    monkeypatch.setattr(settings, "FMS_PHARMACY_SIGNAL", "pinky")
+    delivery = reserve_overdue(quantity=1)
+    batch = _assign(client, db, "b-1", ["o-1"])
+    _round(db); _hold(arm, batch); _round(db); _round(db)
+    assert batch.step == "called"
+
+    _event(client, "robot_at_pharmacy", batch_id="b-1", robot=1)   # 가상 FMS의 정밀 주차 — 무시
+    _round(db)
+    assert batch.step == "called" and batch.at_pharmacy_at is None
+
+    response = client.post("/api/v1/robot/arrived", headers=arm["robot"]["headers"],
+                           json={"event": "arrived", "dest": "PHARMACY", "job_id": "b86a97fa",
+                                 "dock_error": {"fwd_mm": -7.3, "left_mm": -3.4, "heading_deg": -0.94}})
+    assert response.status_code == 200 and response.json()["id"] == delivery["id"]
+    _round(db)
+    assert batch.step == "pinky"
+    _round(db)
+    assert arm["calls"][-1] == ("omx", "pinky", f"emr-b{batch.id}")
+
+
+@requires_db
+def test_loaded_waits_until_fms_batch_is_at_pharmacy(client, db, arm, reserve_overdue, monkeypatch):
+    """실물 Pinky로 먼저 실었어도 FMS 묶음이 아직 called면 loaded를 보내지 않고 기다린다(409를 '넘어감'으로 잘못 보지 않게)."""
+    monkeypatch.setattr(settings, "FMS_PHARMACY_SIGNAL", "pinky")
+    reserve_overdue(quantity=1)
+    batch = _assign(client, db, "b-1", ["o-1"])
+    _round(db); _hold(arm, batch); _round(db); _round(db)
+    client.post("/api/v1/robot/arrived", headers=arm["robot"]["headers"], json={"dest": "PHARMACY"})
+    _round(db); _round(db)
+    arm["status"]["pinky"] = "completed"
+    _round(db)
+    assert batch.step == "loaded"
+    arm["fms_batch_status"] = "called"
+    _round(db); _round(db)
+    assert batch.step == "loaded" and "loaded" not in [call[1] for call in arm["calls"]]
+    arm["fms_batch_status"] = "at_pharmacy"
+    _round(db)
+    assert batch.step == "delivering" and arm["calls"][-1] == ("fms", "loaded", "b-1")
 

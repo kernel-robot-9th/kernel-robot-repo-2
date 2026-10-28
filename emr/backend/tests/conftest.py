@@ -129,6 +129,7 @@ def fms_off(monkeypatch) -> None:
     monkeypatch.setattr(settings, "FMS_BASE_URL", "")
     monkeypatch.setattr(settings, "FMS_OMX_ENABLED", False)
     monkeypatch.setattr(settings, "OMX_COMMAND_FORMAT", "counts")   # .env의 임시 sentence와 상관없이 (10-27)
+    monkeypatch.setattr(settings, "FMS_PHARMACY_SIGNAL", "fms")      # .env의 임시 pinky와 상관없이 (10-28)
 
 
 @pytest.fixture(autouse=True)

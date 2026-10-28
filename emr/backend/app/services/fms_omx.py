@@ -11,6 +11,8 @@
 #   → /pinky(내려놓기) → OMX 시작 자세(pinky = completed) → FMS loaded.
 # 안전: OMX가 running·grabbing·holding·releasing·returning이면 /command를 보내지 않는다 — 팀원 OMX는 들고 있는 동안에도
 #   /command를 받아 왼팔을 움직인다(vision 47bcb47 코드 확인). OMX는 한 번에 묶음 하나만 쓴다.
+# OMX가 명령 양식을 받지 않으면(422 — 10-28 실제 OMX는 문장만) OMX 적재를 생략한다(사용자 "OMX 양식이 없으면 생략"):
+#   ready를 바로 보내고, 정밀 주차 뒤 /pinky 없이 loaded. 생략한 묶음은 omx_request_id가 비어 있고 error에 까닭을 남긴다.
 # 끝났는지는 OMX GET /status로 본다(완료 신호 end-point는 로그 — OMX가 EMR에 닿지 못해도 흐름이 선다). 바깥 HTTP는 이 주기 작업에서만.
 # 계약: docs/api_contract_delivery_2026-10-20.md 10.4
 # =============================================================================
@@ -23,7 +25,7 @@ import structlog
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.clients.fms import FmsRejected, FmsUnavailable, batch_step
+from app.clients.fms import FmsRejected, FmsUnavailable, batch_step, get_batch
 from app.clients.omx import OmxRejected, OmxUnavailable, get_status, send_command, send_pinky
 from app.core.config import settings
 from app.core.database import SessionLocal
@@ -60,12 +62,13 @@ class FmsOmxRunner:
         batches = list(self.db.scalars(
             select(FmsBatch).where(FmsBatch.step.in_(ACTIVE_STEPS)).order_by(FmsBatch.id).with_for_update(),
         ))
-        owner = next((batch for batch in batches if batch.step in OMX_OWNER_STEPS), None) \
-            or next((batch for batch in batches if batch.step == FmsBatchStep.PICK), None)
+        uses_omx = [batch for batch in batches if not self._omx_skipped(batch)]
+        owner = next((batch for batch in uses_omx if batch.step in OMX_OWNER_STEPS), None) \
+            or next((batch for batch in uses_omx if batch.step == FmsBatchStep.PICK), None)
         for batch in batches:
             if batch.step == FmsBatchStep.LOADED:
                 self._send_loaded(batch, now)
-            elif batch is owner:
+            elif batch is owner or self._omx_skipped(batch):   # 생략한 묶음은 OMX를 쓰지 않으니 기다리지 않는다
                 self._advance_owner(batch, now)
 
     # ---- 단계 ------------------------------------------------------------------
@@ -82,7 +85,7 @@ class FmsOmxRunner:
         elif step == FmsBatchStep.READY:
             self._send_ready(batch, now)
         elif step == FmsBatchStep.CALLED and batch.at_pharmacy_at is not None:
-            self._move(batch, FmsBatchStep.PINKY, now)
+            self._move(batch, self._after_pharmacy(batch), now)
         elif step == FmsBatchStep.PINKY:
             self._send_pinky(batch, now)
         elif step == FmsBatchStep.LOADING:
@@ -103,6 +106,12 @@ class FmsOmxRunner:
             log.warning("fms_omx_unavailable", batch_id=batch.batch_id, step=batch.step, error=str(error))
             return
         except OmxRejected as error:
+            if error.status_code == 422:   # OMX가 이 명령 양식을 받지 않음 → OMX 적재 생략 (10-28 사용자)
+                batch.error = f"omx skipped: /command 422 {error.detail}"[:255]
+                log.warning("fms_omx_skipped", batch_id=batch.batch_id, reason="omx_command_format_not_supported",
+                            command_format=settings.OMX_COMMAND_FORMAT)
+                self._move(batch, FmsBatchStep.READY, now)
+                return
             self._fail(batch, f"/command rejected {error.status_code}: {error.detail}", now)
             return
         batch.omx_request_id = request_id
@@ -132,7 +141,7 @@ class FmsOmxRunner:
         if not self._fms_step(batch, "ready", now):
             return
         batch.ready_sent_at = now
-        self._move(batch, FmsBatchStep.PINKY if batch.at_pharmacy_at is not None else FmsBatchStep.CALLED, now)
+        self._move(batch, self._after_pharmacy(batch) if batch.at_pharmacy_at is not None else FmsBatchStep.CALLED, now)
 
     def _send_pinky(self, batch: FmsBatch, now: datetime) -> None:
         """Pinky 정밀 주차 끝 → /pinky (들고 있는 물품을 Pinky 위에 내려놓기).
@@ -164,14 +173,40 @@ class FmsOmxRunner:
 
     def _send_loaded(self, batch: FmsBatch, now: datetime) -> None:
         """다 실었다 → FMS loaded (Pinky가 병실로).
+        FMS 묶음이 아직 at_pharmacy가 아니면(called — FMS의 Pinky가 아직 오는 중) 기다린다: 실물 Pinky 신호로 먼저 실었을 때
+        loaded를 보내면 FMS가 409 bad_batch_state를 주고 '이미 넘어감'으로 잘못 보이기 때문 (2026-10-28)
         [입력] batch: step = loaded / now [출력] 없음
         """
+        try:
+            fms_status = get_batch(settings.FMS_BASE_URL, batch.batch_id, settings.FMS_TIMEOUT_SECONDS).get("status")
+        except FmsUnavailable as error:
+            log.warning("fms_unavailable", batch_id=batch.batch_id, step="loaded", error=str(error))
+            return
+        except FmsRejected as error:
+            self._fail(batch, f"FMS batch {batch.batch_id} lookup rejected {error.status_code} {error.code}", now)
+            return
+        if fms_status in ("assigned", "called"):
+            return   # FMS의 Pinky가 약제실에 오면 다음 회차에
         if not self._fms_step(batch, "loaded", now):
             return
         batch.loaded_sent_at = now
         self._move(batch, FmsBatchStep.DELIVERING, now)
 
     # ---- 내부 ------------------------------------------------------------------
+
+    @staticmethod
+    def _omx_skipped(batch: FmsBatch) -> bool:
+        """OMX 적재를 생략한 묶음인지 — /command가 422로 거절돼 OMX 작업이 없다.
+        [입력] batch [출력] bool
+        """
+        return batch.omx_request_id is None and batch.step in (FmsBatchStep.READY, FmsBatchStep.CALLED)
+
+    @staticmethod
+    def _after_pharmacy(batch: FmsBatch) -> FmsBatchStep:
+        """정밀 주차 뒤 다음 단계 — OMX가 들고 있으면 내려놓기(/pinky), 생략했으면 바로 loaded.
+        [입력] batch [출력] FmsBatchStep
+        """
+        return FmsBatchStep.LOADED if batch.omx_request_id is None else FmsBatchStep.PINKY
 
     def _omx_status(self, batch: FmsBatch) -> dict[str, Any] | None:
         """OMX GET /status. 응답이 없으면 None(다음 회차에 다시).

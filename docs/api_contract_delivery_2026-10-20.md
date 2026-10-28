@@ -242,7 +242,7 @@ Pinky API는 **인증이 없다** — 지금은 그대로 진행(사용자 결�
 
 ## 9. OMX → EMR 완료 신호 (2026-10-26)
 
-팀원 OMX(로봇팔 API `192.168.129.86:8000`)가 작업을 마치면 EMR에 알리는 곳이다. 사용자 결정: 단순하게 GET, 지금은 성공 신호만, 인증 없음.
+팀원 OMX(로봇팔 API `10.42.0.147:8000`)가 작업을 마치면 EMR에 알리는 곳이다. 사용자 결정: 단순하게 GET, 지금은 성공 신호만, 인증 없음.
 
 - `GET {EMR}/api/v1/robot/{request_id}/end-point` — `request_id`는 OMX `/command`·`/pinky`에 넣은 값 그대로(영문·숫자·`._-`, 1~64자, 아니면 422).
 - 응답 200 `{"request_id": "yolo-8b5efa75", "received": true, "received_at": "2026-10-26T06:29:16Z"}`, 헤더 `Cache-Control: no-store`. 같은 id를 여러 번 보내도 매번 200.
@@ -298,11 +298,11 @@ FMS는 `--control-url http://<EMR>:8000`으로 띄운다.
 ⚠️ 10-27 실제 OMX(팀원 `vision` `47bcb47`)는 아직 **문장만 받는다**(`command`가 문자열).
 **임시 방편(10-27 사용자: "이전 버전 API, 수량 무시하고 거즈 문장으로" — 시험 뒤 "합의한 내용으로 변경"으로 **끔**)**: 설정 `OMX_COMMAND_FORMAT=sentence`면 개수 대신 문장 하나 `"pick and place blue gauze"`를 보낸다 — 파란 거즈가 하나라도 있으면 blue, 아니면 green, **수량은 무시**(OMX가 한 개만 집음). FMS 묶음과 관리자 API 둘 다. 관리자 API는 이 스위치가 켜졌을 때만 문장 본문 `{"command": "pick and place blue gauze"}`도 받는다(기본 `counts`면 400 `omx_sentence_disabled`). 10-27 실물 시험(NO 59·60)은 이 스위치로 했다 — `docs/emr_fms_omx_integration_2026-10-27.md` 3장.
 
-**EMR이 부르는 OMX API** (`http://192.168.129.86:8000`, 인증 없음)
+**EMR이 부르는 OMX API** (`http://10.42.0.147:8000`, 인증 없음)
 
 | 요청 | 본문 | 언제 |
 |---|---|---|
-| `POST /command` | `{"command": {"blue": 2, "green": 0}, "request_id": "emr-b{묶음 행 id}"}` — 약품 → blue, 비품 → green(`services/omx_items.py`), 두 색 모두 키, 합계 1~3 | FMS `batch_assigned` 뒤, OMX가 움직이거나 들고 있지 않을 때 |
+| `POST /command` | `{"command": {"blue": 2}, "request_id": "emr-b{묶음 행 id}"}` — 약품 → blue, 비품 → green(`services/omx_items.py`), **개수가 0인 색은 뺀다**(10-28 사용자 "갯수가 0이면 생략" — 예전엔 두 키 모두 보냄), 합계 1~3 | FMS `batch_assigned` 뒤, OMX가 움직이거나 들고 있지 않을 때 |
 | `POST /pinky` | `{"pinky_arrive": true, "request_id": 같은 값}` | FMS `robot_at_pharmacy`(**정밀 주차 끝**) 뒤 — 들고 있는 물품을 Pinky 위에 내려놓기 |
 | `GET /status` | — | 끝났는지 판단(1초마다). `state`(running·completed·failed), `pinky`(grabbing → holding → releasing → returning → completed, 실패 grab_failed·release_failed·return_failed) |
 | OMX → EMR `GET /api/v1/robot/{request_id}/end-point` | — | 집기 끝·내려놓고 복귀 끝에 같은 `request_id`로 두 번. **EMR은 로그만, 판단은 `/status`로** — OMX가 EMR에 닿지 못해도 흐름이 선다 |
@@ -326,7 +326,10 @@ EMR ─POST /batches/{id}/loaded─▶ FMS ─▶ Pinky 병실로 (그 뒤는 10
 
 - 단계(`fms_batches.step`): `pick → picking → ready → called → pinky → loading → loaded → delivering`, 멈춤 `failed`.
 - **안전 규칙**: OMX `/status`가 `running`이거나 `pinky`가 grabbing·holding·releasing·returning이면 `/command`를 보내지 않는다 — 팀원 OMX는 들고 있는 동안에도 `/command`를 받아 왼팔을 움직이기 때문(10-27 코드 확인). OMX는 한 번에 묶음 하나만 쓴다(다른 묶음은 `pick`에서 기다림). 정밀 주차(`robot_at_pharmacy`) 전에는 `/pinky`를 보내지 않는다.
-- **실패**: OMX 4xx 거절, `state=failed`(못 찾음 — 실패는 EMR로 오지 않음), `pinky=*_failed`, FMS 4xx(409 bad_batch_state 말고)면 묶음을 `failed`로 멈추고 로그 `fms_omx_failed`(error에 까닭). 배송 상태는 바꾸지 않는다 — 사람이 팔·Pinky를 확인한다. 응답 없음은 다음 회차에 다시. 시간 초과는 아직 없음.
+- **내려놓기 시점 = 정밀 주차 끝**(10-28 사용자): 설정 `FMS_PHARMACY_SIGNAL` — `fms`(기본, 위 순서의 FMS `robot_at_pharmacy`) · `pinky`(**FMS가 가상인 동안 임시**: 실물 Pinky가 정밀 주차를 마치고 보내는 `POST /api/v1/robot/arrived`, 본문 = Pinky ArrivedSignal `{event, dest, job_id, dock_error}`). `pinky`면 FMS `robot_at_pharmacy`는 무시하고, 가장 먼저 연 OMX 묶음의 정밀 주차 시각을 적는다(Pinky 한 대 가정). FMS가 실물을 몰게 되면(FMS `--real`, 팀원) `fms`로 되돌린다.
+- **`loaded` 전에 FMS 묶음 상태를 본다**(`GET /api/v1/batches/{id}`): FMS 쪽이 아직 `called`(FMS의 Pinky가 오는 중)면 기다렸다가 `at_pharmacy`가 되면 보낸다 — 실물 신호로 먼저 실었을 때 409를 '넘어감'으로 잘못 보지 않게.
+- **OMX가 명령 양식을 받지 않으면(422) OMX 적재를 생략**(10-28 사용자 "OMX 양식이 없으면 생략"): `ready`를 바로 보내고, 정밀 주차 뒤 `/pinky` 없이 `loaded`. 생략한 묶음은 OMX를 쓰지 않으니 다른 묶음을 막지 않는다. 로그 `fms_omx_skipped`, `fms_batches.error`에 까닭.
+- **실패**: OMX 4xx 거절(422 말고), `state=failed`(못 찾음 — 실패는 EMR로 오지 않음), `pinky=*_failed`, FMS 4xx(409 bad_batch_state 말고)면 묶음을 `failed`로 멈추고 로그 `fms_omx_failed`(error에 까닭). 배송 상태는 바꾸지 않는다 — 사람이 팔·Pinky를 확인한다. 응답 없음은 다음 회차에 다시. 시간 초과는 아직 없음.
 - **저장**: `fms_batches`(0016) — FMS `batch_id`(FMS를 다시 켜면 b-1부터라 UNIQUE 아님), 로봇 번호, `blue_count`·`green_count`, 단계, OMX `request_id`, ready·정밀 주차·loaded 시각, error.
 - **바깥 HTTP는 주기 작업에서만**(`services/fms_omx.py`, `FMS_OMX_ROUND_SECONDS` 1초). FMS 이벤트를 받는 요청은 DB만(`batch_assigned` → 묶음 행, `robot_at_pharmacy` → 정밀 주차 시각).
 - 설정 `FMS_OMX_ENABLED`(기본 0). 0이면 FMS(시뮬레이터) 가상 OMX가 `ready`·`loaded`를 보낸다. 1로 켤 때는 시뮬레이터 가상 OMX를 끈다(`POST /api/control {"auto_omx": false}`).

@@ -7,6 +7,7 @@
 #                      order_failed → failed(robot_error), order_canceled → 주문 상태만. 그 밖·우리 주문이 아니면 무시
 #                      2단계(FMS_OMX_ENABLED, 2026-10-27): batch_assigned → fms_batches 한 줄(OMX에 보낼 색깔별 개수),
 #                      robot_at_pharmacy(정밀 주차 끝) → 도착 시각. OMX·FMS ready·loaded 호출은 services/fms_omx.py 주기 작업
+#                      pinky_docked_at_pharmacy() — FMS_PHARMACY_SIGNAL=pinky면 실물 Pinky의 POST /robot/arrived가 정밀 주차 끝 (2026-10-28)
 # 바깥 HTTP 호출 없음(DB만) — FMS는 1초 안에 2xx를 기다린다. 같은 이벤트가 다시 와도 결과가 같다(상태 전이가 멱등).
 # 도착·실패는 DispatchService.report_progress를 그대로 쓴다(일회용 마커·알림·배송 기록·재고 복구가 한 곳).
 # 계약: docs/api_contract_delivery_2026-10-20.md 10.2
@@ -64,7 +65,7 @@ class FmsEventHandler:
             return self._order_failed(event)
         if kind == "order_canceled":
             return self._set_order_status(event.get("order_id"), FmsOrderStatus.CANCELED) is not None
-        if kind == "robot_at_pharmacy" and settings.FMS_OMX_ENABLED:
+        if kind == "robot_at_pharmacy" and settings.FMS_OMX_ENABLED and settings.FMS_PHARMACY_SIGNAL == "fms":
             return self._robot_at_pharmacy(event)
         return False
 
@@ -136,6 +137,31 @@ class FmsEventHandler:
         if batch.at_pharmacy_at is None:
             batch.at_pharmacy_at = datetime.now(UTC)
         return True
+
+    def pinky_docked_at_pharmacy(self) -> FmsBatch | None:
+        """실물 Pinky가 약제실 정밀 주차를 마쳤다(POST /robot/arrived) → 가장 오래 기다린 OMX 묶음의 정밀 주차 시각 (2026-10-28).
+        FMS가 가상인 동안 쓰는 임시 신호(FMS_PHARMACY_SIGNAL=pinky) — Pinky 한 대라 어느 묶음인지는 가장 먼저 연 묶음으로 본다.
+        [입력] 없음
+        [출력] FmsBatch | None: 기다리던 묶음이 없으면 None
+        """
+        waiting = (FmsBatchStep.PICK, FmsBatchStep.PICKING, FmsBatchStep.READY, FmsBatchStep.CALLED)
+        batch = self.db.scalar(
+            select(FmsBatch).where(FmsBatch.step.in_(waiting), FmsBatch.at_pharmacy_at.is_(None))
+            .order_by(FmsBatch.id).limit(1).with_for_update()
+        )
+        if batch is not None:
+            batch.at_pharmacy_at = datetime.now(UTC)
+            log.info("pinky_docked_at_pharmacy", batch_id=batch.batch_id, step=batch.step)
+        return batch
+
+    def delivery_for_batch(self, batch: FmsBatch):
+        """묶음에 실린 EMR 배송 하나 (응답용) — 가장 나중에 보낸 주문의 배송.
+        [입력] batch [출력] Delivery | None
+        """
+        order = self.db.scalar(
+            select(FmsOrder).where(FmsOrder.batch_id == batch.batch_id).order_by(FmsOrder.id.desc()).limit(1)
+        )
+        return self.deliveries.get_with_items(order.delivery_id) if order is not None else None
 
     def _active_omx_batch(self, batch_id: str) -> FmsBatch | None:
         """FMS batch_id로 끝나지 않은 가장 나중 묶음 (FMS를 다시 켜면 b-1부터 다시라).

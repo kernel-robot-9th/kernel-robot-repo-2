@@ -6,6 +6,7 @@
 #   - FmsUnavailable  연결 실패·시간 초과·5xx·JSON이 아님 — 받았는지 알 수 없으니 다음 회차에 같은 request_id로 다시
 #   - FmsRejected     FMS가 4xx로 거절 (unknown_room·missing_field·bad_json) — error 코드·message
 #   - create_order()  주문 1건. 202(새 주문)·200(같은 request_id로 이미 받음)이면 FMS Order dict
+#   - get_batch()     GET /api/v1/batches/{id} — 묶음 상태 (loaded 전에 FMS 묶음이 at_pharmacy인지 본다, 10-28)
 #   - batch_step()    POST /api/v1/batches/{id}/ready·loaded (2026-10-27, 2단계 OMX 연동) — 409 bad_batch_state는 '이미 넘어감'으로 본다
 # 계약: docs/api_contract_delivery_2026-10-20.md 10장, 원본 kernel-robot-repo-2/fms/API.md. 인증 없음(10-27 사용자 결정).
 # 업무 판단(무엇을 언제 보낼지·저장)은 services/fms_order.py, ready·loaded는 services/fms_omx.py
@@ -77,3 +78,26 @@ def batch_step(fms_base_url: str, batch_id: str, step: str, timeout_seconds: flo
     if response.status_code != 200:
         raise FmsUnavailable(f"POST {url} returned {response.status_code}: {str(body)[:200]}")
     return body
+
+
+def get_batch(fms_base_url: str, batch_id: str, timeout_seconds: float) -> dict[str, Any]:
+    """묶음 한 건 — status(assigned·called·at_pharmacy·delivering·completed·failed).
+    [입력] fms_base_url / batch_id: b-5 / timeout_seconds
+    [출력] dict: FMS Batch (404 등 4xx는 FmsRejected, 응답 없음·5xx는 FmsUnavailable)
+    """
+    url = f"{fms_base_url.rstrip('/')}/api/v1/batches/{batch_id}"
+    try:
+        response = httpx.get(url, timeout=timeout_seconds)
+    except httpx.HTTPError as error:
+        raise FmsUnavailable(f"GET {url} failed: {error.__class__.__name__}") from error
+    try:
+        body = response.json()
+    except ValueError as error:
+        raise FmsUnavailable(f"GET {url} returned {response.status_code} without JSON") from error
+    body = body if isinstance(body, dict) else {}
+    if 400 <= response.status_code < 500:
+        raise FmsRejected(response.status_code, str(body.get("error", "unknown")), str(body.get("message", ""))[:200])
+    if response.status_code != 200:
+        raise FmsUnavailable(f"GET {url} returned {response.status_code}")
+    return body
+

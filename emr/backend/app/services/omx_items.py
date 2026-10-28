@@ -6,7 +6,7 @@
 #   - OMX_COLOR_BY_CATEGORY  약품(medication) → blue(파란 거즈), 비품(supply) → green(녹색 거즈)
 #   - omx_color()            비품 종류 하나의 색
 #   - omx_counts()           (종류, 수량) 목록 → OMX POST /command의 {"blue": n, "green": n}
-#   - omx_command()          OMX에 실제로 보낼 command — 설정 OMX_COMMAND_FORMAT: counts면 그대로, sentence(임시, 10-27)면
+#   - omx_command()          OMX에 실제로 보낼 command — 설정 OMX_COMMAND_FORMAT: counts면 0인 색을 뺀 개수(10-28), sentence(임시, 10-27)면
 #                            수량을 무시한 거즈 문장 하나 "pick and place blue gauze" (파란 거즈가 하나라도 있으면 blue, 아니면 green)
 # 사용자 결정(2026-10-27): "약품 파란, 비품 녹색". OMX가 알아보는 것은 blue_gauze·green_gauze 둘뿐이라
 # 비품 하나하나가 아니라 종류(supplies.category)로 나눈다 — DB 칸을 더하지 않는다
@@ -49,10 +49,11 @@ def omx_counts(items: Iterable[tuple[str, int]]) -> dict[str, int]:
 
 def omx_command(counts: dict[str, int]) -> dict[str, int] | str:
     """OMX POST /command에 넣을 command.
+    counts는 개수가 0인 색을 뺀다(10-28 사용자 "갯수가 0이면 생략") — {"blue": 0, "green": 1} → {"green": 1}.
     sentence(임시 — 10-27 실제 OMX가 문장만 받음)는 수량을 무시하고 한 색만: 파란 거즈가 하나라도 있으면 blue, 아니면 green.
     [입력] counts: {"blue": n, "green": n}
-    [출력] counts 그대로 또는 "pick and place blue gauze"
+    [출력] 0이 아닌 색만 남긴 개수 또는 "pick and place blue gauze"
     """
     if settings.OMX_COMMAND_FORMAT == "counts":
-        return counts
+        return {color: count for color, count in counts.items() if count > 0}
     return f"pick and place {'blue' if counts.get('blue', 0) > 0 else 'green'} gauze"

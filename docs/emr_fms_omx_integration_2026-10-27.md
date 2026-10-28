@@ -22,7 +22,7 @@
 | OMX `/pinky` | **Pinky 정밀 주차가 끝난 뒤 내려놓기** |
 | OMX 명령 형식 | **`POST /command {"command": {"blue": N, "green": N}, "request_id"}`**, FMS 묶음 하나에 한 번. 약품 → blue, 비품 → green |
 
-## 2. 만든 것 (EMR, 커밋 전)
+## 2. 만든 것 (EMR, 커밋 `a0ef883`)
 
 ### 2.1 흐름
 
@@ -86,6 +86,46 @@ EMR ─POST /batches/{id}/loaded─▶ FMS ─▶ Pinky 병실로 ─order_deliv
 | 중계 프로그램 | 172.18.0.1:8770 → 127.0.0.1:8770 (시뮬레이터가 127.0.0.1에서만 들어서) | 프로세스 종료. FMS를 `--host 0.0.0.0`으로 띄우면 필요 없음 |
 | 시뮬레이터 | `control_url = http://127.0.0.1:8000`, 가상 OMX 꺼짐 | 시뮬레이터 화면 또는 `POST /api/control` |
 
+### 4.1 OMX 주소 변경 (2026-10-28)
+
+- 팀원 OMX가 **`10.42.0.147:8000`**으로 옮겼다(예전 `192.168.129.86`). 이 PC는 그 망에서 **`10.42.0.1`**(`enp130s0`, NetworkManager **shared** 연결)이다.
+- **EMR 컨테이너 → OMX는 바로 닿지 않는다**: shared 연결의 방화벽이 도커 컨테이너에서 `10.42.0.x`로 가는 새 연결을 거절한다(`Connection refused`). 이 PC 자체는 닿는다.
+  - 지금: 이 PC의 시험용 중계 `172.18.0.1:18000 → 10.42.0.147:8000` + 개발 `.env` `OMX_BASE_URL=http://172.18.0.1:18000`. 확인: EMR `GET /api/v1/omx/status` → OMX `idle`, 개수 형식 명령은 OMX가 422(아직 문장만) → EMR 409 `omx_rejected`, 팔은 안 움직임.
+  - 중계 없이 하려면(sudo 필요): shared 연결 방화벽에 도커 망(172.18.0.0/16) → `enp130s0` 허용을 넣거나, OMX를 다른 망에 두거나, api 컨테이너를 host 네트워크로. 정해지면 `.env` 두 줄을 지운다.
+- **OMX → EMR 완료 신호**: OMX는 `--emr-api http://10.42.0.1:8000/api/v1`(그 망에서 본 EMR 주소). 10-28 명령 한 번으로 확인 — 집기 → 들기, 완료 신호가 EMR에 도착.
+- **Pinky `10.42.0.79`**(Pinky API `:8080`): `localized`·`nav2_ready`·`idle` 확인. 사용자 요청으로 도착 신호 설정 `PUT /notify`의 주소를 `http://192.168.129.135:8000/api/v1/robot/arrived` → **`http://10.42.0.1:8000/api/v1/robot/arrived`**로 바꿈(대상 PHARMACY 그대로). 이 길(Pinky → EMR `/robot/arrived`)은 예전 방식이라 EMR은 로그만 남기고, 맡은 배송이 없으면 409를 준다(Pinky는 4xx를 다시 보내지 않음).
+
+## 4.2 2026-10-28 이어서 한 것
+
+**사용자 결정**
+
+| 항목 | 결정 |
+|---|---|
+| OMX 주소 | `10.42.0.147:8000`(EMR 기본값 변경). 이 PC는 그 망에서 `10.42.0.1` |
+| 실물 Pinky 주행 코드 | **작성하지 않는다** — FMS가 미완성(가상만)이라. 실물 주행은 사용자가 그때그때 요청한 한 번짜리 명령만 |
+| 명령의 0개 색 | **뺀다** — `{"blue": 0, "green": 1}` → `{"green": 1}` |
+| OMX가 양식을 받지 않으면(422) | OMX 싣기를 **생략**하고 `ready` → 정밀 주차 → `loaded` |
+| 내려놓기 시점 | **정밀 주차 완료 후** — FMS가 가상인 동안은 실물 Pinky의 `POST /robot/arrived`를 신호로(`FMS_PHARMACY_SIGNAL=pinky`). FMS가 AMR을 직접 API로 몰게 되면 FMS `robot_at_pharmacy`(`fms`)로 |
+
+**EMR 변경**: `OMX_BASE_URL` 기본값·compose 설정, `omx_items.omx_command`(0개 색 빼기), `fms_omx.py`(422 생략, `loaded` 전에 FMS `GET /batches/{id}`가 `at_pharmacy`인지 확인), `fms_events.pinky_docked_at_pharmacy`·`/robot/arrived`(실물 Pinky 신호), `clients/fms.get_batch`. 테스트 236개 통과.
+
+**실물 시험 (이 PC에서 직접 부른 한 번짜리 명령 + EMR 흐름)**
+
+| 시험 | 결과 |
+|---|---|
+| EMR → OMX(중계 `172.18.0.1:18000`), OMX → EMR(`10.42.0.1`) | ✅ 명령 한 번: 파란 거즈 집기 → 들기 → 완료 신호 EMR 도착 |
+| 실물 Pinky `10.42.0.79` → 약제실 | 1차: 정밀 주차 "앞이 막혀 멈춤"(앞으로 4~5 cm 남음) · 2차·3차: ✅ 오차 8 mm 안 |
+| Pinky 도착 신호 주소 `PUT /notify` → `http://10.42.0.1:8000/api/v1/robot/arrived` | ✅ 정밀 주차 뒤 EMR 도착(예전 경로라 409) |
+| OMX 내려놓기 → Pinky 위 | ✅ 완료 신호 두 번 |
+| 약제실 → 101호 | ✅ 오차 1.6 cm |
+| 101호 → A | ❌ 병실에서 나올 때 Nav2 104, 다시 하니 **왼쪽 협로 `contact`(벽 0.9 cm)**, 벽에 붙어 재시도 불가 → 손으로 옮긴 뒤 `set_pose find`로 위치 다시 잡음(벽 96%) |
+| **EMR 흐름 NO 63(녹색 1)** | 팀원 OMX가 **개수 형식을 받게 바뀜**(`green:1`). 실물 팔 집기 → 가상 Pinky 정밀 주차에 맞춰 내려놓음(실물 Pinky는 늦게 도착 — 자리 비어 있음) → 도착. 이 일로 "내려놓기 = 실물 정밀 주차 뒤" 결정 |
+| EMR 흐름 NO 64·65 | FMS가 한 묶음 `{"blue": 1, "green": 1}`으로 묶음 → OMX "green_gauze not found"(녹색 거즈를 NO 63에서 이미 씀) → 묶음 실패로 멈춤(설계대로). 둘 다 출발에 멈춰 있음 |
+
+**팀원에게**: 왼쪽 협로 벽 따라가기(기록 `/home/pinky/pinky_map_rev3/api/logs/corridor_1028_121032.npz`), 병실 나오는 구간 Nav2 104, FMS가 실물을 몰기(`--real`) 전까지 EMR은 `FMS_PHARMACY_SIGNAL=pinky`.
+
+**지금 켜져 있는 것**: `.env` `FMS_BASE_URL`, `FMS_OMX_ENABLED=0`(실물 팔 꺼 둠), `OMX_BASE_URL=http://172.18.0.1:18000`(중계), `FMS_PHARMACY_SIGNAL=pinky` · 중계 프로그램 2개(OMX `:18000`, 이전 FMS `:8770`은 FMS가 `0.0.0.0`으로 떠서 필요 없음).
+
 ## 5. 남은 것
 
 **팀원에게**
@@ -94,7 +134,7 @@ EMR ─POST /batches/{id}/loaded─▶ FMS ─▶ Pinky 병실로 ─order_deliv
 |---|---|
 | OMX | `/command`가 `{"blue": N, "green": N}`를 받게 바꾸기. 한 명령으로 N개를 집는지도 정하기. 지금(`vision` 47bcb47)은 문장만 받아 개수 형식이면 422 |
 | OMX | 들고 있는 동안(`holding`) 새 `/command`를 거절하기. 지금은 받아서 왼팔이 움직인다 |
-| OMX | 실행 옵션 `--pinky --emr-api http://192.168.129.135:8000/api/v1`, 오른팔 연결 확인 |
+| OMX | 실행 옵션 `--pinky --emr-api http://10.42.0.1:8000/api/v1`, 오른팔 연결 확인 |
 | FMS | 다시 시작했음을 알리기(시작 시각·세대 번호). 실제 FMS 주소, `--host 0.0.0.0` |
 | FMS | 실패·시간 초과 흐름(`order_failed`·`robot_error`), 모든 이벤트에 `request_id`(급하지 않음) |
 

@@ -52,7 +52,9 @@ class Settings(BaseSettings):
 
     # 팀원 OMX(로봇팔) API — 관리자가 EMR에서 명령을 보내고 상태를 본다 (2026-10-26, app/clients/omx.py).
     # /command는 예전 형식(명령 문장) — 10-26 합의한 색깔별 개수 형식은 팀원 쪽이 바뀐 뒤에
-    OMX_BASE_URL: str = "http://192.168.129.86:8000"
+    # 2026-10-28 사용자: OMX 주소가 10.42.0.147로 바뀜(이 PC enp130s0 = 10.42.0.1, NetworkManager 'shared' 망 — 예전 192.168.129.86).
+    # [검토 필요] 그 망의 방화벽이 도커 컨테이너 → 10.42.0.x 새 연결을 거절해 개발 스택은 .env로 이 PC의 중계 주소를 쓴다
+    OMX_BASE_URL: str = "http://10.42.0.147:8000"
     OMX_TIMEOUT_SECONDS: float = 3.0     # 이 안에 답하지 않으면 omx_unavailable(503)
 
     # 팀원 FMS API v1 연동 1단계 (2026-10-27, 계약 docs/api_contract_delivery_2026-10-20.md 10장). EMR은 FMS·OMX만 연결(상위 관제).
@@ -66,6 +68,9 @@ class Settings(BaseSettings):
     # true면 로봇팔이 움직인다 — 묶음마다 /command {"blue": N, "green": N}(집기) → 들고 대기 → FMS ready → 정밀 주차 뒤 /pinky(내려놓기) → FMS loaded
     FMS_OMX_ENABLED: bool = False
     FMS_OMX_ROUND_SECONDS: float = 1.0        # OMX /status를 보고 다음 단계를 보내는 간격
+    # 내려놓기(/pinky)를 보낼 '정밀 주차 끝' 신호 (2026-10-28 사용자: "정밀 주차 완료 후"). fms = FMS 이벤트 robot_at_pharmacy(계약 10.4),
+    # pinky = 실물 Pinky가 정밀 주차를 마치고 보내는 POST /api/v1/robot/arrived — FMS가 가상인 동안 임시(FMS가 실물을 몰면 fms로)
+    FMS_PHARMACY_SIGNAL: Literal["fms", "pinky"] = "fms"
     # OMX /command 형식 — counts = {"blue": N, "green": N} (10-27 결정). sentence = 임시(10-27 사용자: "임시 방편으로 이전 버전 API,
     # 수량 무시하고 거즈 문장으로") — 지금 실제 OMX(vision 47bcb47)가 문장만 받아서. 팀원 OMX가 개수 형식을 받으면 counts로 되돌린다.
     # FMS 묶음(services/fms_omx.py)과 관리자 API(/omx/command) 둘 다 이 값을 따른다

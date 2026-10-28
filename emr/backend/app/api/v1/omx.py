@@ -1,6 +1,6 @@
 # =============================================================================
 # 파일   : app/api/v1/omx.py
-# 역할   : 관리자용 OMX(로봇팔) 명령·상태 (/omx) — 팀원 OMX API(192.168.129.86:8000)를 EMR이 대신 부른다
+# 역할   : 관리자용 OMX(로봇팔) 명령·상태 (/omx) — 팀원 OMX API(OMX_BASE_URL, 10-28부터 10.42.0.147:8000)를 EMR이 대신 부른다
 # 작성일 : 2026-10-26
 # 구성   :
 #   - send_omx_command  POST /omx/command  — 색깔별 개수 {"command": {"blue": n, "green": n}} 또는 임시 문장 {"command": "pick and place blue gauze"} (로봇팔이 움직인다, 관리자만)
