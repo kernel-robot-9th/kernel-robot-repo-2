@@ -1,18 +1,17 @@
 // =============================================================================
 // 파일   : src/pages/MapView.tsx
-// 역할   : 맵 화면 — 올린 맵 이미지(실제 크기) 위에 장소 마커. 관리자는 맵을 눌러 장소 위치·방향을 찍는다 (2026-10-19)
+// 역할   : 맵 화면 — 올린 맵 이미지(실제 크기) 위에 장소 마커와 운반 로봇 위치. 관리자는 맵을 눌러 장소 위치·방향을 찍는다 (2026-10-19)
 // 작성일 : 2026-10-14
 // 구성   :
 //   - toSvgPoint     화면 좌표 → SVG(이미지 픽셀) 좌표
-//   - MapView        맵 선택 → 이미지 + 장소 마커 + (관리자) 찍기 + 로봇 상태 패널
+//   - MapView        맵 선택 → 이미지 + 장소 마커 + 운반 로봇 위치(주황) + (관리자) 찍기 + 로봇 상태 패널
 // 좌표 변환은 features/maps/mapGeometry.ts (ROS map_server 규칙). 이미지가 없는 맵은 격자로 그린다
+// 로봇 위치(2026-10-29)는 팀원 FMS가 1초마다 보낸 마지막 값(GET /robot-positions) — 그 응답의 map_id 맵을 볼 때만 그린다
 // =============================================================================
-// [검토 필요] 로봇 실시간 위치(x·y)는 아직 백엔드에 없다 — 로드맵 3단계(로봇 상태 보고)에서 robots에 위치가 들어오면
-//   장소와 같은 metersToPixel로 마커를 하나 더 그리면 된다.
 import { useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import { apiUrl } from '../api/client'
-import { useIsAdmin, useLocations, useMaps, useRobots } from '../api/hooks'
+import { useIsAdmin, useLocations, useMaps, useRobotPositions, useRobots } from '../api/hooks'
 import { ROBOT_TYPE_LABEL } from '../api/types'
 import { ROBOT_STATUS_LABEL } from '../api/types'
 import { Badge, LoadError, PageTitle, Select } from '../components/ui'
@@ -21,6 +20,9 @@ import type { PickedPose } from '../features/maps/LocationPicker'
 import { headingToSvgVector, mapImageSize, metersToPixel, pixelToMeters, svgVectorToHeading } from '../features/maps/mapGeometry'
 
 const DRAG_MIN_PX_ON_SCREEN = 6   // 이보다 짧게 끌면 방향 없이 위치만 찍은 것으로 본다
+const SMOOTH_IMAGE_MIN_WIDTH_PX = 1000   // 이보다 큰 이미지(평면도)는 줄일 때 글자가 깨지지 않게 부드럽게, 작은 SLAM 맵은 픽셀 그대로
+const ROBOT_COLOR = '#ea580c'
+const STALE_ROBOT_COLOR = '#94a3b8'
 
 /** 화면 좌표 → SVG 좌표(viewBox = 이미지 픽셀). [입력] svg, clientX, clientY [출력] { px, py } | null */
 function toSvgPoint(svg: SVGSVGElement, clientX: number, clientY: number): { px: number; py: number } | null {
@@ -34,18 +36,22 @@ export function MapView() {
   const maps = useMaps()
   const locations = useLocations()
   const robots = useRobots()
+  const robotPositions = useRobotPositions()
   const isAdmin = useIsAdmin()
   const [mapId, setMapId] = useState<number | ''>('')
   const [picked, setPicked] = useState<PickedPose | null>(null)
   const dragStart = useRef<{ px: number; py: number; clientX: number; clientY: number } | null>(null)
   const svgRef = useRef<SVGSVGElement>(null)
 
-  const map = (maps.data ?? []).find(m => m.id === (mapId === '' ? maps.data?.[0]?.id : mapId))
+  // 고르지 않았으면 운반 로봇이 있는 지도(FMS 지도)를 먼저, 없으면 첫 지도 (2026-10-29)
+  const defaultMapId = (maps.data ?? []).find(m => m.id === robotPositions.data?.map_id)?.id ?? maps.data?.[0]?.id
+  const map = (maps.data ?? []).find(m => m.id === (mapId === '' ? defaultMapId : mapId))
   const size = map ? mapImageSize(map) : null
   const canPick = isAdmin && !!map?.has_image
   const marks = map
     ? (locations.data ?? []).filter(l => l.map_id === map.id && l.map_x_m != null && l.map_y_m != null)
     : []
+  const robotMarks = map && robotPositions.data?.map_id === map.id ? robotPositions.data.robots : []
   // 맵 크기와 상관없이 마커가 화면에서 비슷한 크기로 보이게 이미지 크기에 비례
   const unit = size ? Math.max(size.width_px, size.height_px) / 70 : 1
 
@@ -97,7 +103,8 @@ export function MapView() {
                 {map.has_image ? (
                   <image
                     href={apiUrl(`/maps/${map.id}/image?v=${encodeURIComponent(map.updated_at)}`)}
-                    width={size.width_px} height={size.height_px} style={{ imageRendering: 'pixelated' }}
+                    width={size.width_px} height={size.height_px}
+                    style={{ imageRendering: size.width_px >= SMOOTH_IMAGE_MIN_WIDTH_PX ? 'auto' : 'pixelated' }}
                   />
                 ) : (
                   <>
@@ -117,6 +124,27 @@ export function MapView() {
                       <line x1={0} y1={0} x2={dx * unit * 2.2} y2={dy * unit * 2.2} stroke="#2563eb" strokeWidth={unit * 0.3} />
                       <circle r={unit * 0.8} fill="#2563eb" stroke="white" strokeWidth={unit * 0.25} />
                       <text x={unit} y={-unit} fontSize={unit * 1.4} fill="#1e293b" stroke="white" strokeWidth={unit * 0.3} paintOrder="stroke">{l.name}</text>
+                    </g>
+                  )
+                })}
+                {robotMarks.map(robot => {
+                  const { px, py } = metersToPixel(robot.map_x_m, robot.map_y_m, map)
+                  const { dx, dy } = headingToSvgVector(robot.map_yaw_rad, map)
+                  const color = robot.is_stale ? STALE_ROBOT_COLOR : ROBOT_COLOR
+                  const name = robot.robot_name ?? robot.fms_robot_name ?? `FMS ${robot.fms_robot_number}`
+                  return (
+                    // 1초마다 오는 위치 사이를 부드럽게 움직인다 (CSS transform이라 transition이 걸린다)
+                    <g
+                      key={robot.fms_robot_number} pointerEvents="none"
+                      style={{ transform: `translate(${px}px, ${py}px)`, transition: 'transform 1s linear' }}
+                    >
+                      <circle r={unit * 1.2} fill={color} stroke="white" strokeWidth={unit * 0.3} />
+                      <g transform={`rotate(${(Math.atan2(dy, dx) * 180) / Math.PI})`}>
+                        <polygon points={`${unit * 0.85},0 ${-unit * 0.5},${unit * 0.55} ${-unit * 0.5},${-unit * 0.55}`} fill="white" />
+                      </g>
+                      <text x={unit * 1.4} y={unit * 2.4} fontSize={unit * 1.4} fontWeight={600} fill={color} stroke="white" strokeWidth={unit * 0.35} paintOrder="stroke">
+                        {robot.is_stale ? `${name} (연결 끊김)` : name}
+                      </text>
                     </g>
                   )
                 })}
@@ -155,7 +183,9 @@ export function MapView() {
                   <Badge value={r.status} label={ROBOT_STATUS_LABEL[r.status]} />
                 </div>
               ))}
-              <p className="pt-2 text-xs text-slate-400">운반 로봇의 지금 위치는 아직 지도에 보이지 않습니다.</p>
+              <p className="pt-2 text-xs text-slate-400">
+                {robotMarks.length > 0 ? '주황 점이 운반 로봇의 지금 위치입니다.' : '이 지도에는 운반 로봇 위치가 아직 없습니다.'}
+              </p>
             </div>
           </aside>
         </div>

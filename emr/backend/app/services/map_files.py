@@ -6,7 +6,7 @@
 #   - MAP_FILE_MAX_BYTES / MAP_IMAGE_MAX_SIDE_PX   업로드 한도
 #   - MapYamlInfo        yaml에서 읽은 값
 #   - parse_map_yaml()   yaml 텍스트 → MapYamlInfo (형식이 틀리면 BadRequest map_yaml_invalid)
-#   - to_png()           이미지 바이트 → (흑백 PNG, 가로, 세로) (BadRequest map_image_invalid·map_file_too_large)
+#   - to_png()           이미지 바이트 → (PNG, 가로, 세로) — 흑백 맵은 흑백, 색 있는 평면도는 색 그대로(2026-10-29) (BadRequest map_image_invalid·map_file_too_large)
 # Pinky Pro(slam_toolbox map_saver_cli) 맵: image: my_map.pgm / resolution: 0.05 / origin: [-2.05, -1.62, 0]
 # =============================================================================
 from __future__ import annotations
@@ -22,6 +22,7 @@ from app.core.exceptions import BadRequest
 
 MAP_FILE_MAX_BYTES = 10 * 1024 * 1024   # 파일 하나 10MB
 MAP_IMAGE_MAX_SIDE_PX = 4000            # 0.05 m/px면 한 변 200 m — 병동 하나는 충분
+GRAYSCALE_IMAGE_MODES = frozenset({"1", "L", "LA", "I", "I;16", "F"})   # PGM·흑백 PNG — 그 밖(RGB·RGBA·P 등)은 색으로 둔다
 
 
 @dataclass(frozen=True)
@@ -81,7 +82,8 @@ def parse_map_yaml(yaml_text: str) -> MapYamlInfo:
 
 
 def to_png(image_bytes: bytes) -> tuple[bytes, int, int]:
-    """맵 이미지(PGM P2·P5, PNG 등 Pillow가 읽는 형식)를 흑백 PNG로 바꾼다. 브라우저가 PGM을 못 그려서다.
+    """맵 이미지(PGM P2·P5, PNG 등 Pillow가 읽는 형식)를 PNG로 바꾼다. 브라우저가 PGM을 못 그려서다.
+    흑백 맵(ROS trinary)은 흑백(L), 색 있는 이미지(병원 평면도, 2026-10-29)는 색(RGB, 투명도는 버림)으로 둔다.
     [입력] image_bytes
     [출력] (png_bytes, width_px, height_px) (이미지가 아니면 map_image_invalid, 너무 크면 map_file_too_large)
     """
@@ -92,9 +94,10 @@ def to_png(image_bytes: bytes) -> tuple[bytes, int, int]:
                 raise BadRequest(
                     f"map image {width_px}x{height_px} px exceeds {MAP_IMAGE_MAX_SIDE_PX} px", code="map_file_too_large",
                 )
-            grayscale = image.convert("L")   # trinary 맵: 흰=빈 곳, 검정=벽, 회색=모름
+            # trinary 맵: 흰=빈 곳, 검정=벽, 회색=모름
+            converted = image.convert("L" if image.mode in GRAYSCALE_IMAGE_MODES else "RGB")
             output = io.BytesIO()
-            grayscale.save(output, format="PNG", optimize=True)
+            converted.save(output, format="PNG", optimize=True)
     except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError) as error:
         raise BadRequest(f"map image cannot be read: {error}", code="map_image_invalid") from None
     if width_px <= 0 or height_px <= 0:

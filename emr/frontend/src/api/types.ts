@@ -132,6 +132,25 @@ export interface RobotStatusReport {
   contamination_percent: number  // 0(깨끗)~100, 로봇이 잰 값
   reported_at: string
 }
+/** 병원 지도용 로봇 위치 — 팀원 FMS가 1초마다 보내는 마지막 값 (GET /robot-positions, 2026-10-29). 좌표는 맵 미터·라디안 */
+export interface RobotPosition {
+  fms_robot_number: number      // FMS 로봇 번호 (1·2·3)
+  fms_robot_name: string | null // 핑키 이름 (예 pinky_6364)
+  robot_id: number | null       // EMR 로봇 (대응이 없으면 null)
+  robot_name: string | null
+  map_x_m: number
+  map_y_m: number
+  map_yaw_rad: number
+  online: boolean
+  state: string | null          // FMS 로봇 state (idle·moving …)
+  place: string | null          // 사람이 읽는 위치 (아래 복도, 101호 …)
+  reported_at: string
+  is_stale: boolean             // 연결 끊김 (오래 못 받음 또는 online=false)
+}
+export interface RobotPositions {
+  map_id: number | null         // 위치를 그릴 맵 — 다른 맵을 보고 있으면 그리지 않는다
+  robots: RobotPosition[]
+}
 /** POST /robots/{id}/api-key 응답 (관리자). api_key는 다시 조회할 수 없다 */
 export interface RobotApiKey {
   robot_id: number

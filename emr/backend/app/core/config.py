@@ -64,6 +64,10 @@ class Settings(BaseSettings):
     FMS_SEND_INTERVAL_SECONDS: float = 5.0    # 신청 시각이 된 배송을 FMS로 보내는 회차 간격
     # FMS 로봇 번호(robots.yaml 1·2·3) → EMR 로봇 id. [검토 필요] 10-27 EMR 로봇 1 배송로봇 1호·3 2호·4 3호(2는 OMX) 기준 가정값 — 로봇 탭 칸은 다음 단계
     FMS_ROBOT_MAP: dict[int, int] = {1: 1, 2: 3, 3: 4}
+    # 병원 지도에 로봇 위치 (2026-10-29, services/fms_robot_positions.py). FMS robot-status의 pose(그림 cm)를 그릴 EMR 맵 이름 —
+    # 그 맵은 같은 그림을 cm/100 = m로 옮긴 것이어야 한다(scripts/make_arena_floorplan.py, 장소 좌표도 같은 프레임)
+    FMS_MAP_NAME: str = "Pinky 아레나"
+    FMS_POSITION_STALE_SECONDS: float = 5.0   # [검토 필요] 마지막 상태를 받은 지 이보다 오래면 '연결 끊김'으로 표시 (FMS는 1초마다 보냄)
     # 2단계: FMS 묶음마다 실제 OMX로 적재·탑재 (2026-10-27, services/fms_omx.py). false면 ready·loaded를 FMS(가상 OMX)가 스스로 보낸다.
     # true면 로봇팔이 움직인다 — 묶음마다 /command {"blue": N, "green": N}(집기) → 들고 대기 → FMS ready → 정밀 주차 뒤 /pinky(내려놓기) → FMS loaded
     FMS_OMX_ENABLED: bool = False

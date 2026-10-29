@@ -9,6 +9,7 @@
 //   - useSupplies / useSupplyMutations
 //   - useNurses   / useNurseMutations          (등록·수정·비활성화·비밀번호 초기화는 관리자)
 //   - useMaps, useLocations, useRobots (+ mutations — 변경은 관리자). useMapMutations: 맵 파일 업로드·교체·삭제
+//   - useRobotPositions                        병원 지도 로봇 위치 (FMS가 보낸 마지막 값, 1초마다) — 2026-10-29
 //   - useDeliveries / useDeliveryMutations     (재고가 바뀌므로 비품 목록·재고 부족 목록도 다시 불러옴)
 //   - useDeliveryEvents                        배송 한 건의 기록 (본인·관리자) — 2026-10-21
 //   - useDeliveryEventLog                      관리자 배송 기록 화면 (거르기 + 더 보기) — 2026-10-21
@@ -23,7 +24,7 @@ import type {
   AdminDeliveryEvent, BedsideApiKey, BedsideDelivery, BedsideDevice, BedsideDeviceCreate, BedsideDeviceUpdate,
   BedsideMe, BedsideRequest, BedsideSupply, Delivery, DeliveryCreate, DeliveryEvent, DeliveryEventFilters, DeliveryUpdate,
   Location, MapInfo, Nurse, NurseCreate, NurseUpdate, PasswordChange, PasswordReset,
-  Robot, RobotApiKey, Supply, SupplyCreate, SupplyUpdate, VoiceDraft,
+  Robot, RobotApiKey, RobotPositions, Supply, SupplyCreate, SupplyUpdate, VoiceDraft,
 } from './types'
 import { ACTIVE_DELIVERY_STATUSES } from './types'
 
@@ -40,6 +41,7 @@ export const keys = {
   maps: ['maps'] as const,
   locations: ['locations'] as const,
   robots: ['robots'] as const,
+  robotPositions: ['robot-positions'] as const,
   deliveries: ['deliveries'] as const,
   lowStock: ['notifications', 'low-stock'] as const,
   deliveryEventLog: ['delivery-events'] as const,
@@ -117,6 +119,9 @@ export const useLocations = () =>
 export const useRobots = () =>
   // claim 때 로봇 서버에서 받은 배터리·오염도(status_report)가 바뀌므로 10초마다 다시 읽는다 (2026-10-23)
   useQuery({ queryKey: keys.robots, queryFn: () => api.get<Robot[]>('/robots'), refetchInterval: 10_000 })
+export const useRobotPositions = () =>
+  // FMS가 1초마다 보내므로 같은 간격으로 묻는다 (2026-10-29). 지도 화면에 있을 때만 쓰인다
+  useQuery({ queryKey: keys.robotPositions, queryFn: () => api.get<RobotPositions>('/robot-positions'), refetchInterval: 1_000 })
 
 /** 맵 파일 업로드 본문 — map_server yaml + 이미지(PGM·PNG) */
 export interface MapUpload {

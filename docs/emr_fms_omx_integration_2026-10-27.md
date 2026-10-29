@@ -42,7 +42,7 @@ EMR ─POST /batches/{id}/loaded─▶ FMS ─▶ Pinky 병실로 ─order_deliv
 |---|---|---|
 | EMR → FMS | `POST /api/v1/orders {request_id: "emr-d{배송}-s{비품}-{n}", room: "101호", item}` | 5초마다. 같은 `request_id`는 FMS가 처음 주문을 돌려줌 |
 | EMR → FMS | `POST /api/v1/batches/{id}/ready`, `…/loaded` | 409 `bad_batch_state` = 이미 넘어감 |
-| FMS → EMR | `POST /api/v1/fms/robot-status` | 1초마다. 지금은 받기만 한다 |
+| FMS → EMR | `POST /api/v1/fms/robot-status` | 1초마다. 10-29부터 로봇마다 마지막 위치를 메모리에 두고 병원 지도에 그린다(`GET /api/v1/robot-positions`) |
 | FMS → EMR | `POST /api/v1/fms/events` | `batch_assigned` → 출발, `order_delivered`(전부) → 도착, `order_failed` → 실패, `robot_at_pharmacy` → 정밀 주차 시각. 올바른 JSON이면 늘 200 |
 | EMR → OMX | `POST /command {"command": {"blue": N, "green": N}, "request_id": "emr-b{id}"}` | OMX가 움직이거나 들고 있으면 보내지 않음(안전) |
 | EMR → OMX | `POST /pinky {"pinky_arrive": true, "request_id"}` | 정밀 주차 뒤에만 보냄 |
