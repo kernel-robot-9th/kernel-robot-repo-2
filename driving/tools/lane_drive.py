@@ -24,6 +24,8 @@ SPEED = 0.05                # m/s, 테이프 따라가기
 XFER_SPEED = 0.03           # m/s, 차선 바꾸기
 KP, KD = 8.0, 15.0          # line_follow.py 10-26 보정 시험 값
 WMAX = 0.4
+ROT_SETTLE = 0.3            # s, 회전 앞뒤로 AMCL 이 따라오게 멈추는 시간 (10-29: 0.6 → 0.3, rot_test 로 끝 오차 ≤1.5° 확인)
+ROT_WMAX = 1.5              # rad/s, 제자리 회전 최대 각속도 (10-29: 0.3 → 0.6 → 1.5 = velocity_smoother 한도. 회전이 주행 시간의 34% 라서. 90° 7.5 → 3.6 s)
 MAX_DEV = 0.04              # m, 차선 축에서 AMCL 옆 벗어남 한도 (테이프가 지도 축과 1~2° 어긋남)
 TAPE_SEEN = 1.5             # 흰 정도 합 (세 센서가 테이프를 가로로 밟음)
 LOST_S = 0.8                # s, 테이프를 이만큼 못 찾으면 lost (그동안 마지막 본 쪽으로 제자리 회전)
@@ -54,10 +56,12 @@ class Driver:
         return self.n.map_pose()
 
     # ---------- 제자리 회전 ----------
-    def rotate(self, heading_deg, tol_deg=1.5):
+    def rotate(self, heading_deg, tol_deg=1.5, wmax=None, settle=None):
+        wmax = ROT_WMAX if wmax is None else wmax
+        settle = ROT_SETTLE if settle is None else settle
         tgt = math.radians(heading_deg)
         for _ in range(3):
-            self.spin(0.6)                                   # AMCL 이 따라오게 잠깐 멈춤
+            self.spin(settle)                                # AMCL 이 따라오게 잠깐 멈춤
             err = wrap(tgt - self.pose()[2])
             if abs(err) < math.radians(tol_deg):
                 return 'ok'
@@ -68,9 +72,9 @@ class Driver:
                 e = wrap(goal - self.n.odom[2])
                 if abs(e) < math.radians(0.7):
                     break
-                self.n.cmd(0.0, math.copysign(max(0.08, min(0.3, 1.5 * abs(e))), e))
+                self.n.cmd(0.0, math.copysign(max(0.08, min(wmax, 1.5 * abs(e))), e))
             self.stop()
-        self.spin(0.6)
+        self.spin(settle)
         return 'ok' if abs(wrap(tgt - self.pose()[2])) < math.radians(3) else 'rotate_err'
 
     # ---------- 테이프 따라가기 ----------
