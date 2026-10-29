@@ -5,6 +5,7 @@
 #   python3 edge_run.py --start B2_130 --route B2_180,B1_180 --go        # 정해 준 노드 순서대로
 #   --new-only            graph/edge_times.yaml 에 이미 있는 엣지는 재지 않고 지나가기만
 #   --min-n 2             edge_times.yaml 에서 2번 미만 잰 엣지만 모자란 만큼 더 (나머지는 지나가기만)
+#   --done-log edge_logs/edges_X.csv   끊긴 한 바퀴를 이어서: 그 기록에서 ok 로 잰 엣지는 빼고
 #   --pre transfer:22.5   측정 전에 단계 먼저 (transfer:<차선> / rotate:<deg> / straight:<cm>, 노드 위에 올려놓기). --reps 2  엣지마다 두 번씩
 #   배터리: 기본은 안 봄. --batt-stop <%> 를 주면 /battery/voltage 1분 중앙값이 그 % 이하일 때 지금 엣지를 마치고 저장·중지
 # 엣지마다: ① 제자리 회전 (엣지 방향으로) ② 이동. 이동 방식은 graph.yaml 엣지 mode 를 따른다
@@ -258,6 +259,7 @@ def main():
     ap.add_argument('--nav2', action='store_true', help='nav 엣지를 Nav2 FollowPath 로 (기본: AMCL 축선 직진)')
     ap.add_argument('--skip', default='', help='쓰지 않을 엣지 (쉼표, a-b 양방향). 예: L70-R90')
     ap.add_argument('--new-only', action='store_true', help='graph/edge_times.yaml 에 이미 있는 엣지는 재지 않음 (지나가는 길로만 씀)')
+    ap.add_argument('--done-log', nargs='*', default=[], help='이 edges_*.csv 에서 ok 로 잰 엣지는 뺌 (끊긴 한 바퀴 이어 돌기)')
     ap.add_argument('--min-n', type=int, default=0, help='edge_times.yaml 기준 측정 횟수가 이보다 적은 엣지만 모자란 만큼 더 잼')
     ap.add_argument('--heading', type=float, help='지금 로봇 방향 deg (경로 짤 때 첫 회전 줄이기)')
     ap.add_argument('--pre', nargs='*', default=[], help='측정 전 lane_drive 단계 (예: transfer:22.5)')
@@ -275,6 +277,11 @@ def main():
     elif a.nodes:
         keep = {n for n in N if re.search(a.nodes, n)} | {a.start}
         done = {}
+        for fn in a.done_log:          # 이 기록들에서 ok 로 잰 엣지는 이미 한 것으로 (끊긴 한 바퀴 이어 돌기)
+            import csv
+            for r in csv.DictReader(open(fn)):
+                if r['status'] == 'ok':
+                    done[(r['a'], r['b'])] = done.get((r['a'], r['b']), 0) + 1
         if (a.new_only or a.min_n) and os.path.exists(TIMES):
             done = {(v['a'], v['b']): v.get('n', 1) for v in (yaml.safe_load(open(TIMES)).get('edges') or {}).values()}
         route = tour(N, E, a.start, keep, a.reps if not a.min_n else a.min_n, a.heading, done)
