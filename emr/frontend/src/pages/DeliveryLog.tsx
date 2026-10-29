@@ -69,7 +69,7 @@ export function DeliveryLog() {
     <div className="space-y-4">
       <PageTitle>배송 기록</PageTitle>
       <p className="text-sm text-slate-500">
-        간호사 예약·변경·취소, 병상(환자) 요청·받았습니다, 로봇 출발·도착·수령·실패를 최근 것부터 보여 줍니다. 2026-10-21 이전 배송은 기록이 없습니다.
+        간호사 예약·변경·취소, 병상(환자) 요청·받았습니다, 로봇 준비·출발·도착·수령·실패를 최근 것부터 보여 줍니다. 2026-10-21 이전 배송은 기록이 없습니다.
       </p>
 
       <div className="grid grid-cols-6 items-end gap-3">

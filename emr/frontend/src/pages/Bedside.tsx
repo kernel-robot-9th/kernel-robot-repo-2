@@ -6,7 +6,7 @@
 //   - Bedside        키 확인 → 요청 화면 또는 진행 화면. 간호사 로그인과 별개(Layout 밖, X-Bedside-Api-Key)
 //   - KeyEntry       관리자에게 받은 병상 단말 키 입력 (태블릿 브라우저에 저장)
 //   - RequestPanel   환자용 품목(requestable_by = patient)과 수량 1–5 → 요청하기 (간호사 승인 없이 바로 로봇이 가져감)
-//   - ProgressPanel  요청됨 → 출발 → 도착 → 받음. 도착하면 큰 "받았습니다" 버튼
+//   - ProgressPanel  요청됨 → 준비 → 출발 → 도착 → 받음. 도착하면 큰 "받았습니다" 버튼
 // 병상당 진행 중 1건(서버 409 bedside_request_in_progress). 일회용 마커·간호사 정보는 보여 주지 않는다.
 // =============================================================================
 import { useState } from 'react'
@@ -99,7 +99,7 @@ function RequestPanel({ supplies, roomReady }: { supplies: BedsideSupply[]; room
 }
 
 // ---------- 진행 ----------
-const STEPS: [BedsideDelivery['status'], string][] = [['reserved', '요청됨'], ['dispatched', '출발'], ['arrived', '도착'], ['received', '받음']]
+const STEPS: [BedsideDelivery['status'], string][] = [['reserved', '요청됨'], ['preparing', '준비'], ['dispatched', '출발'], ['arrived', '도착'], ['received', '받음']]
 
 function ProgressPanel({ delivery }: { delivery: BedsideDelivery }) {
   const { confirmReceipt } = useBedsideMutations()
@@ -107,6 +107,7 @@ function ProgressPanel({ delivery }: { delivery: BedsideDelivery }) {
   const items = delivery.items.map(item => `${item.name} ${item.quantity}개`).join(', ')
   const message = {
     reserved: '요청을 받았습니다. 운반 로봇이 곧 출발합니다.',
+    preparing: '약제실에서 물품을 준비하고 있습니다.',   // 2026-10-29
     dispatched: `운반 로봇이 ${formatHourMinute(delivery.dispatched_at)}에 출발했습니다.`,
     arrived: '운반 로봇이 도착했습니다. 물건을 받으신 뒤 아래 버튼을 눌러 주세요.',
     received: '받으셨습니다. 감사합니다.',

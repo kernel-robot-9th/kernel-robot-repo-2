@@ -1,6 +1,6 @@
 // =============================================================================
 // 파일   : src/features/deliveries/DeliveryProgress.tsx
-// 역할   : 배송 단계 표시 — 예약 → 출발 → 도착 → 수령, 실패·취소는 사유와 함께 (로드맵 2단계, 2026-10-20)
+// 역할   : 배송 단계 표시 — 예약 → 준비(2026-10-29) → 출발 → 도착 → 수령, 실패·취소는 사유와 함께 (로드맵 2단계, 2026-10-20)
 // 작성일 : 2026-10-20
 // 구성   :
 //   - (useNowMs는 useNowMs.ts로 옮김, 2026-10-22)
@@ -13,15 +13,16 @@ import { useNowMs } from './useNowMs'
 
 const STEPS = [
   { status: 'reserved', label: '신청' },
+  { status: 'preparing', label: '준비' },   // FMS가 Pinky를 약제실로 부름 → 정밀 주차 끝이 출발 (2026-10-29)
   { status: 'dispatched', label: '출발' },
   { status: 'arrived', label: '도착' },
   { status: 'received', label: '받음' },
 ] as const
 
 
-/** 지금 단계의 순번 (실패는 어디서 멈췄는지로). [입력] delivery [출력] 0~3 */
+/** 지금 단계의 순번 (실패는 어디서 멈췄는지로). [입력] delivery [출력] 0~4 */
 function stepIndex(delivery: Delivery): number {
-  if (delivery.status === 'failed') return delivery.arrived_at ? 2 : 1
+  if (delivery.status === 'failed') return delivery.arrived_at ? 3 : delivery.dispatched_at ? 2 : 1
   return Math.max(0, STEPS.findIndex(step => step.status === delivery.status))
 }
 
@@ -58,6 +59,7 @@ export function DeliveryProgress({ delivery }: { delivery: Delivery }) {
       <p className="text-xs text-slate-500">
         {delivery.status === 'reserved' && !robotCanGo && <span className="text-amber-700">운반 로봇이 갈 수 없는 장소라 출발하지 않습니다. 관리자에게 문의해 주세요.</span>}
         {delivery.status === 'reserved' && robotCanGo && (overdue ? '곧 운반 로봇이 출발합니다.' : '보낼 시간이 되면 운반 로봇이 출발합니다.')}
+        {delivery.status === 'preparing' && '약제실에서 물품을 준비하고 있습니다.'}
         {delivery.status === 'dispatched' && `운반 로봇이 ${formatHourMinute(delivery.dispatched_at)}에 출발했습니다.`}
         {delivery.status === 'arrived' && '병동에 도착했습니다. 받아 주세요.'}
         {delivery.status === 'received' && `${formatHourMinute(delivery.received_at)} 받음`}

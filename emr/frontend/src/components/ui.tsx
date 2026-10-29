@@ -65,6 +65,7 @@ const BADGE: Record<string, string> = {
   reserved: 'bg-amber-100 text-amber-800',
   cancelled: 'bg-slate-200 text-slate-600',
   received: 'bg-green-100 text-green-800',
+  preparing: 'bg-cyan-100 text-cyan-800',      // 배송: 준비 — 로봇이 약제실로 오는 중 (2026-10-29)
   dispatched: 'bg-blue-100 text-blue-800',     // 배송: 로봇 출발
   arrived: 'bg-teal-100 text-teal-800',        // 배송: 도착, 수령 대기
   failed: 'bg-red-100 text-red-800',           // 배송: 실패

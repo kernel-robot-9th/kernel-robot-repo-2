@@ -6,7 +6,7 @@
 #   - request_id_for()     emr-d{배송}-s{비품}-{n} — 같은 물품은 언제 보내도 같은 값(FMS가 같은 request_id를 처음 주문으로 돌려줌)
 #   - FmsOrderSender       send_due(now) — 한 회차(app/main.py 주기 작업이 FMS_SEND_INTERVAL_SECONDS마다)
 #   - run_send_round()     주기 작업용: 세션을 열어 한 회차 → commit (실패하면 rollback 후 로그)
-# 받음(202·200) → fms_orders에 한 줄, 배송은 reserved 그대로(출발은 FMS batch_assigned 이벤트 — services/fms_events.py).
+# 받음(202·200) → fms_orders에 한 줄, 배송은 reserved 그대로(준비는 FMS robot_called, 출발은 정밀 주차 끝 — services/fms_events.py, 2026-10-29).
 # 거절(4xx) → 로그만, 다음 회차에 다시. 응답 없음·5xx → 그 회차를 멈춘다. 1단계는 실패로 바꾸지 않는다.
 # 계약: docs/api_contract_delivery_2026-10-20.md 10.1
 # =============================================================================

@@ -20,9 +20,10 @@ from app.models.enums import DeliveryStatus
 from app.models.location import Location
 from app.repositories.base import BaseRepository
 
-ACTIVE_STATUSES = (DeliveryStatus.DISPATCHED, DeliveryStatus.ARRIVED)
-# 병상 기준 진행 중 = 예약·출발·도착 (병상당 하나 — uq_deliveries_bedside_active)
-BEDSIDE_ACTIVE_STATUSES = (DeliveryStatus.RESERVED, DeliveryStatus.DISPATCHED, DeliveryStatus.ARRIVED)
+# 로봇이 맡아 진행 중 — 준비(2026-10-29)도 맡은 로봇이 있다
+ACTIVE_STATUSES = (DeliveryStatus.PREPARING, DeliveryStatus.DISPATCHED, DeliveryStatus.ARRIVED)
+# 병상 기준 진행 중 = 예약·준비·출발·도착 (병상당 하나 — uq_deliveries_bedside_active)
+BEDSIDE_ACTIVE_STATUSES = (DeliveryStatus.RESERVED, DeliveryStatus.PREPARING, DeliveryStatus.DISPATCHED, DeliveryStatus.ARRIVED)
 
 
 def _with_details():
@@ -76,7 +77,7 @@ class DeliveryRepository(BaseRepository[Delivery]):
         return list(self.db.scalars(statement.order_by(Delivery.scheduled_at, Delivery.id).limit(limit)))
 
     def get_active_for_robot(self, robot_id: int) -> Delivery | None:
-        """로봇이 지금 맡고 있는(dispatched·arrived) 배송. 부분 유일 인덱스로 많아야 하나.
+        """로봇이 지금 맡고 있는(preparing·dispatched·arrived) 배송. FMS 묶음이면 여럿일 수 있어 첫 하나.
         [입력] robot_id
         [출력] Delivery | None
         """
@@ -87,7 +88,7 @@ class DeliveryRepository(BaseRepository[Delivery]):
         return self.db.scalar(statement)
 
     def get_active_for_bedside(self, bedside_device_id: int) -> Delivery | None:
-        """병상의 진행 중(예약·출발·도착) 배송. 부분 유일 인덱스로 많아야 하나 (2026-10-22).
+        """병상의 진행 중(예약·준비·출발·도착) 배송. 부분 유일 인덱스로 많아야 하나 (2026-10-22).
         [입력] bedside_device_id
         [출력] Delivery | None
         """
@@ -137,7 +138,7 @@ class DeliveryRepository(BaseRepository[Delivery]):
     def lock_due_for_fms(self, now: datetime, limit: int = 50) -> list[Delivery]:
         """FMS로 보낼 배송을 잠가서 가져온다 (2026-10-27): reserved이고 신청 시각이 지났고 목적지에 robot_dest(FMS 방 번호)가 있는 것,
         이른 순. 보내는 동안 간호사 변경·취소가 끼어들지 않게 잠근다 — 끝나면 변경·취소는 delivery_sent_to_fms로 막힌다.
-        이미 다 보낸 배송도 batch_assigned 전까지 reserved라 함께 나온다(서비스가 물품별로 건너뛴다).
+        이미 다 보낸 배송도 FMS robot_called(준비) 전까지 reserved라 함께 나온다(서비스가 물품별로 건너뛴다).
         [입력] now: 지금 시각 / limit: 한 회차에 볼 배송 수
         [출력] list[Delivery]: 품목·목적지 로드됨
         """

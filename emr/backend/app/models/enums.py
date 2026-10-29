@@ -42,10 +42,13 @@ class RequestableBy(StrEnum):
 class DeliveryStatus(StrEnum):
     """배송 상태 (2026-10-20 로드맵 2단계, docs/api_contract_delivery_2026-10-20.md).
     reserved → dispatched(로봇 claim) → arrived(로봇 도착 보고, 일회용 마커 생성) → received(로봇이 일회용 마커 읽음)
-    reserved → cancelled(간호사 취소) / dispatched·arrived → failed(로봇 실패 보고, 재고 복구)
+    reserved → cancelled(간호사 취소) / preparing·dispatched·arrived → failed(로봇 실패 보고, 재고 복구)
+    FMS 연동(2026-10-29 사용자 "OMX 적재 준비 단계 추가, 호출부터 준비, 정밀 주차 출발"):
+    reserved → preparing(FMS robot_called — Pinky를 약제실로 부름, OMX 적재 준비) → dispatched(약제실 정밀 주차 끝) → arrived → received
     간호사 변경·취소는 reserved에서만.
     """
     RESERVED = "reserved"
+    PREPARING = "preparing"    # 준비 — Pinky가 약제실로 오는 중, OMX가 물품을 들고 기다림 (2026-10-29)
     CANCELLED = "cancelled"
     DISPATCHED = "dispatched"
     ARRIVED = "arrived"
@@ -68,7 +71,8 @@ class DeliveryEventType(StrEnum):
     RESERVED = "reserved"      # 간호사 예약
     UPDATED = "updated"        # 간호사 변경 (바뀐 값만 details에)
     CANCELLED = "cancelled"    # 간호사 취소
-    DISPATCHED = "dispatched"  # 로봇이 맡아 출발
+    PREPARING = "preparing"    # 준비 — FMS가 Pinky를 약제실로 부름 (2026-10-29)
+    DISPATCHED = "dispatched"  # 로봇이 맡아 출발 (FMS 연동: 약제실 정밀 주차 끝)
     ARRIVED = "arrived"        # 로봇 도착 보고 (일회용 마커 번호는 기록하지 않음)
     RECEIVED = "received"      # 로봇이 일회용 마커로 수령 확인
     FAILED = "failed"          # 로봇 실패 보고 (사유는 details)

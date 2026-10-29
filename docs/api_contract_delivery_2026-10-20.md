@@ -277,12 +277,15 @@ Pinky API는 **인증이 없다** — 지금은 그대로 진행(사용자 결�
 
 | 이벤트 | EMR |
 |---|---|
-| `batch_assigned` | 묶음의 EMR 주문에 `batch_id`·FMS 로봇 번호. 그 주문의 배송이 reserved면 **dispatched**(로봇 = 설정 `FMS_ROBOT_MAP`으로 바꾼 EMR 로봇, 출발 알림·배송 기록) |
-| `order_delivered` | 그 주문을 delivered로. **배송의 물품이 모두 보내졌고 모두 delivered면 arrived**(일회용 마커·도착 알림·기록 — `report_progress`와 같은 처리) |
-| `order_failed` | 그 주문의 배송을 failed(`robot_error`, 재고 복구·실패 알림). 시뮬레이터에는 아직 없음 |
+| `batch_assigned` | 묶음의 EMR 주문에 `batch_id`·FMS 로봇 번호. **배송은 reserved 그대로**(Pinky는 제자리 대기 — 2026-10-29 바꿈, 전엔 여기서 dispatched) |
+| `robot_called` | (2026-10-29) FMS가 `ready`를 받고 Pinky를 약제실로 부름 → 그 묶음의 reserved 배송을 **preparing(준비)**, 맡은 로봇 = 설정 `FMS_ROBOT_MAP`으로 바꾼 EMR 로봇, 배송 기록 `preparing`. 알림 없음 |
+| `robot_at_pharmacy` | (2026-10-29) 약제실 **정밀 주차 끝** → 그 묶음의 reserved·preparing 배송을 **dispatched(출발)**, 출발 시각·출발 알림·배송 기록. `FMS_OMX_ENABLED`이면 OMX 묶음의 정밀 주차 시각도(10.4). 단 `FMS_OMX_ENABLED`이고 `FMS_PHARMACY_SIGNAL=pinky`면 무시 — 그때는 실물 Pinky `POST /robot/arrived`가 같은 일을 한다 |
+| `order_delivered` | 그 주문을 delivered로. **배송의 물품이 모두 보내졌고 모두 delivered면 arrived**(일회용 마커·도착 알림·기록 — `report_progress`와 같은 처리). 그때 배송이 아직 reserved·preparing이면(정밀 주차 신호를 놓침) 출발을 먼저 남기고 도착(로그 `delivery_dispatched_late`) |
+| `order_failed` | 그 주문의 배송(preparing·dispatched·arrived)을 failed(`robot_error`, 재고 복구·실패 알림). 시뮬레이터에는 아직 없음 |
 | `order_canceled` | 주문 상태만 |
 | 그 밖·우리 주문이 아님 | 무시(`handled: false`) |
 
+- **배송 상태 (FMS 연동, 2026-10-29 사용자 "OMX 적재 준비 단계 추가 — 준비 두 글자, 호출부터 준비, 정밀 주차 출발")**: `reserved`(신청 → 주문 전송 → 배차까지) → `preparing` 준비(`robot_called`) → `dispatched` 출발(정밀 주차 끝) → `arrived` → `received`. 마이그레이션 0017(상태·기록 종류 CHECK, 병상 진행 중 인덱스).
 - 같은 이벤트가 다시 와도 결과가 같다(상태 전이가 멱등). `event_id` 표는 두지 않는다.
 - **한 로봇이 여러 배송을 함께 맡는다** — FMS 묶음(최대 3개)에 여러 신청이 섞이므로 0015에서 '로봇 한 대 = 진행 중 배송 하나' 유일 인덱스를 없앴다.
 - 한 신청이 여러 로봇으로 나뉘면 처음 배차된 로봇을 적는다(분석 문서 4장 결정 2 권하는 안).
@@ -317,9 +320,10 @@ FMS는 `--control-url http://<EMR>:8000`으로 띄운다.
 **순서 (묶음 하나)**
 
 ```
-FMS batch_assigned ─▶ EMR: fms_batches 한 줄 (blue N·green N, 단계 pick)
+FMS batch_assigned ─▶ EMR: fms_batches 한 줄 (blue N·green N, 단계 pick)                         배송: 신청(reserved)
 EMR ─POST /command {"blue": N, "green": N}─▶ OMX 집기 → 시작 자세 → 스스로 양팔로 들고 대기 (pinky=holding)
-EMR ─POST /batches/{id}/ready─▶ FMS ─▶ Pinky 약제실로, 정밀 주차 ─▶ FMS 이벤트 robot_at_pharmacy
+EMR ─POST /batches/{id}/ready─▶ FMS ─▶ 이벤트 robot_called                                        배송: 준비(preparing)
+FMS ─▶ Pinky 약제실로, 정밀 주차 ─▶ FMS 이벤트 robot_at_pharmacy (pinky 신호면 POST /robot/arrived)   배송: 출발(dispatched)
 EMR ─POST /pinky─▶ OMX 내려놓기 → 시작 자세 (pinky=completed)
 EMR ─POST /batches/{id}/loaded─▶ FMS ─▶ Pinky 병실로 (그 뒤는 10.2: order_delivered → 도착)
 ```
@@ -331,6 +335,6 @@ EMR ─POST /batches/{id}/loaded─▶ FMS ─▶ Pinky 병실로 (그 뒤는 10
 - **OMX가 명령 양식을 받지 않으면(422) OMX 적재를 생략**(10-28 사용자 "OMX 양식이 없으면 생략"): `ready`를 바로 보내고, 정밀 주차 뒤 `/pinky` 없이 `loaded`. 생략한 묶음은 OMX를 쓰지 않으니 다른 묶음을 막지 않는다. 로그 `fms_omx_skipped`, `fms_batches.error`에 까닭.
 - **실패**: OMX 4xx 거절(422 말고), `state=failed`(못 찾음 — 실패는 EMR로 오지 않음), `pinky=*_failed`, FMS 4xx(409 bad_batch_state 말고)면 묶음을 `failed`로 멈추고 로그 `fms_omx_failed`(error에 까닭). 배송 상태는 바꾸지 않는다 — 사람이 팔·Pinky를 확인한다. 응답 없음은 다음 회차에 다시. 시간 초과는 아직 없음.
 - **저장**: `fms_batches`(0016) — FMS `batch_id`(FMS를 다시 켜면 b-1부터라 UNIQUE 아님), 로봇 번호, `blue_count`·`green_count`, 단계, OMX `request_id`, ready·정밀 주차·loaded 시각, error.
-- **바깥 HTTP는 주기 작업에서만**(`services/fms_omx.py`, `FMS_OMX_ROUND_SECONDS` 1초). FMS 이벤트를 받는 요청은 DB만(`batch_assigned` → 묶음 행, `robot_at_pharmacy` → 정밀 주차 시각).
+- **바깥 HTTP는 주기 작업에서만**(`services/fms_omx.py`, `FMS_OMX_ROUND_SECONDS` 1초). FMS 이벤트를 받는 요청은 DB만(`batch_assigned` → 묶음 행, `robot_called` → 배송 준비, `robot_at_pharmacy` → 정밀 주차 시각·배송 출발).
 - 설정 `FMS_OMX_ENABLED`(기본 0). 0이면 FMS(시뮬레이터) 가상 OMX가 `ready`·`loaded`를 보낸다. 1로 켤 때는 시뮬레이터 가상 OMX를 끈다(`POST /api/control {"auto_omx": false}`).
 - **실제 시험 전 확인**: ① 팀원 OMX가 `{"blue": N, "green": N}`를 받는지 ② OMX를 `--pinky --emr-api http://<EMR>:8000/api/v1`로 실행 ③ 테이블에 파란 거즈 N개 ④ 팔 시작 자세(10-27 마지막 시도 `grab_failed`) ⑤ 한 번에 여러 개 집는지(N ≥ 2).

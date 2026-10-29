@@ -33,7 +33,8 @@ REQUESTER_CONSISTENCY_SQL = (
     "(requester_type = 'nurse' AND nurse_id IS NOT NULL AND bedside_device_id IS NULL AND bedside_name IS NULL)"
     " OR (requester_type = 'bedside' AND nurse_id IS NULL AND bedside_name IS NOT NULL)"
 )
-BEDSIDE_ACTIVE_SQL = "status IN ('reserved', 'dispatched', 'arrived')"
+# 0017에서 preparing을 더함(2026-10-29)
+BEDSIDE_ACTIVE_SQL = "status IN ('reserved', 'preparing', 'dispatched', 'arrived')"
 
 # 일회용 수령 마커: ArUco DICT_4X4_250의 50~249번. 0~49는 간호사 고정 마커(DICT_4X4_50 = DICT_4X4_250 앞 50개)
 RECEIPT_MARKER_ID_MIN = 50

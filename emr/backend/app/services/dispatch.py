@@ -161,7 +161,7 @@ class DispatchService:
         if delivery.status == DeliveryStatus.RECEIVED:
             attempt.info("progress_rejected", code="delivery_already_received")
             raise Conflict(f"delivery {delivery_id} is already received", code="delivery_already_received")
-        if delivery.status not in (DeliveryStatus.DISPATCHED, DeliveryStatus.ARRIVED):
+        if delivery.status not in (DeliveryStatus.PREPARING, DeliveryStatus.DISPATCHED, DeliveryStatus.ARRIVED):
             return self._reject_transition(attempt, delivery, stage)
         self.deliveries.restore_stock(delivery)
         delivery.status = DeliveryStatus.FAILED
@@ -192,7 +192,7 @@ class DispatchService:
             log.warning("progress_rejected", robot_id=robot_id, stage=STAGE_AT_PHARMACY, code="robot_no_active_delivery")
             raise Conflict(f"robot {robot_id} has no dispatched or arrived delivery", code="robot_no_active_delivery")
         attempt = log.bind(robot_id=robot_id, delivery_id=active.id, stage=STAGE_AT_PHARMACY)
-        if active.status != DeliveryStatus.DISPATCHED:
+        if active.status not in (DeliveryStatus.PREPARING, DeliveryStatus.DISPATCHED):   # 준비 = FMS가 약제실로 부름 (2026-10-29)
             return self._reject_transition(attempt, active, STAGE_AT_PHARMACY)
         attempt.info("robot_at_pharmacy")
         return active

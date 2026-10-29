@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from app.models.delivery import Delivery
     from app.models.nurse import Nurse
 
-# 아래 SQL은 마이그레이션 0009(사건 종류)·0010(행위자 — bedside 추가)에 같은 문자열로 들어 있다 — 바꾸면 새 마이그레이션으로
+# 아래 SQL은 마이그레이션 0009(사건 종류)·0010(행위자 — bedside 추가)·0017(사건 종류 — preparing 추가)에 같은 값으로 들어 있다 — 바꾸면 새 마이그레이션으로
 EVENT_TYPE_SQL = f"event_type IN ({check_values(DeliveryEventType)})"
 ACTOR_TYPE_SQL = f"actor_type IN ({check_values(DeliveryEventActor)})"
 # 간호사 사건은 간호사 id가, 로봇 사건은 로봇 이름(스냅숏)이, 병상 사건은 병상 이름(스냅숏)이 있다.

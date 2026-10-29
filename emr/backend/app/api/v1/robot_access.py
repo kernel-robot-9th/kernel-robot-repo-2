@@ -20,12 +20,11 @@ from typing import Any
 import structlog
 from fastapi import APIRouter, Body, Path, Query, Request, Response, status
 
-from app.core.config import settings
 from app.core.deps import DB, ROBOT_RESPONSES, CurrentRobot
 from app.schemas.delivery import DeliveryProgressIn, DeliveryReceiptIn, RobotDeliveryOut, RobotMeOut
 from app.schemas.robot import OmxEndPointOut
 from app.services.dispatch import DispatchService
-from app.services.fms_events import FmsEventHandler
+from app.services.fms_events import FmsEventHandler, pinky_signals_pharmacy
 from app.services.omx_signal import OmxSignalService
 
 router = APIRouter(responses=ROBOT_RESPONSES)
@@ -119,7 +118,7 @@ def list_deliveries(
                 "마치면 부른다. 본문 없음, 여러 번 불러도 같다. **EMR은 서버 로그만 남긴다** — 배송 상태는 dispatched 그대로, 간호사 알림·배송 기록 없음. "
                 "**병실 도착은 `POST /robot/deliveries/{id}/progress {stage: arrived}`**. 2026-10-22, 2026-10-27 약제실 전용으로 바꿈(사용자 결정). "
                 "**2026-10-28**: 설정 `FMS_PHARMACY_SIGNAL=pinky`(FMS가 가상인 동안)면 실물 Pinky의 이 신호(본문 = Pinky ArrivedSignal)를 "
-                "'정밀 주차 끝'으로 보고, 기다리던 OMX 묶음에 내려놓기(/pinky)를 시작한다",
+                "'정밀 주차 끝'으로 보고, 기다리던 OMX 묶음에 내려놓기(/pinky)를 시작한다. **2026-10-29**: 그 묶음의 배송을 준비 → 출발로(출발 알림·기록)",
     responses={409: {"description": "맡은 배송 없음 (robot_no_active_delivery) · 이미 병실 도착(delivery_invalid_transition)"}},
 )
 def report_at_pharmacy(db: DB, robot: CurrentRobot, signal: dict[str, Any] | None = Body(default=None)) -> RobotDeliveryOut:
@@ -128,7 +127,7 @@ def report_at_pharmacy(db: DB, robot: CurrentRobot, signal: dict[str, Any] | Non
     [출력] RobotDeliveryOut: dispatched 그대로
     """
     signal = signal or {}
-    if settings.FMS_OMX_ENABLED and settings.FMS_PHARMACY_SIGNAL == "pinky" and signal.get("dest", "PHARMACY") == "PHARMACY":
+    if pinky_signals_pharmacy() and signal.get("dest", "PHARMACY") == "PHARMACY":
         events = FmsEventHandler(db)
         batch = events.pinky_docked_at_pharmacy()
         log.info("pinky_arrived_signal", robot_id=robot.id, job_id=signal.get("job_id"), dock_error=signal.get("dock_error"),

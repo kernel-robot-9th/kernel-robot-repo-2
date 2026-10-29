@@ -210,12 +210,12 @@ export interface BedsideRequest {
 export const BEDSIDE_MAX_QUANTITY = 5
 
 // ---------- 배송 ----------
-/** 예약 → 출발(로봇이 맡음) → 도착(일회용 마커 생김) → 수령(로봇이 마커를 읽음). 예약만 간호사가 취소 가능,
- *  출발·도착에서 실패하면 failed(재고 복구). docs/api_contract_delivery_2026-10-20.md (2026-10-20) */
-export type DeliveryStatus = 'reserved' | 'cancelled' | 'dispatched' | 'arrived' | 'received' | 'failed'
+/** 예약 → 준비(FMS가 Pinky를 약제실로 부름, 2026-10-29) → 출발(약제실 정밀 주차 끝) → 도착(일회용 마커 생김) → 수령.
+ *  예약만 간호사가 취소 가능, 준비·출발·도착에서 실패하면 failed(재고 복구). docs/api_contract_delivery_2026-10-20.md */
+export type DeliveryStatus = 'reserved' | 'preparing' | 'cancelled' | 'dispatched' | 'arrived' | 'received' | 'failed'
 export type DeliveryFailureReason = 'navigation_failed' | 'not_received' | 'destination_blocked' | 'robot_error'
 /** 로봇이 맡아 진행 중인 상태 — 이때는 배송 목록을 더 자주 새로 고친다 */
-export const ACTIVE_DELIVERY_STATUSES: readonly DeliveryStatus[] = ['dispatched', 'arrived']
+export const ACTIVE_DELIVERY_STATUSES: readonly DeliveryStatus[] = ['preparing', 'dispatched', 'arrived']
 
 export interface DeliveryItem {
   supply_id: number
@@ -259,6 +259,7 @@ export type DeliveryUpdate = Partial<DeliveryCreate>
 /** 한국어 라벨 — 화면 여러 곳에서 공유 */
 export const DELIVERY_STATUS_LABEL: Record<DeliveryStatus, string> = {
   reserved: '신청됨',
+  preparing: '준비',   // 2026-10-29
   cancelled: '취소',
   dispatched: '출발',
   arrived: '도착 · 수령 대기',
@@ -272,8 +273,8 @@ export const DELIVERY_FAILURE_REASON_LABEL: Record<DeliveryFailureReason, string
   robot_error: '운반 로봇에 문제가 생겼습니다. 비상 정지합니다.',
 }
 // ---------- 배송 기록 (2026-10-21, 로드맵 4단계) ----------
-/** 간호사: 예약·변경·취소 / 로봇: 출발·도착·수령·실패. 상태가 실제로 바뀐 때만 남는다 (거부·같은 보고 반복은 없음) */
-export type DeliveryEventType = 'reserved' | 'updated' | 'cancelled' | 'dispatched' | 'arrived' | 'received' | 'failed'
+/** 간호사: 예약·변경·취소 / 로봇: 준비·출발·도착·수령·실패. 상태가 실제로 바뀐 때만 남는다 (거부·같은 보고 반복은 없음) */
+export type DeliveryEventType = 'reserved' | 'updated' | 'cancelled' | 'preparing' | 'dispatched' | 'arrived' | 'received' | 'failed'
 export interface DeliveryEventItem {
   supply_id: number
   name: string       // 당시 비품 이름
@@ -332,6 +333,7 @@ export const DELIVERY_EVENT_LABEL: Record<DeliveryEventType, string> = {
   reserved: '신청',
   updated: '변경',
   cancelled: '취소',
+  preparing: '준비',   // 2026-10-29
   dispatched: '출발',
   arrived: '도착',
   received: '받음',   // 2026-10-27 화면 문구와 맞춤

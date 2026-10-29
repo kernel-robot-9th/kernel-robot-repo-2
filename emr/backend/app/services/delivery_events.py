@@ -77,7 +77,7 @@ class DeliveryEventRecorder:
         self, delivery: Delivery, event_type: DeliveryEventType, robot: Robot, occurred_at: datetime,
         details: dict[str, Any] | None = None,
     ) -> DeliveryEvent:
-        """로봇이 한 일 (출발·도착·수령·실패). 로봇 이름은 스냅숏으로 남긴다(로봇을 지워도 누가 했는지 보이게).
+        """로봇이 한 일 (준비·출발·도착·수령·실패). 로봇 이름은 스냅숏으로 남긴다(로봇을 지워도 누가 했는지 보이게).
         [입력] delivery / event_type / robot: 키로 확인된 로봇 / occurred_at / details
         [출력] DeliveryEvent
         """

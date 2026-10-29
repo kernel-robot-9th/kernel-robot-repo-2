@@ -208,23 +208,27 @@ def _hold(arm, batch) -> None:
 
 
 @requires_db
-def test_pinky_signal_mode_puts_down_after_real_pinky_docks(client, db, arm, reserve_overdue, monkeypatch):
+def test_pinky_signal_mode_puts_down_after_real_pinky_docks(client, auth_headers, db, arm, reserve_overdue, monkeypatch):
     """10-28 사용자 "정밀 주차 완료 후": FMS_PHARMACY_SIGNAL=pinky면 FMS robot_at_pharmacy가 아니라
-    실물 Pinky의 POST /robot/arrived(정밀 주차 끝)를 받은 뒤에 /pinky."""
+    실물 Pinky의 POST /robot/arrived(정밀 주차 끝)를 받은 뒤에 /pinky. 배송 출발도 그 신호로 (10-29 "정밀 주차 출발")."""
     monkeypatch.setattr(settings, "FMS_PHARMACY_SIGNAL", "pinky")
     delivery = reserve_overdue(quantity=1)
     batch = _assign(client, db, "b-1", ["o-1"])
     _round(db); _hold(arm, batch); _round(db); _round(db)
     assert batch.step == "called"
 
+    _event(client, "robot_called", batch_id="b-1", robot=1)
     _event(client, "robot_at_pharmacy", batch_id="b-1", robot=1)   # 가상 FMS의 정밀 주차 — 무시
     _round(db)
     assert batch.step == "called" and batch.at_pharmacy_at is None
+    status = lambda: client.get(f"/api/v1/deliveries/{delivery['id']}", headers=auth_headers).json()["status"]  # noqa: E731
+    assert status() == "preparing"
 
     response = client.post("/api/v1/robot/arrived", headers=arm["robot"]["headers"],
                            json={"event": "arrived", "dest": "PHARMACY", "job_id": "b86a97fa",
                                  "dock_error": {"fwd_mm": -7.3, "left_mm": -3.4, "heading_deg": -0.94}})
     assert response.status_code == 200 and response.json()["id"] == delivery["id"]
+    assert status() == "dispatched"
     _round(db)
     assert batch.step == "pinky"
     _round(db)

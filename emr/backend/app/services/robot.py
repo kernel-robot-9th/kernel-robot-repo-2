@@ -75,7 +75,7 @@ class RobotService:
         return robot
 
     def delete(self, robot_id: int) -> None:
-        """로봇 삭제. 진행 중(dispatched·arrived) 배송을 맡고 있으면 Conflict — 끝난 배송의 로봇 칸은 NULL이 된다.
+        """로봇 삭제. 진행 중(preparing·dispatched·arrived) 배송을 맡고 있으면 Conflict — 끝난 배송의 로봇 칸은 NULL이 된다.
         [입력] robot_id
         [출력] 없음 (없으면 NotFound)
         """

@@ -3,12 +3,13 @@
 # 역할   : fms_orders 조회 — 팀원 FMS에 보낸 물품 1개 주문 (2026-10-27, FMS API v1 연동 1단계)
 # 작성일 : 2026-10-27
 # 구성   :
-#   - FmsOrderRepository  get_by_fms_order_id, list_for_delivery, delivery_has_orders, try_lock_send_round
+#   - FmsOrderRepository  get_by_fms_order_id, list_for_delivery, list_assigned_for_batch(2026-10-29), delivery_has_orders, try_lock_send_round
 # =============================================================================
 from __future__ import annotations
 
 from sqlalchemy import func, select
 
+from app.models.enums import FmsOrderStatus
 from app.models.fms_order import FmsOrder
 from app.repositories.base import BaseRepository
 
@@ -37,6 +38,17 @@ class FmsOrderRepository(BaseRepository[FmsOrder]):
         [출력] list[FmsOrder]
         """
         statement = select(FmsOrder).where(FmsOrder.delivery_id == delivery_id).order_by(FmsOrder.supply_id, FmsOrder.nth)
+        return list(self.db.scalars(statement))
+
+    def list_assigned_for_batch(self, batch_id: str) -> list[FmsOrder]:
+        """FMS 묶음에 들어가 아직 배송되지 않은(assigned) 주문 — 묶음의 준비·출발을 신청에 옮길 때 (2026-10-29).
+        FMS를 다시 켜면 b-1부터 다시라, 끝난 옛 묶음의 주문(delivered·failed)은 상태로 걸러진다.
+        [입력] batch_id: FMS 묶음 b-5
+        [출력] list[FmsOrder]: 보낸 순
+        """
+        statement = (
+            select(FmsOrder).where(FmsOrder.batch_id == batch_id, FmsOrder.status == FmsOrderStatus.ASSIGNED).order_by(FmsOrder.id)
+        )
         return list(self.db.scalars(statement))
 
     def delivery_has_orders(self, delivery_id: int) -> bool:
