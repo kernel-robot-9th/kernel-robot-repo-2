@@ -37,6 +37,7 @@ class Driver:
     def __init__(self):
         self.n = LineFollow()
         self.trace = []   # follow 중 (시각, 남은 cm, IR 3, 흰 정도 3, 테이프 위치 cm) — edge_run 이 엣지마다 저장
+        self.should_stop = None   # 매 주기 부르는 함수, True 면 멈추고 'canceled' (API /cancel)
         t_end = time.time() + 5
         while time.time() < t_end and (self.n.odom is None or self.n.ir is None or self.n.map_pose() is None):
             rclpy.spin_once(self.n, timeout_sec=0.05)
@@ -51,6 +52,9 @@ class Driver:
     def stop(self):
         for _ in range(5):
             self.n.cmd(0.0, 0.0); time.sleep(0.02)
+
+    def canceled(self):
+        return bool(self.should_stop and self.should_stop())
 
     def pose(self):
         """바퀴 축 (x, y) m, yaw"""
@@ -72,6 +76,8 @@ class Driver:
             t_end = time.time() + abs(err) / 0.1 + 5
             while time.time() < t_end:
                 rclpy.spin_once(self.n, timeout_sec=0.02)
+                if self.canceled():
+                    self.stop(); return 'canceled'
                 e = wrap(goal - self.n.odom[2])
                 if abs(e) < math.radians(0.7):
                     break
@@ -102,6 +108,8 @@ class Driver:
         status = 'timeout'
         while time.time() < deadline:
             rclpy.spin_once(self.n, timeout_sec=0.02)
+            if self.canceled():
+                status = 'canceled'; break
             if time.time() - self.n.ir_t > 0.5:
                 status = 'ir_stale'; break
             r = remain()
@@ -148,6 +156,8 @@ class Driver:
         t_end = time.time() + (expect + 0.04) / XFER_SPEED * 2 + 5
         while time.time() < t_end:
             rclpy.spin_once(self.n, timeout_sec=0.02)
+            if self.canceled():
+                status = 'canceled'; break
             d = math.hypot(self.n.odom[0] - o0[0], self.n.odom[1] - o0[1])
             if seen_at is None:
                 if d > expect + 0.04:

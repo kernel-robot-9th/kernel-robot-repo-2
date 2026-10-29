@@ -101,8 +101,8 @@
 <script>
 // ───────── 상태 ─────────
 const NS = 'http://www.w3.org/2000/svg';
-const MODES = ['line', 'transfer', 'wall', 'nav'];
-const MODE_COL = { line: 'var(--m-line)', transfer: 'var(--m-transfer)', wall: 'var(--m-wall)', nav: 'var(--m-nav)' };
+const MODES = ['line', 'transfer', 'wall', 'nav', 'dock'];
+const MODE_COL = { line: 'var(--m-line)', transfer: 'var(--m-transfer)', wall: 'var(--m-wall)', nav: 'var(--m-nav)', dock: '#c800c8' };
 const IMG = { x: -76 / 3.39, y: -40 / 3.39, w: 825 / 3.39, h: 733 / 3.39 };   // layout_diagram.png 를 그림 cm 로
 let spec = null, walls = [], built = { nodes: {}, edges: [], errors: [] };
 let saved = '', undoStack = [], redoStack = [];
@@ -374,7 +374,7 @@ function panelNode(P, id) {
   P.appendChild(h(`
     <h2>노드 <span class="pill">${n.type}</span></h2>
     <div class="row"><label>이름</label><input type="text" id="f-id" value="${esc(id)}"></div>
-    <div class="row"><label>종류</label><select id="f-type">${['gate', 'way', 'stop'].map((t) => `<option ${t === n.type ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
+    <div class="row"><label>종류</label><select id="f-type">${['gate', 'way', 'stop', 'dock'].map((t) => `<option ${t === n.type ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
     <div class="row"><label>위치 x, y</label><div class="two"><input type="number" step="0.1" id="f-x" value="${n.xy[0]}"><input type="number" step="0.1" id="f-y" value="${n.xy[1]}"></div></div>
     ${n.type === 'stop' ? `
       <div class="row"><label>방향 °</label><input type="number" step="1" id="f-heading" value="${n.heading ?? 0}"></div>

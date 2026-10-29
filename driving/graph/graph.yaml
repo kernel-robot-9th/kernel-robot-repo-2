@@ -184,6 +184,11 @@ nodes:
     heading: 90
     name: 약제실 OMX
     dock: aruco
+  PHARMACY_DOCK:
+    type: dock
+    xy: [98.9, 187.2]
+    heading: 90
+    note: 정밀 주차 자리 (마커 기준, 정차점보다 ~8cm 안쪽. aruco_ref amcl_axle y 188.9 → 라이다 187.2). /drive 전용
   ROOM4_R:
     type: stop
     xy: [175, 178]
@@ -930,3 +935,12 @@ edges:
   gap_bare_cm: 12.5
   gap_bowl_cm: 11.0
   gap_at: [99, 166]
+- a: PHARMACY
+  b: PHARMACY_DOCK
+  mode: dock
+  zone: pharmacy
+  length_cm: 8.4
+  gap_bare_cm: 16.4
+  gap_bowl_cm: 14.9
+  gap_at: [99, 179]
+  note: 들어가기 = precise_dock.py, 나오기 = 방향 그대로 뒤로 (10-29)

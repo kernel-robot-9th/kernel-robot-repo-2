@@ -1,6 +1,6 @@
 note: edge_run.py 실측 (tools/edge_costs.py --write). move_s = 노드에서 멈춰 있다가 다음 노드에 멈출
   때까지 (회전 뺌)
-made: 2026-10-29 15:01
+made: 2026-10-29 17:46
 files:
 - edges_1027_180400.csv
 - edges_1027_190338.csv
@@ -22,18 +22,25 @@ files:
 - edges_1029_140721.csv
 - edges_1029_141748.csv
 - edges_1029_143059.csv
+- edges_1029_153352.csv
+- edges_1029_154125.csv
+- edges_1029_155549.csv
+- edges_1029_164025.csv
+- edges_1029_164301.csv
+- edges_1029_165231.csv
 rotate:
-  r0_s: 2.09
-  s_per_deg: 0.0233
-  n: 247
+  r0_s: 2.45
+  s_per_deg: 0.0282
+  n: 163
   src:
-  - rot_1029_114348.csv
-  - edges_1029_114503.csv
-  - edges_1029_115202.csv
-  - edges_1029_120803.csv
-  - edges_1029_140721.csv
   - edges_1029_141748.csv
   - edges_1029_143059.csv
+  - edges_1029_153352.csv
+  - edges_1029_154125.csv
+  - edges_1029_155549.csv
+  - edges_1029_164025.csv
+  - edges_1029_164301.csv
+  - edges_1029_165231.csv
 edges:
   B1_130>B1_180:
     a: B1_130
@@ -121,10 +128,10 @@ edges:
     b: B1_40
     mode: line
     len_cm: 38.0
-    n: 4
-    move_s: 8.86
+    n: 5
+    move_s: 8.88
     min_s: 8.69
-    max_s: 9.05
+    max_s: 9.55
   B2_130>B2_180:
     a: B2_130
     b: B2_180
@@ -139,8 +146,8 @@ edges:
     b: B2_78
     mode: line
     len_cm: 52.0
-    n: 9
-    move_s: 11.73
+    n: 14
+    move_s: 11.87
     min_s: 11.33
     max_s: 12.15
   B2_180>B2_130:
@@ -211,9 +218,9 @@ edges:
     b: B2_40
     mode: line
     len_cm: 38.0
-    n: 6
-    move_s: 8.89
-    min_s: 8.73
+    n: 11
+    move_s: 8.85
+    min_s: 8.25
     max_s: 9.33
   T1_130>T1_175:
     a: T1_130
@@ -283,18 +290,18 @@ edges:
     b: T1_98.9
     mode: line
     len_cm: 58.9
-    n: 8
-    move_s: 13.11
+    n: 14
+    move_s: 13.36
     min_s: 12.61
-    max_s: 13.54
+    max_s: 13.61
   T1_98.9>T1_130:
     a: T1_98.9
     b: T1_130
     mode: line
     len_cm: 31.1
-    n: 8
-    move_s: 7.44
-    min_s: 7.05
+    n: 14
+    move_s: 7.38
+    min_s: 6.75
     max_s: 7.8
   T1_98.9>T1_40:
     a: T1_98.9
@@ -670,10 +677,10 @@ edges:
     b: B2_40
     mode: transfer
     len_cm: 15.0
-    n: 4
-    move_s: 5.02
+    n: 5
+    move_s: 5.03
     min_s: 5.0
-    max_s: 5.08
+    max_s: 5.1
   B1_40>GB40:
     a: B1_40
     b: GB40
@@ -715,9 +722,9 @@ edges:
     b: GB130
     mode: transfer
     len_cm: 9.5
-    n: 5
-    move_s: 3.5
-    min_s: 3.34
+    n: 7
+    move_s: 3.38
+    min_s: 3.33
     max_s: 3.69
   B2_180>B1_180:
     a: B2_180
@@ -769,10 +776,10 @@ edges:
     b: GB40
     mode: transfer
     len_cm: 9.5
-    n: 7
-    move_s: 3.38
-    min_s: 3.28
-    max_s: 3.56
+    n: 15
+    move_s: 3.39
+    min_s: 3.18
+    max_s: 3.57
   B2_78>B1_78:
     a: B2_78
     b: B1_78
@@ -805,9 +812,9 @@ edges:
     b: B2_130
     mode: transfer
     len_cm: 9.5
-    n: 8
-    move_s: 3.66
-    min_s: 2.91
+    n: 15
+    move_s: 3.03
+    min_s: 2.87
     max_s: 4.35
   GB180>B1_180:
     a: GB180
@@ -841,8 +848,8 @@ edges:
     b: B2_40
     mode: transfer
     len_cm: 9.5
-    n: 5
-    move_s: 3.16
+    n: 6
+    move_s: 3.17
     min_s: 2.99
     max_s: 4.19
   GB78>B1_78:
@@ -850,10 +857,10 @@ edges:
     b: B1_78
     mode: transfer
     len_cm: 24.5
-    n: 4
-    move_s: 9.04
+    n: 5
+    move_s: 9.05
     min_s: 8.98
-    max_s: 9.09
+    max_s: 9.12
   GB78>B2_78:
     a: GB78
     b: B2_78
@@ -868,8 +875,8 @@ edges:
     b: T1_130
     mode: transfer
     len_cm: 9.5
-    n: 6
-    move_s: 2.56
+    n: 8
+    move_s: 2.58
     min_s: 2.49
     max_s: 3.81
   GT130D>T2_130:
@@ -904,8 +911,8 @@ edges:
     b: T1_40
     mode: transfer
     len_cm: 9.5
-    n: 7
-    move_s: 2.47
+    n: 15
+    move_s: 2.53
     min_s: 2.4
     max_s: 4.06
   GT40D>T2_40:
@@ -976,8 +983,8 @@ edges:
     b: GT130D
     mode: transfer
     len_cm: 9.5
-    n: 9
-    move_s: 3.15
+    n: 16
+    move_s: 3.17
     min_s: 2.79
     max_s: 3.39
   T1_130>T2_130:
@@ -1021,8 +1028,8 @@ edges:
     b: GT40D
     mode: transfer
     len_cm: 9.5
-    n: 4
-    move_s: 3.17
+    n: 5
+    move_s: 3.18
     min_s: 2.96
     max_s: 3.33
   T1_40>GT40U:
@@ -1183,26 +1190,26 @@ edges:
     b: R58
     mode: wall
     len_cm: 26.0
-    n: 5
-    move_s: 6.25
+    n: 7
+    move_s: 6.3
     min_s: 6.21
-    max_s: 6.31
+    max_s: 6.39
   GB40>L70:
     a: GB40
     b: L70
     mode: wall
     len_cm: 38.0
-    n: 6
-    move_s: 8.9
-    min_s: 8.81
-    max_s: 8.94
+    n: 14
+    move_s: 8.89
+    min_s: 8.72
+    max_s: 9.03
   GT130D>R90:
     a: GT130D
     b: R90
     mode: wall
     len_cm: 38.0
-    n: 7
-    move_s: 8.81
+    n: 14
+    move_s: 8.85
     min_s: 8.73
     max_s: 8.96
   GT40D>L102:
@@ -1210,26 +1217,26 @@ edges:
     b: L102
     mode: wall
     len_cm: 26.0
-    n: 5
+    n: 6
     move_s: 6.33
     min_s: 6.26
-    max_s: 6.37
+    max_s: 6.43
   L102>GT40D:
     a: L102
     b: GT40D
     mode: wall
     len_cm: 26.0
-    n: 7
-    move_s: 6.78
-    min_s: 6.31
+    n: 15
+    move_s: 6.4
+    min_s: 6.22
     max_s: 7.01
   L102>L80:
     a: L102
     b: L80
     mode: wall
     len_cm: 22.0
-    n: 5
-    move_s: 5.52
+    n: 6
+    move_s: 5.53
     min_s: 5.46
     max_s: 5.61
   L70>GB40:
@@ -1237,26 +1244,26 @@ edges:
     b: GB40
     mode: wall
     len_cm: 38.0
-    n: 5
-    move_s: 8.8
-    min_s: 8.78
+    n: 6
+    move_s: 8.79
+    min_s: 8.7
     max_s: 8.99
   L70>L80:
     a: L70
     b: L80
     mode: wall
     len_cm: 10.0
-    n: 7
-    move_s: 3.66
-    min_s: 3.17
+    n: 15
+    move_s: 3.23
+    min_s: 3.13
     max_s: 3.83
   L80>L102:
     a: L80
     b: L102
     mode: wall
     len_cm: 22.0
-    n: 7
-    move_s: 5.7
+    n: 15
+    move_s: 5.49
     min_s: 5.33
     max_s: 5.88
   L80>L70:
@@ -1264,8 +1271,8 @@ edges:
     b: L70
     mode: wall
     len_cm: 10.0
-    n: 5
-    move_s: 3.03
+    n: 6
+    move_s: 3.06
     min_s: 3.0
     max_s: 3.17
   POCKET>CHARGER:
@@ -1282,7 +1289,7 @@ edges:
     b: GB130
     mode: wall
     len_cm: 26.0
-    n: 7
+    n: 14
     move_s: 6.27
     min_s: 6.18
     max_s: 6.94
@@ -1291,25 +1298,25 @@ edges:
     b: R90
     mode: wall
     len_cm: 32.0
-    n: 4
-    move_s: 7.6
-    min_s: 7.49
+    n: 6
+    move_s: 7.56
+    min_s: 7.43
     max_s: 7.68
   R90>GT130D:
     a: R90
     b: GT130D
     mode: wall
     len_cm: 38.0
-    n: 4
-    move_s: 8.82
-    min_s: 8.69
+    n: 6
+    move_s: 8.77
+    min_s: 8.66
     max_s: 8.88
   R90>R58:
     a: R90
     b: R58
     mode: wall
     len_cm: 32.0
-    n: 7
-    move_s: 7.6
+    n: 14
+    move_s: 7.56
     min_s: 7.38
     max_s: 7.75

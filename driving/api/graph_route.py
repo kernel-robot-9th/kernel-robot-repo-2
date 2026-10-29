@@ -98,7 +98,7 @@ class Graph:
         lane_corr = {k: v['corridor'] for k, v in lanes.items()}
         self.nodes, self.alias = {}, {}
         for k, n in g['nodes'].items():
-            if n.get('deferred'):
+            if n.get('deferred') or n.get('type') == 'dock':   # 정밀 주차 자리는 /drive 전용 (/goto 는 dock 구간으로 따로)
                 continue
             if n.get('type') == 'lane':        # 차선 노드 → 복도 가운데 노드
                 c = lane_corr[n['lane']]; x = n['xy'][0]

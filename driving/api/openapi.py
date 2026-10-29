@@ -104,6 +104,19 @@ def spec(server_url=None):
                                    'job': {'$ref': '#/components/schemas/Job'}, 'plan': {'$ref': '#/components/schemas/Plan'}}})),
                                    '400': _err('목적지 없음 / 그래프로 못 감 / dock 못 하는 목적지'),
                                    '409': _err('다른 작업이 도는 중 — 먼저 /cancel'), '503': _err('지금 위치 모름')}}},
+            '/drive': {'post': {'tags': ['FMS 구간 주행'], 'summary': '노드 순서대로 엣지 주행 (FMS 용) ⚠️ 로봇이 움직임',
+                                'description': 'route 첫 노드 = 지금 노드 (엣지 중간에 멈췄으면 "@here" + 그 엣지 끝 노드). '
+                                               'next = 묶음 다음 노드 (마지막 정지 위치 보정용). 진행은 GET /status 의 drive 칸.',
+                                'requestBody': {'required': True, **_json(schema={'type': 'object'}, example={
+                                    'cmd_id': 'b12-r1-003', 'route': ['B2_78', 'B2_40', 'GB40', 'L70'], 'next': 'L80', 'end_heading': None})},
+                                'responses': {'202': dict(description='받음: {accepted, cmd_id, edges, expected_s}', **_json(schema={'type': 'object'})),
+                                              '200': dict(description='같은 cmd_id 다시: 지금 drive 상태', **_json(schema={'type': 'object'})),
+                                              '400': _err('bad_request / unknown_edge'), '409': _err('busy / not_at_start / not_localized'),
+                                              '503': _err('not_ready (IR·odom·TF)')}}},
+            '/action': {'post': {'tags': ['FMS 구간 주행'], 'summary': '제자리 동작: spin (360°, 배송 완료) | rotate {heading} ⚠️ 로봇이 움직임',
+                                 'requestBody': {'required': True, **_json(schema={'type': 'object'}, example={'cmd_id': 'b12-r1-007', 'kind': 'spin'})},
+                                 'responses': {'202': dict(description='받음: {accepted, cmd_id, expected_s}', **_json(schema={'type': 'object'})), '400': _err('bad_request'), '409': _err('busy / not_localized'),
+                                               '503': _err('not_ready')}}},
             '/cancel': {'post': {'tags': ['주행'], 'summary': '지금 작업 멈춤 (작업 없으면 정지 명령만)', 'responses': {'200': dict(
                 description='OK', **_json(schema={'type': 'object', 'properties': {
                     'canceled': {'type': 'string', 'nullable': True}, 'state': {'type': 'string'}}}))}}},
