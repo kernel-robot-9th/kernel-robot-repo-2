@@ -1,0 +1,8 @@
+# 관제 PC 로봇 번호 ↔ 핑키 (API v1 의 robot / name). FMS 가 이 표로 맞춘다 (2026-10-27 사용자: "robot 1" 로 쓰고 FMS 에서 표).
+# url = 로봇 API (api/pinky_api.py, 포트 8080). sim_server.py --real-table 이면 url 있는 로봇은 실제 로봇으로 움직인다 (10-29).
+# 로봇 IP 는 DHCP 라 바뀔 수 있음 → 띄우기 전에 확인 (curl http://<IP>:8080/status 의 robot.serial).
+# 시뮬레이터는 위에서부터 로봇 수만큼 쓴다.
+robots:
+  - {robot: 1, name: pinky_6364, serial: 0d4763d873e291b7, url: 'http://10.42.0.171:8080'}
+  - {robot: 2, name: pinky_ee3a, serial: 8ab6b3c36a27f120, url: 'http://10.42.0.79:8080'}
+  - {robot: 3, name: pinky_62f4, serial: 1cdda27b956a1efc, url: 'http://10.42.0.131:8080'}

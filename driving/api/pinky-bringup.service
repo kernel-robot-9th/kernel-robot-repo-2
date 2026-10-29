@@ -1,0 +1,15 @@
+# Pinky 하드웨어 (bringup_robot.launch.xml: 모터·라이다·TF 등) — 사용자 systemd 서비스. 설치: install_service.sh
+#   systemctl --user status|restart|stop pinky-bringup      journalctl --user -u pinky-bringup -f
+[Unit]
+Description=Pinky bringup (bringup_robot.launch.xml)
+
+[Service]
+ExecStart=%h/pinky_map_rev3/api/run_ros.sh pinky_bringup bringup_robot.launch.xml
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGINT
+TimeoutStopSec=20
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,946 @@
+# 자동 생성: python3 build_graph.py (graph_spec.yaml 에서). 직접 고치지 말 것.
+# gap_bare_cm / gap_bowl_cm = 엣지를 따라 빈 로봇(Ø11) / 그릇 실은 로봇(Ø14) 과 실측 벽(map_drawn + 바닥 패널) 사이 최소 여유
+nodes:
+  B1_20:
+    xy: [20, 7.5]
+    type: lane
+    lane: B1
+    role: wait
+    note: '대기: 왼쪽 협로에서 나오는 로봇에게 비켜 주기'
+  B1_40:
+    xy: [40, 7.5]
+    type: lane
+    lane: B1
+  B1_78:
+    xy: [78, 7.5]
+    type: lane
+    lane: B1
+  B1_130:
+    xy: [130, 7.5]
+    type: lane
+    lane: B1
+  B1_180:
+    xy: [180, 7.5]
+    type: lane
+    lane: B1
+  B1_195:
+    xy: [195, 7.5]
+    type: lane
+    lane: B1
+  B2_20:
+    xy: [20, 22.5]
+    type: lane
+    lane: B2
+    role: wait
+    note: '대기: 왼쪽 협로에서 나오는 로봇에게 비켜 주기'
+  B2_40:
+    xy: [40, 22.5]
+    type: lane
+    lane: B2
+  B2_78:
+    xy: [78, 22.5]
+    type: lane
+    lane: B2
+  B2_130:
+    xy: [130, 22.5]
+    type: lane
+    lane: B2
+  B2_180:
+    xy: [180, 22.5]
+    type: lane
+    lane: B2
+  B2_195:
+    xy: [195, 22.5]
+    type: lane
+    lane: B2
+  T1_20:
+    xy: [20, 137.5]
+    type: lane
+    lane: T1
+    role: wait
+    note: '대기: 왼쪽 협로에서 나오는 로봇에게 비켜 주기'
+  T1_40:
+    xy: [40, 137.5]
+    type: lane
+    lane: T1
+  T1_98.9:
+    xy: [98.9, 137.5]
+    type: lane
+    lane: T1
+  T1_130:
+    xy: [130, 137.5]
+    type: lane
+    lane: T1
+  T1_175:
+    xy: [175, 137.5]
+    type: lane
+    lane: T1
+  T1_190:
+    xy: [190, 137.5]
+    type: lane
+    lane: T1
+  T2_40:
+    xy: [40, 152.5]
+    type: lane
+    lane: T2
+  T2_98.9:
+    xy: [98.9, 152.5]
+    type: lane
+    lane: T2
+  T2_130:
+    xy: [130, 152.5]
+    type: lane
+    lane: T2
+  T2_175:
+    xy: [175, 152.5]
+    type: lane
+    lane: T2
+  T2_190:
+    xy: [190, 152.5]
+    type: lane
+    lane: T2
+  GB40:
+    type: gate
+    xy: [40, 32]
+    jct: [B, 40]
+    note: 왼쪽 협로 아래 끝
+  GB78:
+    type: gate
+    xy: [78, 32]
+    jct: [B, 78]
+    note: 가운데 아래-왼 1인실 문
+  GB130:
+    type: gate
+    xy: [130, 32]
+    jct: [B, 130]
+    note: 오른쪽 협로 아래 끝
+  GB180:
+    type: gate
+    xy: [180, 32]
+    jct: [B, 180]
+    note: 수술실 문
+  GT40D:
+    type: gate
+    xy: [40, 128]
+    jct: [T, 40]
+    note: 왼쪽 협로 위 끝
+  GT130D:
+    type: gate
+    xy: [130, 128]
+    jct: [T, 130]
+    note: 오른쪽 협로 위 끝
+  GT175U:
+    type: gate
+    xy: [175, 162]
+    jct: [T, 175]
+    note: 오른쪽 4인실 문 (x 165~185)
+  GT40U:
+    type: gate
+    xy: [40, 162]
+    jct: [T, 40]
+    note: 왼쪽 4인실 문 (x 25~45). 35 갈림목은 40 으로 합침 (10-22)
+  GT99U:
+    type: gate
+    xy: [98.9, 162]
+    jct: [T, 98.9]
+    note: 약제실 문 (x 79~116), OMX x=98.9 에 맞춤
+  GT99D:
+    type: gate
+    xy: [98.9, 128]
+    jct: [T, 98.9]
+    note: 가운데 위-오른 1인실 문 (x 82~102). 97 갈림목은 98.9 로 합침 (10-22)
+  L70:
+    type: way
+    xy: [40, 70]
+    note: 왼쪽 협로 · 계단 통로 갈림목 (대각선 시작)
+  L80:
+    type: way
+    xy: [40, 80]
+    note: 왼쪽 협로 · 단일차선 협로 갈림목 (보류 가지)
+  L102:
+    type: way
+    xy: [40, 102]
+    note: 가운데 위-왼 1인실 문 앞
+  R58:
+    type: way
+    xy: [130, 58]
+    note: 가운데 아래-오른 1인실 문 앞
+  R90:
+    type: way
+    xy: [130, 90]
+    note: 오른쪽 협로 · 계단 통로 갈림목 (대각선 끝)
+  S15:
+    type: way
+    xy: [15, 80]
+    note: 단일차선 협로 (30cm). 10-26 엶
+  ROOM4_L:
+    type: stop
+    xy: [35, 178]
+    heading: 90
+    name: 101호 4인실 왼쪽
+  PHARMACY:
+    type: stop
+    xy: [98.9, 178.8]
+    heading: 90
+    name: 약제실 OMX
+    dock: aruco
+  PHARMACY_DOCK:
+    type: dock
+    xy: [98.9, 187.2]
+    heading: 90
+    note: 정밀 주차 자리 (마커 기준, 정차점보다 ~8cm 안쪽. aruco_ref amcl_axle y 188.9 → 라이다 187.2). /drive 전용
+  ROOM4_R:
+    type: stop
+    xy: [175, 178]
+    heading: 90
+    name: 102호 4인실 오른쪽
+  ROOM1_LU:
+    type: stop
+    xy: [15, 112]
+    heading: 180
+    name: 103호 1인실 왼쪽 위
+  ROOM1_LD:
+    type: stop
+    xy: [15, 50]
+    heading: 180
+    name: 106호 1인실 왼쪽 아래
+  ROOM1_CUL:
+    type: stop
+    xy: [65, 108]
+    heading: 90
+    name: 104호 1인실 가운데 위-왼
+  ROOM1_CUR:
+    type: stop
+    xy: [97, 115]
+    heading: 270
+    name: 105호 1인실 가운데 위-오른
+  ROOM1_CLL:
+    type: stop
+    xy: [72, 45]
+    heading: 90
+    name: 107호 1인실 가운데 아래-왼
+  ROOM1_CLR:
+    type: stop
+    xy: [105, 52]
+    heading: 180
+    name: 108호 1인실 가운데 아래-오른
+  SURGERY:
+    type: stop
+    xy: [180, 50]
+    heading: 90
+    name: 수술실
+  POCKET:
+    type: stop
+    xy: [200, 150]
+    heading: 0
+    name: 대기 포켓
+  CHARGER:
+    type: stop
+    xy: [200, 125]
+    heading: 270
+    name: 충전
+edges:
+- a: B1_20
+  b: B1_40
+  mode: line
+  zone: corr_B1
+  length_cm: 20.0
+  gap_bare_cm: 2.0
+  gap_bowl_cm: 0.5
+  gap_at: [20, 8]
+  auto: true
+- a: B1_40
+  b: B1_78
+  mode: line
+  zone: corr_B1
+  length_cm: 38.0
+  gap_bare_cm: 2.0
+  gap_bowl_cm: 0.5
+  gap_at: [40, 8]
+  auto: true
+- a: B1_78
+  b: B1_130
+  mode: line
+  zone: corr_B1
+  length_cm: 52.0
+  gap_bare_cm: 2.0
+  gap_bowl_cm: 0.5
+  gap_at: [78, 8]
+  auto: true
+- a: B1_130
+  b: B1_180
+  mode: line
+  zone: corr_B1
+  length_cm: 50.0
+  gap_bare_cm: 2.0
+  gap_bowl_cm: 0.5
+  gap_at: [130, 8]
+  auto: true
+- a: B1_180
+  b: B1_195
+  mode: line
+  zone: corr_B1
+  length_cm: 15.0
+  gap_bare_cm: 2.0
+  gap_bowl_cm: 0.5
+  gap_at: [180, 8]
+  auto: true
+- a: B2_20
+  b: B2_40
+  mode: line
+  zone: corr_B2
+  length_cm: 20.0
+  gap_bare_cm: 1.5
+  gap_bowl_cm: 0.0
+  gap_at: [20, 22]
+  auto: true
+- a: B2_40
+  b: B2_78
+  mode: line
+  zone: corr_B2
+  length_cm: 38.0
+  gap_bare_cm: 6.7
+  gap_bowl_cm: 5.2
+  gap_at: [40, 22]
+  auto: true
+- a: B2_78
+  b: B2_130
+  mode: line
+  zone: corr_B2
+  length_cm: 52.0
+  gap_bare_cm: 6.7
+  gap_bowl_cm: 5.2
+  gap_at: [130, 22]
+  auto: true
+- a: B2_130
+  b: B2_180
+  mode: line
+  zone: corr_B2
+  length_cm: 50.0
+  gap_bare_cm: 1.5
+  gap_bowl_cm: 0.0
+  gap_at: [140, 22]
+  auto: true
+- a: B2_180
+  b: B2_195
+  mode: line
+  zone: corr_B2
+  length_cm: 15.0
+  gap_bare_cm: 10.5
+  gap_bowl_cm: 9.0
+  gap_at: [194, 22]
+  auto: true
+- a: T1_20
+  b: T1_40
+  mode: line
+  zone: corr_T1
+  length_cm: 20.0
+  gap_bare_cm: 2.5
+  gap_bowl_cm: 1.0
+  gap_at: [20, 138]
+  auto: true
+- a: T1_40
+  b: T1_98.9
+  mode: line
+  zone: corr_T1
+  length_cm: 58.9
+  gap_bare_cm: 7.3
+  gap_bowl_cm: 5.8
+  gap_at: [40, 138]
+  auto: true
+- a: T1_98.9
+  b: T1_130
+  mode: line
+  zone: corr_T1
+  length_cm: 31.1
+  gap_bare_cm: 7.3
+  gap_bowl_cm: 5.8
+  gap_at: [130, 138]
+  auto: true
+- a: T1_130
+  b: T1_175
+  mode: line
+  zone: corr_T1
+  length_cm: 45.0
+  gap_bare_cm: 2.5
+  gap_bowl_cm: 1.0
+  gap_at: [140, 138]
+  auto: true
+- a: T1_175
+  b: T1_190
+  mode: line
+  zone: corr_T1
+  length_cm: 15.0
+  gap_bare_cm: 10.6
+  gap_bowl_cm: 9.1
+  gap_at: [175, 138]
+  auto: true
+- a: T2_40
+  b: T2_98.9
+  mode: line
+  zone: corr_T2
+  length_cm: 58.9
+  gap_bare_cm: 1.5
+  gap_bowl_cm: 0.0
+  gap_at: [50, 152]
+  auto: true
+- a: T2_98.9
+  b: T2_130
+  mode: line
+  zone: corr_T2
+  length_cm: 31.1
+  gap_bare_cm: 1.5
+  gap_bowl_cm: 0.0
+  gap_at: [116, 152]
+  auto: true
+- a: T2_130
+  b: T2_175
+  mode: line
+  zone: corr_T2
+  length_cm: 45.0
+  gap_bare_cm: 1.5
+  gap_bowl_cm: 0.0
+  gap_at: [130, 152]
+  auto: true
+- a: T2_175
+  b: T2_190
+  mode: line
+  zone: corr_T2
+  length_cm: 15.0
+  gap_bare_cm: 14.5
+  gap_bowl_cm: 13.0
+  gap_at: [190, 152]
+  auto: true
+- a: B1_20
+  b: B2_20
+  mode: transfer
+  zone: jct_B20
+  length_cm: 15.0
+  gap_bare_cm: 1.5
+  gap_bowl_cm: 0.0
+  gap_at: [20, 22]
+  crosses: []
+  auto: true
+- a: B1_40
+  b: B2_40
+  mode: transfer
+  zone: jct_B40
+  length_cm: 15.0
+  gap_bare_cm: 2.0
+  gap_bowl_cm: 0.5
+  gap_at: [40, 8]
+  crosses: []
+  auto: true
+- a: B1_78
+  b: B2_78
+  mode: transfer
+  zone: jct_B78
+  length_cm: 15.0
+  gap_bare_cm: 2.0
+  gap_bowl_cm: 0.5
+  gap_at: [78, 8]
+  crosses: []
+  auto: true
+- a: B1_130
+  b: B2_130
+  mode: transfer
+  zone: jct_B130
+  length_cm: 15.0
+  gap_bare_cm: 2.0
+  gap_bowl_cm: 0.5
+  gap_at: [130, 8]
+  crosses: []
+  auto: true
+- a: B1_180
+  b: B2_180
+  mode: transfer
+  zone: jct_B180
+  length_cm: 15.0
+  gap_bare_cm: 2.0
+  gap_bowl_cm: 0.5
+  gap_at: [180, 8]
+  crosses: []
+  auto: true
+- a: B1_195
+  b: B2_195
+  mode: transfer
+  zone: jct_B195
+  length_cm: 15.0
+  gap_bare_cm: 2.0
+  gap_bowl_cm: 0.5
+  gap_at: [195, 8]
+  crosses: []
+  auto: true
+- a: T1_40
+  b: T2_40
+  mode: transfer
+  zone: jct_T40
+  length_cm: 15.0
+  gap_bare_cm: 6.7
+  gap_bowl_cm: 5.2
+  gap_at: [40, 152]
+  crosses: []
+  auto: true
+- a: T1_98.9
+  b: T2_98.9
+  mode: transfer
+  zone: jct_T98.9
+  length_cm: 15.0
+  gap_bare_cm: 13.8
+  gap_bowl_cm: 12.3
+  gap_at: [99, 152]
+  crosses: []
+  auto: true
+- a: T1_130
+  b: T2_130
+  mode: transfer
+  zone: jct_T130
+  length_cm: 15.0
+  gap_bare_cm: 1.5
+  gap_bowl_cm: 0.0
+  gap_at: [130, 152]
+  crosses: []
+  auto: true
+- a: T1_175
+  b: T2_175
+  mode: transfer
+  zone: jct_T175
+  length_cm: 15.0
+  gap_bare_cm: 10.6
+  gap_bowl_cm: 9.1
+  gap_at: [175, 138]
+  crosses: []
+  auto: true
+- a: T1_190
+  b: T2_190
+  mode: transfer
+  zone: jct_T190
+  length_cm: 15.0
+  gap_bare_cm: 14.5
+  gap_bowl_cm: 13.0
+  gap_at: [190, 138]
+  crosses: []
+  auto: true
+- a: GB40
+  b: B2_40
+  mode: transfer
+  zone: jct_B40
+  length_cm: 9.5
+  gap_bare_cm: 4.5
+  gap_bowl_cm: 3.0
+  gap_at: [40, 32]
+  crosses: []
+  auto: true
+- a: GB40
+  b: B1_40
+  mode: transfer
+  zone: jct_B40
+  length_cm: 24.5
+  gap_bare_cm: 2.0
+  gap_bowl_cm: 0.5
+  gap_at: [40, 8]
+  crosses: [B2]
+  auto: true
+- a: GB78
+  b: B2_78
+  mode: transfer
+  zone: jct_B78
+  length_cm: 9.5
+  gap_bare_cm: 17.0
+  gap_bowl_cm: 15.5
+  gap_at: [78, 22]
+  crosses: []
+  auto: true
+- a: GB78
+  b: B1_78
+  mode: transfer
+  zone: jct_B78
+  length_cm: 24.5
+  gap_bare_cm: 2.0
+  gap_bowl_cm: 0.5
+  gap_at: [78, 8]
+  crosses: [B2]
+  auto: true
+- a: GB130
+  b: B2_130
+  mode: transfer
+  zone: jct_B130
+  length_cm: 9.5
+  gap_bare_cm: 4.5
+  gap_bowl_cm: 3.0
+  gap_at: [130, 32]
+  crosses: []
+  auto: true
+- a: GB130
+  b: B1_130
+  mode: transfer
+  zone: jct_B130
+  length_cm: 24.5
+  gap_bare_cm: 2.0
+  gap_bowl_cm: 0.5
+  gap_at: [130, 8]
+  crosses: [B2]
+  auto: true
+- a: GB180
+  b: B2_180
+  mode: transfer
+  zone: jct_B180
+  length_cm: 9.5
+  gap_bare_cm: 17.0
+  gap_bowl_cm: 15.5
+  gap_at: [180, 22]
+  crosses: []
+  auto: true
+- a: GB180
+  b: B1_180
+  mode: transfer
+  zone: jct_B180
+  length_cm: 24.5
+  gap_bare_cm: 2.0
+  gap_bowl_cm: 0.5
+  gap_at: [180, 8]
+  crosses: [B2]
+  auto: true
+- a: GT40D
+  b: T1_40
+  mode: transfer
+  zone: jct_T40
+  length_cm: 9.5
+  gap_bare_cm: 4.5
+  gap_bowl_cm: 3.0
+  gap_at: [40, 128]
+  crosses: []
+  auto: true
+- a: GT40D
+  b: T2_40
+  mode: transfer
+  zone: jct_T40
+  length_cm: 24.5
+  gap_bare_cm: 4.5
+  gap_bowl_cm: 3.0
+  gap_at: [40, 128]
+  crosses: [T1]
+  auto: true
+- a: GT130D
+  b: T1_130
+  mode: transfer
+  zone: jct_T130
+  length_cm: 9.5
+  gap_bare_cm: 4.5
+  gap_bowl_cm: 3.0
+  gap_at: [130, 128]
+  crosses: []
+  auto: true
+- a: GT130D
+  b: T2_130
+  mode: transfer
+  zone: jct_T130
+  length_cm: 24.5
+  gap_bare_cm: 1.5
+  gap_bowl_cm: 0.0
+  gap_at: [130, 152]
+  crosses: [T1]
+  auto: true
+- a: GT175U
+  b: T2_175
+  mode: transfer
+  zone: jct_T175
+  length_cm: 9.5
+  gap_bare_cm: 21.4
+  gap_bowl_cm: 19.9
+  gap_at: [175, 153]
+  crosses: []
+  auto: true
+- a: GT175U
+  b: T1_175
+  mode: transfer
+  zone: jct_T175
+  length_cm: 24.5
+  gap_bare_cm: 10.6
+  gap_bowl_cm: 9.1
+  gap_at: [175, 138]
+  crosses: [T2]
+  auto: true
+- a: GT40U
+  b: T2_40
+  mode: transfer
+  zone: jct_T40
+  length_cm: 9.5
+  gap_bare_cm: 4.5
+  gap_bowl_cm: 3.0
+  gap_at: [40, 160]
+  crosses: []
+  auto: true
+- a: GT40U
+  b: T1_40
+  mode: transfer
+  zone: jct_T40
+  length_cm: 24.5
+  gap_bare_cm: 4.5
+  gap_bowl_cm: 3.0
+  gap_at: [40, 160]
+  crosses: [T2]
+  auto: true
+- a: GT99U
+  b: T2_98.9
+  mode: transfer
+  zone: jct_T98.9
+  length_cm: 9.5
+  gap_bare_cm: 12.5
+  gap_bowl_cm: 11.0
+  gap_at: [99, 162]
+  crosses: []
+  auto: true
+- a: GT99U
+  b: T1_98.9
+  mode: transfer
+  zone: jct_T98.9
+  length_cm: 24.5
+  gap_bare_cm: 12.5
+  gap_bowl_cm: 11.0
+  gap_at: [99, 162]
+  crosses: [T2]
+  auto: true
+- a: GT99D
+  b: T1_98.9
+  mode: transfer
+  zone: jct_T98.9
+  length_cm: 9.5
+  gap_bare_cm: 22.5
+  gap_bowl_cm: 21.0
+  gap_at: [99, 128]
+  crosses: []
+  auto: true
+- a: GT99D
+  b: T2_98.9
+  mode: transfer
+  zone: jct_T98.9
+  length_cm: 24.5
+  gap_bare_cm: 13.8
+  gap_bowl_cm: 12.3
+  gap_at: [99, 152]
+  crosses: [T1]
+  auto: true
+- a: GB130
+  b: R58
+  mode: wall
+  zone: narrow_right
+  length_cm: 26.0
+  gap_bare_cm: 4.5
+  gap_bowl_cm: 3.0
+  gap_at: [130, 32]
+  wall:
+  - [140, 30]
+  - [140, 130]
+  note: 10-22 벽 따라가기로 주행 완료
+- a: R58
+  b: R90
+  mode: wall
+  zone: narrow_right
+  length_cm: 32.0
+  gap_bare_cm: 4.5
+  gap_bowl_cm: 3.0
+  gap_at: [130, 58]
+  wall:
+  - [140, 30]
+  - [140, 130]
+  note: 10-22 벽 따라가기로 주행 완료
+- a: R90
+  b: GT130D
+  mode: wall
+  zone: narrow_right
+  length_cm: 38.0
+  gap_bare_cm: 4.5
+  gap_bowl_cm: 3.0
+  gap_at: [130, 90]
+  wall:
+  - [140, 30]
+  - [140, 130]
+  note: 10-22 벽 따라가기로 주행 완료
+- a: GB40
+  b: L70
+  mode: wall
+  zone: narrow_left
+  length_cm: 38.0
+  gap_bare_cm: 4.5
+  gap_bowl_cm: 3.0
+  gap_at: [40, 32]
+  wall:
+  - [30, 30]
+  - [30, 70]
+  wall2:
+  - [30, 90]
+  - [30, 130]
+  note: y 70~90 은 벽 없음 → AMCL
+- a: L70
+  b: L80
+  mode: wall
+  zone: narrow_left
+  length_cm: 10.0
+  gap_bare_cm: 4.5
+  gap_bowl_cm: 3.0
+  gap_at: [40, 70]
+  wall:
+  - [30, 30]
+  - [30, 70]
+  wall2:
+  - [30, 90]
+  - [30, 130]
+  note: y 70~90 은 벽 없음 → AMCL
+- a: L80
+  b: L102
+  mode: wall
+  zone: narrow_left
+  length_cm: 22.0
+  gap_bare_cm: 4.5
+  gap_bowl_cm: 3.0
+  gap_at: [40, 90]
+  wall:
+  - [30, 30]
+  - [30, 70]
+  wall2:
+  - [30, 90]
+  - [30, 130]
+  note: y 70~90 은 벽 없음 → AMCL
+- a: L102
+  b: GT40D
+  mode: wall
+  zone: narrow_left
+  length_cm: 26.0
+  gap_bare_cm: 4.5
+  gap_bowl_cm: 3.0
+  gap_at: [40, 102]
+  wall:
+  - [30, 30]
+  - [30, 70]
+  wall2:
+  - [30, 90]
+  - [30, 130]
+  note: y 70~90 은 벽 없음 → AMCL
+- a: L70
+  b: R90
+  mode: nav
+  zone: center_corr
+  length_cm: 92.2
+  gap_bare_cm: 4.5
+  gap_bowl_cm: 3.0
+  gap_at: [40, 70]
+  note: '계단 통로 대각선 직선: 계단 모서리 (80,90)·(90,70) 정가운데를 지남'
+- a: GT99D
+  b: ROOM1_CUR
+  mode: nav
+  zone: room1_cur
+  length_cm: 13.1
+  gap_bare_cm: 9.5
+  gap_bowl_cm: 8.0
+  gap_at: [97, 115]
+- a: GT175U
+  b: ROOM4_R
+  mode: nav
+  zone: room4_r
+  length_cm: 16.0
+  gap_bare_cm: 16.5
+  gap_bowl_cm: 15.0
+  gap_at: [175, 178]
+- a: L102
+  b: ROOM1_CUL
+  mode: nav
+  zone: room1_cul
+  length_cm: 25.7
+  gap_bare_cm: 4.5
+  gap_bowl_cm: 3.0
+  gap_at: [40, 102]
+- a: GB78
+  b: ROOM1_CLL
+  mode: nav
+  zone: room1_cll
+  length_cm: 14.3
+  gap_bare_cm: 9.5
+  gap_bowl_cm: 8.0
+  gap_at: [72, 44]
+- a: R58
+  b: ROOM1_CLR
+  mode: nav
+  zone: room1_clr
+  length_cm: 25.7
+  gap_bare_cm: 4.5
+  gap_bowl_cm: 3.0
+  gap_at: [130, 58]
+- a: GB180
+  b: SURGERY
+  mode: nav
+  zone: surgery
+  length_cm: 18.0
+  gap_bare_cm: 22.6
+  gap_bowl_cm: 21.1
+  gap_at: [180, 32]
+- a: POCKET
+  b: CHARGER
+  mode: wall
+  zone: charger
+  length_cm: 25.0
+  gap_bare_cm: 4.5
+  gap_bowl_cm: 3.0
+  gap_at: [200, 150]
+  wall:
+  - [210, 116]
+  - [210, 160]
+  note: 10-22 Nav2 충돌 검사로 못 나감(오른쪽 바깥벽 9.9cm) → 바깥벽 x=210 따라가기
+- a: L80
+  b: S15
+  mode: nav
+  zone: narrow_single
+  length_cm: 25.0
+  gap_bare_cm: 4.5
+  gap_bowl_cm: 3.0
+  gap_at: [30, 80]
+- a: S15
+  b: ROOM1_LU
+  mode: nav
+  zone: room1_lu
+  length_cm: 32.0
+  gap_bare_cm: 9.5
+  gap_bowl_cm: 8.0
+  gap_at: [15, 90]
+- a: S15
+  b: ROOM1_LD
+  mode: nav
+  zone: room1_ld
+  length_cm: 30.0
+  gap_bare_cm: 9.5
+  gap_bowl_cm: 8.0
+  gap_at: [15, 70]
+- a: T2_190
+  b: POCKET
+  mode: nav
+  zone: pocket
+  length_cm: 10.3
+  gap_bare_cm: 4.5
+  gap_bowl_cm: 3.0
+  gap_at: [200, 150]
+  note: 복도 동쪽 끝 → 대기 포켓
+- a: ROOM4_L
+  b: GT40U
+  mode: nav
+  zone: room4_l
+  length_cm: 16.8
+  gap_bare_cm: 4.9
+  gap_bowl_cm: 3.4
+  gap_at: [40, 162]
+- a: PHARMACY
+  b: GT99U
+  mode: nav
+  zone: pharmacy
+  length_cm: 16.8
+  gap_bare_cm: 12.5
+  gap_bowl_cm: 11.0
+  gap_at: [99, 166]
+- a: PHARMACY
+  b: PHARMACY_DOCK
+  mode: dock
+  zone: pharmacy
+  length_cm: 8.4
+  gap_bare_cm: 16.4
+  gap_bowl_cm: 14.9
+  gap_at: [99, 179]
+  note: 들어가기 = precise_dock.py, 나오기 = 방향 그대로 뒤로 (10-29)

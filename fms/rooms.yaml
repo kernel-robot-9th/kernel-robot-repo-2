@@ -1,0 +1,14 @@
+# 관제 PC 요청의 병실 이름 → FMS 그래프 노드
+# code = 관제 PC 가 쓰는 방 번호 (2026-10-27 사용자 확정: 수술실, 101호~108호. 약제실은 상태 표시용이라 주문 목적지 아님).
+# aliases 에 더 넣으면 그 이름도 받는다 (대소문자·띄어쓰기 무시).
+# contam = 방문(도착) 때 오염도 증가. 물품은 무엇이든 약제실(OMX)에서 싣는다.
+rooms:
+  ROOM1_CUL: {code: 104호, name: 1인실 가운데 위-왼, contam: 10, aliases: [104호, 104, 1인실 위-왼]}
+  ROOM1_CUR: {code: 105호, name: 1인실 가운데 위-오른, contam: 10, aliases: [105호, 105, 1인실 위-오른]}
+  ROOM1_CLL: {code: 107호, name: 1인실 가운데 아래-왼, contam: 10, aliases: [107호, 107, 1인실 아래-왼]}
+  ROOM1_CLR: {code: 108호, name: 1인실 가운데 아래-오른, contam: 10, aliases: [108호, 108, 1인실 아래-오른]}
+  ROOM1_LU: {code: 103호, name: 1인실 왼쪽 위, contam: 10, aliases: [103호, 103]}
+  ROOM1_LD: {code: 106호, name: 1인실 왼쪽 아래, contam: 10, aliases: [106호, 106]}
+  ROOM4_L: {code: 101호, name: 4인실 왼쪽, contam: 50, aliases: [101호, 101]}
+  ROOM4_R: {code: 102호, name: 4인실 오른쪽, contam: 50, aliases: [102호, 102]}
+  SURGERY: {code: 수술실, name: 수술실, contam: 0, aliases: [수술실]}

@@ -1,0 +1,86 @@
+# 주행 그래프 요약 (사람·편집기가 고치는 파일) → python3 build_graph.py → graph.yaml (노드·엣지 전부), graph.png
+# 편집기: python3 graph_editor.py → http://localhost:8765  (저장하면 이 파일을 다시 쓰고, 이전 것은 backup/ 에 둔다)
+# 좌표: 그림 cm (왼쪽 아래 원점, y 위), 위치 = 라이다 중심, 방향 deg (0 = +x, 90 = +y)
+# 자동으로 생기는 것: 차선 노드 <차선>_<x> (예: B1_130) 와 차선 엣지(line), 경계점(gate) <-> 같은 x 의 차선들(transfer)
+# lane_skip: 못 가는 차선 노드 목록 — 그 노드와 거기 붙는 자동 엣지를 만들지 않음 (예: T2_20 콘센트 자리)
+# 노드 type: gate(복도 경계 바로 밖, jct = [복도, x] 갈림목과 연결) / way(경유점) / stop(목적지, heading)
+# 엣지 mode
+#   line     교행 복도 흰 테이프 따라가기 (IR). 차선 방향 고정 없음 — 관제가 차선을 골라 예약
+#   transfer 복도 차선 <-> 경계점. 들어갈 때: 직진하다 IR 로 테이프 잡고 꺾기 / 나올 때: odom 으로 갈림목 x 에서 꺾어 나오고 AMCL 재확인
+#            먼 차선으로 갈 때는 가까운 차선을 가로지른다 → 갈림목 구역(jct_*) 예약
+#   wall     협로 라이다 벽 따라가기 (corridor_drive.py). wall = 따라갈 벽 선분, 벽 없는 구간은 AMCL
+#   nav      Nav2 FollowPath
+# zone: 예약 단위. 같은 zone 의 엣지는 한 번에 1대 (corr_* 는 차선마다 따로)
+# 2026-10-22 사용자 결정: 목적지 12곳, 차선 2줄(벽에서 7.5cm, 테이프 폭 2.4cm), 우측통행 고집 안 함,
+#   왼쪽 협로도 벽 따라가기, 단일차선 협로·왼쪽 1인실은 보류(10-26 엶), 계단 통로는 Nav2 대각선 (40,70)-(130,90) 직선
+# 로봇 몸체 Ø11, OMX 그릇 Ø14 (그릇 실은 상태). 교행 허용: 빈 로봇끼리, 빈 로봇 + 그릇 로봇. 그릇 로봇끼리는 교행 금지
+
+lanes:            # 교행 복도 차선 = 흰 테이프 중심
+  B1: {y: 7.5, corridor: B, note: 아래 복도 아래 차선 (y=0 = 바닥 패널 앞면)}
+  B2: {y: 22.5, corridor: B, note: 아래 복도 위 차선}
+  T1: {y: 137.5, corridor: T, note: 위 복도 아래 차선}
+  T2: {y: 152.5, corridor: T, note: 위 복도 위 차선}
+junctions:        # 복도 위 갈림목 x → 차선마다 노드 (예: B1_130, B2_130)
+  B: [20, 40, 78, 130, 180, 195]
+  T: [20, 40, 98.9, 130, 175, 190]
+lane_skip: [T2_20]   # 못 가는 차선 노드 — 노드·차선 엣지·transfer 를 만들지 않음 (T2_20: 콘센트 자리, 10-28 사용자)
+junction_info:    # 갈림목(차선 노드)에 붙이는 속성. role: wait = 대기(비켜 주기) 자리
+  B:
+    '20': {role: wait, note: '대기: 왼쪽 협로에서 나오는 로봇에게 비켜 주기'}
+  T:
+    '20': {role: wait, note: '대기: 왼쪽 협로에서 나오는 로봇에게 비켜 주기'}
+
+nodes:
+  GB40: {type: gate, xy: [40, 32], jct: [B, 40], note: 왼쪽 협로 아래 끝}
+  GB78: {type: gate, xy: [78, 32], jct: [B, 78], note: 가운데 아래-왼 1인실 문}
+  GB130: {type: gate, xy: [130, 32], jct: [B, 130], note: 오른쪽 협로 아래 끝}
+  GB180: {type: gate, xy: [180, 32], jct: [B, 180], note: 수술실 문}
+  GT40D: {type: gate, xy: [40, 128], jct: [T, 40], note: 왼쪽 협로 위 끝}
+  GT130D: {type: gate, xy: [130, 128], jct: [T, 130], note: 오른쪽 협로 위 끝}
+  GT175U: {type: gate, xy: [175, 162], jct: [T, 175], note: 오른쪽 4인실 문 (x 165~185)}
+  GT40U: {type: gate, xy: [40, 162], jct: [T, 40], note: 왼쪽 4인실 문 (x 25~45). 35 갈림목은 40 으로 합침 (10-22)}
+  GT99U: {type: gate, xy: [98.9, 162], jct: [T, 98.9], note: '약제실 문 (x 79~116), OMX x=98.9 에 맞춤'}
+  GT99D: {type: gate, xy: [98.9, 128], jct: [T, 98.9], note: 가운데 위-오른 1인실 문 (x 82~102). 97 갈림목은 98.9 로 합침 (10-22)}
+  L70: {type: way, xy: [40, 70], note: 왼쪽 협로 · 계단 통로 갈림목 (대각선 시작)}
+  L80: {type: way, xy: [40, 80], note: 왼쪽 협로 · 단일차선 협로 갈림목 (보류 가지)}
+  L102: {type: way, xy: [40, 102], note: 가운데 위-왼 1인실 문 앞}
+  R58: {type: way, xy: [130, 58], note: 가운데 아래-오른 1인실 문 앞}
+  R90: {type: way, xy: [130, 90], note: 오른쪽 협로 · 계단 통로 갈림목 (대각선 끝)}
+  S15: {type: way, xy: [15, 80], note: '단일차선 협로 (30cm). 10-26 엶'}
+  ROOM4_L: {type: stop, xy: [35, 178], heading: 90, name: 101호 4인실 왼쪽}
+  PHARMACY: {type: stop, xy: [98.9, 178.8], heading: 90, name: 약제실 OMX, dock: aruco}
+  PHARMACY_DOCK: {type: dock, xy: [98.9, 187.2], heading: 90, note: '정밀 주차 자리 (마커 기준, 정차점보다 ~8cm 안쪽. aruco_ref amcl_axle y 188.9 → 라이다 187.2). /drive 전용'}
+  ROOM4_R: {type: stop, xy: [175, 178], heading: 90, name: 102호 4인실 오른쪽}
+  ROOM1_LU: {type: stop, xy: [15, 112], heading: 180, name: 103호 1인실 왼쪽 위}
+  ROOM1_LD: {type: stop, xy: [15, 50], heading: 180, name: 106호 1인실 왼쪽 아래}
+  ROOM1_CUL: {type: stop, xy: [65, 108], heading: 90, name: 104호 1인실 가운데 위-왼}
+  ROOM1_CUR: {type: stop, xy: [97, 115], heading: 270, name: 105호 1인실 가운데 위-오른}
+  ROOM1_CLL: {type: stop, xy: [72, 45], heading: 90, name: 107호 1인실 가운데 아래-왼}
+  ROOM1_CLR: {type: stop, xy: [105, 52], heading: 180, name: 108호 1인실 가운데 아래-오른}
+  SURGERY: {type: stop, xy: [180, 50], heading: 90, name: 수술실}
+  POCKET: {type: stop, xy: [200, 150], heading: 0, name: 대기 포켓}
+  CHARGER: {type: stop, xy: [200, 125], heading: 270, name: 충전}
+
+edges:            # 양방향. 차선 노드(B1_130 등)도 a/b 로 쓸 수 있음
+  - {a: GB130, b: R58, mode: wall, zone: narrow_right, wall: [[140, 30], [140, 130]], note: 10-22 벽 따라가기로 주행 완료}
+  - {a: R58, b: R90, mode: wall, zone: narrow_right, wall: [[140, 30], [140, 130]], note: 10-22 벽 따라가기로 주행 완료}
+  - {a: R90, b: GT130D, mode: wall, zone: narrow_right, wall: [[140, 30], [140, 130]], note: 10-22 벽 따라가기로 주행 완료}
+  - {a: GB40, b: L70, mode: wall, zone: narrow_left, wall: [[30, 30], [30, 70]], wall2: [[30, 90], [30, 130]], note: y 70~90 은 벽 없음 → AMCL}
+  - {a: L70, b: L80, mode: wall, zone: narrow_left, wall: [[30, 30], [30, 70]], wall2: [[30, 90], [30, 130]], note: y 70~90 은 벽 없음 → AMCL}
+  - {a: L80, b: L102, mode: wall, zone: narrow_left, wall: [[30, 30], [30, 70]], wall2: [[30, 90], [30, 130]], note: y 70~90 은 벽 없음 → AMCL}
+  - {a: L102, b: GT40D, mode: wall, zone: narrow_left, wall: [[30, 30], [30, 70]], wall2: [[30, 90], [30, 130]], note: y 70~90 은 벽 없음 → AMCL}
+  - {a: L70, b: R90, mode: nav, zone: center_corr, note: '계단 통로 대각선 직선: 계단 모서리 (80,90)·(90,70) 정가운데를 지남'}
+  - {a: GT99D, b: ROOM1_CUR, mode: nav, zone: room1_cur}
+  - {a: GT175U, b: ROOM4_R, mode: nav, zone: room4_r}
+  - {a: L102, b: ROOM1_CUL, mode: nav, zone: room1_cul}
+  - {a: GB78, b: ROOM1_CLL, mode: nav, zone: room1_cll}
+  - {a: R58, b: ROOM1_CLR, mode: nav, zone: room1_clr}
+  - {a: GB180, b: SURGERY, mode: nav, zone: surgery}
+  - {a: POCKET, b: CHARGER, mode: wall, zone: charger, wall: [[210, 116], [210, 160]], note: '10-22 Nav2 충돌 검사로 못 나감(오른쪽 바깥벽 9.9cm) → 바깥벽 x=210 따라가기'}
+  - {a: L80, b: S15, mode: nav, zone: narrow_single}
+  - {a: S15, b: ROOM1_LU, mode: nav, zone: room1_lu}
+  - {a: S15, b: ROOM1_LD, mode: nav, zone: room1_ld}
+  - {a: T2_190, b: POCKET, mode: nav, zone: pocket, note: 복도 동쪽 끝 → 대기 포켓}
+  - {a: ROOM4_L, b: GT40U, mode: nav, zone: room4_l}
+  - {a: PHARMACY, b: GT99U, mode: nav, zone: pharmacy}
+  - {a: PHARMACY, b: PHARMACY_DOCK, mode: dock, zone: pharmacy, note: '들어가기 = precise_dock.py, 나오기 = 방향 그대로 뒤로 (10-29)'}

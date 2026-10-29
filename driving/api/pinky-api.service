@@ -1,0 +1,18 @@
+# Pinky REST API (포트 8080) — 사용자 systemd 서비스. 설치: ~/pinky_map_rev3/api/install_service.sh
+# 부팅하면 로그인 없이 뜬다 (loginctl enable-linger). bringup·Nav2 는 따로 (안 떠 있으면 /status 의 nav2_ready=false)
+#   systemctl --user status pinky-api      journalctl --user -u pinky-api -f
+#   systemctl --user restart pinky-api     systemctl --user disable --now pinky-api   (끄기)
+[Unit]
+Description=Pinky REST API (port 8080)
+
+[Service]
+ExecStart=%h/pinky_map_rev3/api/run_api.sh
+WorkingDirectory=%h/pinky_map_rev3/api
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=10
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target

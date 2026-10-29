@@ -1,0 +1,1322 @@
+note: edge_run.py 실측 (tools/edge_costs.py --write). move_s = 노드에서 멈춰 있다가 다음 노드에 멈출
+  때까지 (회전 뺌)
+made: 2026-10-29 17:46
+files:
+- edges_1027_180400.csv
+- edges_1027_190338.csv
+- edges_1027_191424.csv
+- edges_1028_195200.csv
+- edges_1027_213935.csv
+- edges_1028_201449.csv
+- edges_1028_201922.csv
+- edges_1028_203323.csv
+- edges_1028_204354.csv
+- edges_1028_212950.csv
+- edges_1028_214438.csv
+- edges_1028_221100.csv
+- edges_1029_110210.csv
+- edges_1029_112145.csv
+- edges_1029_114503.csv
+- edges_1029_115202.csv
+- edges_1029_120803.csv
+- edges_1029_140721.csv
+- edges_1029_141748.csv
+- edges_1029_143059.csv
+- edges_1029_153352.csv
+- edges_1029_154125.csv
+- edges_1029_155549.csv
+- edges_1029_164025.csv
+- edges_1029_164301.csv
+- edges_1029_165231.csv
+rotate:
+  r0_s: 2.45
+  s_per_deg: 0.0282
+  n: 163
+  src:
+  - edges_1029_141748.csv
+  - edges_1029_143059.csv
+  - edges_1029_153352.csv
+  - edges_1029_154125.csv
+  - edges_1029_155549.csv
+  - edges_1029_164025.csv
+  - edges_1029_164301.csv
+  - edges_1029_165231.csv
+edges:
+  B1_130>B1_180:
+    a: B1_130
+    b: B1_180
+    mode: line
+    len_cm: 50.0
+    n: 5
+    move_s: 11.18
+    min_s: 10.98
+    max_s: 12.11
+  B1_130>B1_78:
+    a: B1_130
+    b: B1_78
+    mode: line
+    len_cm: 52.0
+    n: 5
+    move_s: 11.81
+    min_s: 11.45
+    max_s: 11.81
+  B1_180>B1_130:
+    a: B1_180
+    b: B1_130
+    mode: line
+    len_cm: 50.0
+    n: 6
+    move_s: 11.47
+    min_s: 11.16
+    max_s: 11.61
+  B1_180>B1_195:
+    a: B1_180
+    b: B1_195
+    mode: line
+    len_cm: 15.0
+    n: 4
+    move_s: 4.17
+    min_s: 4.01
+    max_s: 4.31
+  B1_195>B1_180:
+    a: B1_195
+    b: B1_180
+    mode: line
+    len_cm: 15.0
+    n: 5
+    move_s: 4.95
+    min_s: 4.7
+    max_s: 5.19
+  B1_20>B1_40:
+    a: B1_20
+    b: B1_40
+    mode: line
+    len_cm: 20.0
+    n: 4
+    move_s: 6.12
+    min_s: 5.48
+    max_s: 6.55
+  B1_40>B1_20:
+    a: B1_40
+    b: B1_20
+    mode: line
+    len_cm: 20.0
+    n: 5
+    move_s: 5.53
+    min_s: 5.48
+    max_s: 7.36
+  B1_40>B1_78:
+    a: B1_40
+    b: B1_78
+    mode: line
+    len_cm: 38.0
+    n: 4
+    move_s: 9.01
+    min_s: 8.6
+    max_s: 9.36
+  B1_78>B1_130:
+    a: B1_78
+    b: B1_130
+    mode: line
+    len_cm: 52.0
+    n: 5
+    move_s: 11.78
+    min_s: 11.46
+    max_s: 12.38
+  B1_78>B1_40:
+    a: B1_78
+    b: B1_40
+    mode: line
+    len_cm: 38.0
+    n: 5
+    move_s: 8.88
+    min_s: 8.69
+    max_s: 9.55
+  B2_130>B2_180:
+    a: B2_130
+    b: B2_180
+    mode: line
+    len_cm: 50.0
+    n: 8
+    move_s: 11.34
+    min_s: 11.03
+    max_s: 11.68
+  B2_130>B2_78:
+    a: B2_130
+    b: B2_78
+    mode: line
+    len_cm: 52.0
+    n: 14
+    move_s: 11.87
+    min_s: 11.33
+    max_s: 12.15
+  B2_180>B2_130:
+    a: B2_180
+    b: B2_130
+    mode: line
+    len_cm: 50.0
+    n: 8
+    move_s: 11.53
+    min_s: 11.07
+    max_s: 11.88
+  B2_180>B2_195:
+    a: B2_180
+    b: B2_195
+    mode: line
+    len_cm: 15.0
+    n: 7
+    move_s: 4.13
+    min_s: 3.95
+    max_s: 4.16
+  B2_195>B2_180:
+    a: B2_195
+    b: B2_180
+    mode: line
+    len_cm: 15.0
+    n: 6
+    move_s: 4.82
+    min_s: 4.6
+    max_s: 4.86
+  B2_20>B2_40:
+    a: B2_20
+    b: B2_40
+    mode: line
+    len_cm: 20.0
+    n: 5
+    move_s: 5.95
+    min_s: 5.63
+    max_s: 6.36
+  B2_40>B2_20:
+    a: B2_40
+    b: B2_20
+    mode: line
+    len_cm: 20.0
+    n: 5
+    move_s: 5.78
+    min_s: 5.15
+    max_s: 6.11
+  B2_40>B2_78:
+    a: B2_40
+    b: B2_78
+    mode: line
+    len_cm: 38.0
+    n: 5
+    move_s: 9.01
+    min_s: 8.83
+    max_s: 9.28
+  B2_78>B2_130:
+    a: B2_78
+    b: B2_130
+    mode: line
+    len_cm: 52.0
+    n: 5
+    move_s: 11.76
+    min_s: 11.48
+    max_s: 11.86
+  B2_78>B2_40:
+    a: B2_78
+    b: B2_40
+    mode: line
+    len_cm: 38.0
+    n: 11
+    move_s: 8.85
+    min_s: 8.25
+    max_s: 9.33
+  T1_130>T1_175:
+    a: T1_130
+    b: T1_175
+    mode: line
+    len_cm: 45.0
+    n: 8
+    move_s: 10.14
+    min_s: 10.07
+    max_s: 10.48
+  T1_130>T1_98.9:
+    a: T1_130
+    b: T1_98.9
+    mode: line
+    len_cm: 31.1
+    n: 6
+    move_s: 7.33
+    min_s: 7.07
+    max_s: 7.8
+  T1_175>T1_130:
+    a: T1_175
+    b: T1_130
+    mode: line
+    len_cm: 45.0
+    n: 6
+    move_s: 10.18
+    min_s: 9.88
+    max_s: 10.75
+  T1_175>T1_190:
+    a: T1_175
+    b: T1_190
+    mode: line
+    len_cm: 15.0
+    n: 5
+    move_s: 4.09
+    min_s: 3.95
+    max_s: 4.52
+  T1_190>T1_175:
+    a: T1_190
+    b: T1_175
+    mode: line
+    len_cm: 15.0
+    n: 4
+    move_s: 4.76
+    min_s: 4.31
+    max_s: 5.03
+  T1_20>T1_40:
+    a: T1_20
+    b: T1_40
+    mode: line
+    len_cm: 20.0
+    n: 5
+    move_s: 5.65
+    min_s: 5.26
+    max_s: 5.73
+  T1_40>T1_20:
+    a: T1_40
+    b: T1_20
+    mode: line
+    len_cm: 20.0
+    n: 5
+    move_s: 5.06
+    min_s: 4.89
+    max_s: 5.35
+  T1_40>T1_98.9:
+    a: T1_40
+    b: T1_98.9
+    mode: line
+    len_cm: 58.9
+    n: 14
+    move_s: 13.36
+    min_s: 12.61
+    max_s: 13.61
+  T1_98.9>T1_130:
+    a: T1_98.9
+    b: T1_130
+    mode: line
+    len_cm: 31.1
+    n: 14
+    move_s: 7.38
+    min_s: 6.75
+    max_s: 7.8
+  T1_98.9>T1_40:
+    a: T1_98.9
+    b: T1_40
+    mode: line
+    len_cm: 58.9
+    n: 5
+    move_s: 12.76
+    min_s: 12.61
+    max_s: 12.86
+  T2_130>T2_175:
+    a: T2_130
+    b: T2_175
+    mode: line
+    len_cm: 45.0
+    n: 4
+    move_s: 9.99
+    min_s: 9.88
+    max_s: 10.06
+  T2_130>T2_98.9:
+    a: T2_130
+    b: T2_98.9
+    mode: line
+    len_cm: 31.1
+    n: 5
+    move_s: 7.44
+    min_s: 7.42
+    max_s: 7.64
+  T2_175>T2_130:
+    a: T2_175
+    b: T2_130
+    mode: line
+    len_cm: 45.0
+    n: 5
+    move_s: 9.89
+    min_s: 9.86
+    max_s: 9.98
+  T2_175>T2_190:
+    a: T2_175
+    b: T2_190
+    mode: line
+    len_cm: 15.0
+    n: 4
+    move_s: 3.94
+    min_s: 3.63
+    max_s: 4.02
+  T2_190>T2_175:
+    a: T2_190
+    b: T2_175
+    mode: line
+    len_cm: 15.0
+    n: 5
+    move_s: 4.16
+    min_s: 4.07
+    max_s: 4.58
+  T2_40>T2_98.9:
+    a: T2_40
+    b: T2_98.9
+    mode: line
+    len_cm: 58.9
+    n: 4
+    move_s: 13.19
+    min_s: 12.91
+    max_s: 13.46
+  T2_98.9>T2_130:
+    a: T2_98.9
+    b: T2_130
+    mode: line
+    len_cm: 31.1
+    n: 4
+    move_s: 7.2
+    min_s: 7.11
+    max_s: 7.25
+  T2_98.9>T2_40:
+    a: T2_98.9
+    b: T2_40
+    mode: line
+    len_cm: 58.9
+    n: 5
+    move_s: 12.63
+    min_s: 12.43
+    max_s: 12.93
+  GB180>SURGERY:
+    a: GB180
+    b: SURGERY
+    mode: nav
+    len_cm: 18.0
+    n: 4
+    move_s: 4.65
+    min_s: 4.63
+    max_s: 4.71
+  GB78>ROOM1_CLL:
+    a: GB78
+    b: ROOM1_CLL
+    mode: nav
+    len_cm: 14.3
+    n: 4
+    move_s: 3.79
+    min_s: 3.74
+    max_s: 4.0
+  GT175U>ROOM4_R:
+    a: GT175U
+    b: ROOM4_R
+    mode: nav
+    len_cm: 16.0
+    n: 4
+    move_s: 4.28
+    min_s: 4.23
+    max_s: 4.31
+  GT40U>ROOM4_L:
+    a: GT40U
+    b: ROOM4_L
+    mode: nav
+    len_cm: 16.8
+    n: 4
+    move_s: 4.25
+    min_s: 4.19
+    max_s: 4.36
+  GT99D>ROOM1_CUR:
+    a: GT99D
+    b: ROOM1_CUR
+    mode: nav
+    len_cm: 13.1
+    n: 4
+    move_s: 3.75
+    min_s: 3.71
+    max_s: 3.92
+  GT99U>PHARMACY:
+    a: GT99U
+    b: PHARMACY
+    mode: nav
+    len_cm: 16.8
+    n: 4
+    move_s: 4.56
+    min_s: 4.41
+    max_s: 10.76
+  L102>ROOM1_CUL:
+    a: L102
+    b: ROOM1_CUL
+    mode: nav
+    len_cm: 25.7
+    n: 4
+    move_s: 6.56
+    min_s: 6.41
+    max_s: 6.62
+  L70>R90:
+    a: L70
+    b: R90
+    mode: nav
+    len_cm: 92.2
+    n: 4
+    move_s: 19.82
+    min_s: 19.76
+    max_s: 20.0
+  L80>S15:
+    a: L80
+    b: S15
+    mode: nav
+    len_cm: 25.0
+    n: 4
+    move_s: 6.43
+    min_s: 6.39
+    max_s: 6.48
+  PHARMACY>GT99U:
+    a: PHARMACY
+    b: GT99U
+    mode: nav
+    len_cm: 16.8
+    n: 4
+    move_s: 5.21
+    min_s: 5.13
+    max_s: 5.25
+  POCKET>T2_190:
+    a: POCKET
+    b: T2_190
+    mode: nav
+    len_cm: 10.3
+    n: 4
+    move_s: 3.28
+    min_s: 3.22
+    max_s: 3.34
+  R58>ROOM1_CLR:
+    a: R58
+    b: ROOM1_CLR
+    mode: nav
+    len_cm: 25.7
+    n: 4
+    move_s: 6.63
+    min_s: 6.59
+    max_s: 6.73
+  R90>L70:
+    a: R90
+    b: L70
+    mode: nav
+    len_cm: 92.2
+    n: 4
+    move_s: 20.12
+    min_s: 19.79
+    max_s: 21.6
+  ROOM1_CLL>GB78:
+    a: ROOM1_CLL
+    b: GB78
+    mode: nav
+    len_cm: 14.3
+    n: 4
+    move_s: 4.69
+    min_s: 4.49
+    max_s: 4.89
+  ROOM1_CLR>R58:
+    a: ROOM1_CLR
+    b: R58
+    mode: nav
+    len_cm: 25.7
+    n: 4
+    move_s: 6.92
+    min_s: 6.89
+    max_s: 7.04
+  ROOM1_CUL>L102:
+    a: ROOM1_CUL
+    b: L102
+    mode: nav
+    len_cm: 25.7
+    n: 4
+    move_s: 6.88
+    min_s: 6.81
+    max_s: 6.94
+  ROOM1_CUR>GT99D:
+    a: ROOM1_CUR
+    b: GT99D
+    mode: nav
+    len_cm: 13.1
+    n: 4
+    move_s: 4.46
+    min_s: 4.35
+    max_s: 4.57
+  ROOM1_LD>S15:
+    a: ROOM1_LD
+    b: S15
+    mode: nav
+    len_cm: 30.0
+    n: 4
+    move_s: 7.83
+    min_s: 7.74
+    max_s: 7.94
+  ROOM1_LU>S15:
+    a: ROOM1_LU
+    b: S15
+    mode: nav
+    len_cm: 32.0
+    n: 4
+    move_s: 8.25
+    min_s: 8.21
+    max_s: 8.32
+  ROOM4_L>GT40U:
+    a: ROOM4_L
+    b: GT40U
+    mode: nav
+    len_cm: 16.8
+    n: 4
+    move_s: 5.19
+    min_s: 5.02
+    max_s: 5.32
+  ROOM4_R>GT175U:
+    a: ROOM4_R
+    b: GT175U
+    mode: nav
+    len_cm: 16.0
+    n: 4
+    move_s: 5.1
+    min_s: 5.01
+    max_s: 5.15
+  S15>L80:
+    a: S15
+    b: L80
+    mode: nav
+    len_cm: 25.0
+    n: 4
+    move_s: 6.28
+    min_s: 6.06
+    max_s: 6.33
+  S15>ROOM1_LD:
+    a: S15
+    b: ROOM1_LD
+    mode: nav
+    len_cm: 30.0
+    n: 4
+    move_s: 7.25
+    min_s: 6.96
+    max_s: 7.27
+  S15>ROOM1_LU:
+    a: S15
+    b: ROOM1_LU
+    mode: nav
+    len_cm: 32.0
+    n: 4
+    move_s: 7.35
+    min_s: 7.31
+    max_s: 7.41
+  SURGERY>GB180:
+    a: SURGERY
+    b: GB180
+    mode: nav
+    len_cm: 18.0
+    n: 4
+    move_s: 5.32
+    min_s: 5.21
+    max_s: 5.4
+  T2_190>POCKET:
+    a: T2_190
+    b: POCKET
+    mode: nav
+    len_cm: 10.3
+    n: 4
+    move_s: 3.38
+    min_s: 3.26
+    max_s: 3.45
+  B1_130>B2_130:
+    a: B1_130
+    b: B2_130
+    mode: transfer
+    len_cm: 15.0
+    n: 6
+    move_s: 5.08
+    min_s: 5.0
+    max_s: 5.13
+  B1_130>GB130:
+    a: B1_130
+    b: GB130
+    mode: transfer
+    len_cm: 24.5
+    n: 5
+    move_s: 6.38
+    min_s: 6.27
+    max_s: 6.4
+  B1_180>B2_180:
+    a: B1_180
+    b: B2_180
+    mode: transfer
+    len_cm: 15.0
+    n: 5
+    move_s: 5.08
+    min_s: 5.0
+    max_s: 5.1
+  B1_180>GB180:
+    a: B1_180
+    b: GB180
+    mode: transfer
+    len_cm: 24.5
+    n: 4
+    move_s: 6.34
+    min_s: 6.18
+    max_s: 6.4
+  B1_195>B2_195:
+    a: B1_195
+    b: B2_195
+    mode: transfer
+    len_cm: 15.0
+    n: 4
+    move_s: 5.11
+    min_s: 5.08
+    max_s: 5.16
+  B1_20>B2_20:
+    a: B1_20
+    b: B2_20
+    mode: transfer
+    len_cm: 15.0
+    n: 4
+    move_s: 5.12
+    min_s: 5.11
+    max_s: 5.18
+  B1_40>B2_40:
+    a: B1_40
+    b: B2_40
+    mode: transfer
+    len_cm: 15.0
+    n: 5
+    move_s: 5.03
+    min_s: 5.0
+    max_s: 5.1
+  B1_40>GB40:
+    a: B1_40
+    b: GB40
+    mode: transfer
+    len_cm: 24.5
+    n: 4
+    move_s: 6.27
+    min_s: 6.18
+    max_s: 6.42
+  B1_78>B2_78:
+    a: B1_78
+    b: B2_78
+    mode: transfer
+    len_cm: 15.0
+    n: 4
+    move_s: 5.07
+    min_s: 5.03
+    max_s: 5.11
+  B1_78>GB78:
+    a: B1_78
+    b: GB78
+    mode: transfer
+    len_cm: 24.5
+    n: 4
+    move_s: 6.32
+    min_s: 6.23
+    max_s: 6.33
+  B2_130>B1_130:
+    a: B2_130
+    b: B1_130
+    mode: transfer
+    len_cm: 15.0
+    n: 5
+    move_s: 5.48
+    min_s: 5.17
+    max_s: 5.51
+  B2_130>GB130:
+    a: B2_130
+    b: GB130
+    mode: transfer
+    len_cm: 9.5
+    n: 7
+    move_s: 3.38
+    min_s: 3.33
+    max_s: 3.69
+  B2_180>B1_180:
+    a: B2_180
+    b: B1_180
+    mode: transfer
+    len_cm: 15.0
+    n: 5
+    move_s: 5.42
+    min_s: 5.03
+    max_s: 6.05
+  B2_180>GB180:
+    a: B2_180
+    b: GB180
+    mode: transfer
+    len_cm: 9.5
+    n: 9
+    move_s: 3.6
+    min_s: 2.87
+    max_s: 3.71
+  B2_195>B1_195:
+    a: B2_195
+    b: B1_195
+    mode: transfer
+    len_cm: 15.0
+    n: 6
+    move_s: 5.1
+    min_s: 5.05
+    max_s: 5.48
+  B2_20>B1_20:
+    a: B2_20
+    b: B1_20
+    mode: transfer
+    len_cm: 15.0
+    n: 4
+    move_s: 4.92
+    min_s: 4.91
+    max_s: 5.1
+  B2_40>B1_40:
+    a: B2_40
+    b: B1_40
+    mode: transfer
+    len_cm: 15.0
+    n: 6
+    move_s: 5.29
+    min_s: 5.02
+    max_s: 5.52
+  B2_40>GB40:
+    a: B2_40
+    b: GB40
+    mode: transfer
+    len_cm: 9.5
+    n: 15
+    move_s: 3.39
+    min_s: 3.18
+    max_s: 3.57
+  B2_78>B1_78:
+    a: B2_78
+    b: B1_78
+    mode: transfer
+    len_cm: 15.0
+    n: 5
+    move_s: 5.26
+    min_s: 5.13
+    max_s: 5.55
+  B2_78>GB78:
+    a: B2_78
+    b: GB78
+    mode: transfer
+    len_cm: 9.5
+    n: 8
+    move_s: 3.48
+    min_s: 3.2
+    max_s: 3.56
+  GB130>B1_130:
+    a: GB130
+    b: B1_130
+    mode: transfer
+    len_cm: 24.5
+    n: 4
+    move_s: 7.94
+    min_s: 7.78
+    max_s: 9.16
+  GB130>B2_130:
+    a: GB130
+    b: B2_130
+    mode: transfer
+    len_cm: 9.5
+    n: 15
+    move_s: 3.03
+    min_s: 2.87
+    max_s: 4.35
+  GB180>B1_180:
+    a: GB180
+    b: B1_180
+    mode: transfer
+    len_cm: 24.5
+    n: 4
+    move_s: 9.21
+    min_s: 8.28
+    max_s: 9.4
+  GB180>B2_180:
+    a: GB180
+    b: B2_180
+    mode: transfer
+    len_cm: 9.5
+    n: 6
+    move_s: 4.0
+    min_s: 2.47
+    max_s: 4.21
+  GB40>B1_40:
+    a: GB40
+    b: B1_40
+    mode: transfer
+    len_cm: 24.5
+    n: 4
+    move_s: 9.01
+    min_s: 7.83
+    max_s: 9.18
+  GB40>B2_40:
+    a: GB40
+    b: B2_40
+    mode: transfer
+    len_cm: 9.5
+    n: 6
+    move_s: 3.17
+    min_s: 2.99
+    max_s: 4.19
+  GB78>B1_78:
+    a: GB78
+    b: B1_78
+    mode: transfer
+    len_cm: 24.5
+    n: 5
+    move_s: 9.05
+    min_s: 8.98
+    max_s: 9.12
+  GB78>B2_78:
+    a: GB78
+    b: B2_78
+    mode: transfer
+    len_cm: 9.5
+    n: 6
+    move_s: 3.08
+    min_s: 2.95
+    max_s: 4.07
+  GT130D>T1_130:
+    a: GT130D
+    b: T1_130
+    mode: transfer
+    len_cm: 9.5
+    n: 8
+    move_s: 2.58
+    min_s: 2.49
+    max_s: 3.81
+  GT130D>T2_130:
+    a: GT130D
+    b: T2_130
+    mode: transfer
+    len_cm: 24.5
+    n: 4
+    move_s: 9.01
+    min_s: 8.96
+    max_s: 9.06
+  GT175U>T1_175:
+    a: GT175U
+    b: T1_175
+    mode: transfer
+    len_cm: 24.5
+    n: 4
+    move_s: 9.32
+    min_s: 9.23
+    max_s: 9.4
+  GT175U>T2_175:
+    a: GT175U
+    b: T2_175
+    mode: transfer
+    len_cm: 9.5
+    n: 4
+    move_s: 2.58
+    min_s: 1.82
+    max_s: 2.64
+  GT40D>T1_40:
+    a: GT40D
+    b: T1_40
+    mode: transfer
+    len_cm: 9.5
+    n: 15
+    move_s: 2.53
+    min_s: 2.4
+    max_s: 4.06
+  GT40D>T2_40:
+    a: GT40D
+    b: T2_40
+    mode: transfer
+    len_cm: 24.5
+    n: 4
+    move_s: 8.15
+    min_s: 7.51
+    max_s: 8.88
+  GT40U>T1_40:
+    a: GT40U
+    b: T1_40
+    mode: transfer
+    len_cm: 24.5
+    n: 4
+    move_s: 9.39
+    min_s: 9.33
+    max_s: 9.49
+  GT40U>T2_40:
+    a: GT40U
+    b: T2_40
+    mode: transfer
+    len_cm: 9.5
+    n: 5
+    move_s: 3.06
+    min_s: 2.92
+    max_s: 4.15
+  GT99D>T1_98.9:
+    a: GT99D
+    b: T1_98.9
+    mode: transfer
+    len_cm: 9.5
+    n: 6
+    move_s: 2.62
+    min_s: 2.38
+    max_s: 3.87
+  GT99D>T2_98.9:
+    a: GT99D
+    b: T2_98.9
+    mode: transfer
+    len_cm: 24.5
+    n: 4
+    move_s: 8.87
+    min_s: 8.79
+    max_s: 8.92
+  GT99U>T1_98.9:
+    a: GT99U
+    b: T1_98.9
+    mode: transfer
+    len_cm: 24.5
+    n: 4
+    move_s: 9.65
+    min_s: 9.56
+    max_s: 9.7
+  GT99U>T2_98.9:
+    a: GT99U
+    b: T2_98.9
+    mode: transfer
+    len_cm: 9.5
+    n: 5
+    move_s: 3.14
+    min_s: 3.05
+    max_s: 4.37
+  T1_130>GT130D:
+    a: T1_130
+    b: GT130D
+    mode: transfer
+    len_cm: 9.5
+    n: 16
+    move_s: 3.17
+    min_s: 2.79
+    max_s: 3.39
+  T1_130>T2_130:
+    a: T1_130
+    b: T2_130
+    mode: transfer
+    len_cm: 15.0
+    n: 4
+    move_s: 5.71
+    min_s: 5.52
+    max_s: 5.98
+  T1_175>GT175U:
+    a: T1_175
+    b: GT175U
+    mode: transfer
+    len_cm: 24.5
+    n: 4
+    move_s: 6.42
+    min_s: 6.29
+    max_s: 6.45
+  T1_175>T2_175:
+    a: T1_175
+    b: T2_175
+    mode: transfer
+    len_cm: 15.0
+    n: 4
+    move_s: 5.72
+    min_s: 5.65
+    max_s: 5.92
+  T1_190>T2_190:
+    a: T1_190
+    b: T2_190
+    mode: transfer
+    len_cm: 15.0
+    n: 5
+    move_s: 5.8
+    min_s: 5.75
+    max_s: 6.1
+  T1_40>GT40D:
+    a: T1_40
+    b: GT40D
+    mode: transfer
+    len_cm: 9.5
+    n: 5
+    move_s: 3.18
+    min_s: 2.96
+    max_s: 3.33
+  T1_40>GT40U:
+    a: T1_40
+    b: GT40U
+    mode: transfer
+    len_cm: 24.5
+    n: 4
+    move_s: 6.57
+    min_s: 6.34
+    max_s: 6.7
+  T1_40>T2_40:
+    a: T1_40
+    b: T2_40
+    mode: transfer
+    len_cm: 15.0
+    n: 4
+    move_s: 5.58
+    min_s: 5.51
+    max_s: 5.68
+  T1_98.9>GT99D:
+    a: T1_98.9
+    b: GT99D
+    mode: transfer
+    len_cm: 9.5
+    n: 6
+    move_s: 3.09
+    min_s: 2.95
+    max_s: 3.14
+  T1_98.9>GT99U:
+    a: T1_98.9
+    b: GT99U
+    mode: transfer
+    len_cm: 24.5
+    n: 4
+    move_s: 6.55
+    min_s: 6.52
+    max_s: 6.9
+  T1_98.9>T2_98.9:
+    a: T1_98.9
+    b: T2_98.9
+    mode: transfer
+    len_cm: 15.0
+    n: 4
+    move_s: 5.71
+    min_s: 5.58
+    max_s: 5.89
+  T2_130>GT130D:
+    a: T2_130
+    b: GT130D
+    mode: transfer
+    len_cm: 24.5
+    n: 4
+    move_s: 6.23
+    min_s: 6.06
+    max_s: 6.29
+  T2_130>T1_130:
+    a: T2_130
+    b: T1_130
+    mode: transfer
+    len_cm: 15.0
+    n: 4
+    move_s: 5.51
+    min_s: 5.51
+    max_s: 5.6
+  T2_175>GT175U:
+    a: T2_175
+    b: GT175U
+    mode: transfer
+    len_cm: 9.5
+    n: 4
+    move_s: 3.41
+    min_s: 3.11
+    max_s: 3.48
+  T2_175>T1_175:
+    a: T2_175
+    b: T1_175
+    mode: transfer
+    len_cm: 15.0
+    n: 4
+    move_s: 5.99
+    min_s: 5.71
+    max_s: 6.83
+  T2_190>T1_190:
+    a: T2_190
+    b: T1_190
+    mode: transfer
+    len_cm: 15.0
+    n: 4
+    move_s: 5.8
+    min_s: 5.73
+    max_s: 6.09
+  T2_40>GT40D:
+    a: T2_40
+    b: GT40D
+    mode: transfer
+    len_cm: 24.5
+    n: 5
+    move_s: 6.26
+    min_s: 6.05
+    max_s: 6.35
+  T2_40>GT40U:
+    a: T2_40
+    b: GT40U
+    mode: transfer
+    len_cm: 9.5
+    n: 5
+    move_s: 3.52
+    min_s: 3.43
+    max_s: 3.63
+  T2_40>T1_40:
+    a: T2_40
+    b: T1_40
+    mode: transfer
+    len_cm: 15.0
+    n: 4
+    move_s: 5.58
+    min_s: 5.31
+    max_s: 5.71
+  T2_98.9>GT99D:
+    a: T2_98.9
+    b: GT99D
+    mode: transfer
+    len_cm: 24.5
+    n: 4
+    move_s: 6.15
+    min_s: 6.11
+    max_s: 6.35
+  T2_98.9>GT99U:
+    a: T2_98.9
+    b: GT99U
+    mode: transfer
+    len_cm: 9.5
+    n: 5
+    move_s: 3.63
+    min_s: 3.51
+    max_s: 3.74
+  T2_98.9>T1_98.9:
+    a: T2_98.9
+    b: T1_98.9
+    mode: transfer
+    len_cm: 15.0
+    n: 4
+    move_s: 5.83
+    min_s: 5.45
+    max_s: 5.92
+  CHARGER>POCKET:
+    a: CHARGER
+    b: POCKET
+    mode: wall
+    len_cm: 25.0
+    n: 4
+    move_s: 7.03
+    min_s: 6.84
+    max_s: 7.12
+  GB130>R58:
+    a: GB130
+    b: R58
+    mode: wall
+    len_cm: 26.0
+    n: 7
+    move_s: 6.3
+    min_s: 6.21
+    max_s: 6.39
+  GB40>L70:
+    a: GB40
+    b: L70
+    mode: wall
+    len_cm: 38.0
+    n: 14
+    move_s: 8.89
+    min_s: 8.72
+    max_s: 9.03
+  GT130D>R90:
+    a: GT130D
+    b: R90
+    mode: wall
+    len_cm: 38.0
+    n: 14
+    move_s: 8.85
+    min_s: 8.73
+    max_s: 8.96
+  GT40D>L102:
+    a: GT40D
+    b: L102
+    mode: wall
+    len_cm: 26.0
+    n: 6
+    move_s: 6.33
+    min_s: 6.26
+    max_s: 6.43
+  L102>GT40D:
+    a: L102
+    b: GT40D
+    mode: wall
+    len_cm: 26.0
+    n: 15
+    move_s: 6.4
+    min_s: 6.22
+    max_s: 7.01
+  L102>L80:
+    a: L102
+    b: L80
+    mode: wall
+    len_cm: 22.0
+    n: 6
+    move_s: 5.53
+    min_s: 5.46
+    max_s: 5.61
+  L70>GB40:
+    a: L70
+    b: GB40
+    mode: wall
+    len_cm: 38.0
+    n: 6
+    move_s: 8.79
+    min_s: 8.7
+    max_s: 8.99
+  L70>L80:
+    a: L70
+    b: L80
+    mode: wall
+    len_cm: 10.0
+    n: 15
+    move_s: 3.23
+    min_s: 3.13
+    max_s: 3.83
+  L80>L102:
+    a: L80
+    b: L102
+    mode: wall
+    len_cm: 22.0
+    n: 15
+    move_s: 5.49
+    min_s: 5.33
+    max_s: 5.88
+  L80>L70:
+    a: L80
+    b: L70
+    mode: wall
+    len_cm: 10.0
+    n: 6
+    move_s: 3.06
+    min_s: 3.0
+    max_s: 3.17
+  POCKET>CHARGER:
+    a: POCKET
+    b: CHARGER
+    mode: wall
+    len_cm: 25.0
+    n: 4
+    move_s: 6.63
+    min_s: 6.59
+    max_s: 7.03
+  R58>GB130:
+    a: R58
+    b: GB130
+    mode: wall
+    len_cm: 26.0
+    n: 14
+    move_s: 6.27
+    min_s: 6.18
+    max_s: 6.94
+  R58>R90:
+    a: R58
+    b: R90
+    mode: wall
+    len_cm: 32.0
+    n: 6
+    move_s: 7.56
+    min_s: 7.43
+    max_s: 7.68
+  R90>GT130D:
+    a: R90
+    b: GT130D
+    mode: wall
+    len_cm: 38.0
+    n: 6
+    move_s: 8.77
+    min_s: 8.66
+    max_s: 8.88
+  R90>R58:
+    a: R90
+    b: R58
+    mode: wall
+    len_cm: 32.0
+    n: 14
+    move_s: 7.56
+    min_s: 7.38
+    max_s: 7.75
