@@ -69,9 +69,15 @@ class Planner:
         self.wrong_lane, self.horizon = wrong_lane, horizon
         self.cbs_nodes, self.cbs_expand = cbs_nodes, cbs_expand   # CBS 한도: 노드 수, A* 펼침 수 (시계 대신 → 같은 입력이면 같은 결과)
         self.expanded = 0
-        self.dur = {e: max(1, math.ceil(info['L'] / speed / step)) for e, info in g.edge.items()}
+        # 엣지 시간 칸: 실측 중앙값 (graph/edge_times.yaml, 방향별), 없으면 길이 ÷ speed
+        self.dur = {e: max(1, math.ceil(g.edge_s(*e, speed) / step)) for e in g.edge}
         self._h = {}
         self.last = {}
+
+    def turn(self, h0, h1):
+        """제자리 회전 시간 칸 (실측 식). h0 None(모름) 이면 0"""
+        s = self.g.rot_s(h0, h1)
+        return 0 if s <= 0 else max(1, math.ceil(s / self.step))
 
     # ---- 휴리스틱: 목표까지 가장 짧은 시간 칸 ----
     def h_table(self, goal):
@@ -98,11 +104,13 @@ class Planner:
         return 0.0 if right else (self.wrong_lane - 1.0) * self.dur[(a, b)]
 
     # ---- 시공간 A* (여러 목적지: 목적지마다 머무는 시간) ----
-    def astar(self, agent, start, t0, legs, cons):
+    def astar(self, agent, start, t0, legs, cons, h0=None):
         """legs: [(목적지, 머무는 칸, 그 구간 동안 약 실음)] — 마지막 목적지의 머무는 칸이 INF 면 계속 거기 있음,
         유한하면 그만큼 머문 뒤 계획 끝 (그 뒤는 다시 출발할 때 새로 계획).
         목적지 i 에 닿으면 그 자리에서 머무는 칸만큼 반드시 머문 뒤 목적지 i+1 로.
-        cons: 피해야 할 Item 목록. 반환 [(노드, 도착 t, 출발 t, 구간, 실음)] 또는 None"""
+        cons: 피해야 할 Item 목록. h0: 시작 방향 deg (회전 비용, None = 모름 → 첫 회전 0).
+        상태 = (노드, t, 구간, 방향). 엣지를 타려면 먼저 그 엣지 방향으로 제자리 회전 (실측 회전 시간, 그동안 노드 점유).
+        반환 [(노드, 도착 t, 출발 t, 구간, 실음)] 또는 None"""
         g = self.g
         L = len(legs)
         Hs = [self.h_table(gl) for gl, _, _ in legs]
@@ -139,20 +147,21 @@ class Planner:
             if latest >= INF:
                 return None
         tick = itertools.count()
-        start_s = (start, t0, 0)
+        hk = None if h0 is None else round(h0) % 360
+        start_s = (start, t0, 0, hk)
         openq = [(h(start, 0), next(tick), 0.0, start_s)]
         prev = {start_s: None}
         gbest = {start_s: 0.0}
         tmax = t0 + self.horizon
         while openq:
-            f, _, gc, (n, t, i) = heapq.heappop(openq)
+            f, _, gc, (n, t, i, hd) = heapq.heappop(openq)
             self.expanded += 1
-            if gc > gbest.get((n, t, i), INF):
+            if gc > gbest.get((n, t, i, hd), INF):
                 continue
             if (stays and i == L - 1 and n == last_goal and t > latest) or i == L:
-                out, st = [], (n, t, i)
+                out, st = [], (n, t, i, hd)
                 while st is not None:
-                    out.append(st)
+                    out.append(st[:3])
                     st = prev[st]
                 return self._compress(out[::-1], legs)
             if t >= tmax:
@@ -162,20 +171,26 @@ class Planner:
             if n == goal_i and (i < L - 1 or not stays):                           # 목적지: 머무는 시간 (정밀 주차·회전 등)
                 ld = loaded or (legs[i + 1][2] if i + 1 < L else False)
                 if not blocked(Item(g, 'node', n, t, t + dwell_i, ld, agent)):
-                    nxt.append(((n, t + dwell_i, i + 1), gc + dwell_i))
+                    nxt.append(((n, t + dwell_i, i + 1, hd), gc + dwell_i))
             else:
                 if not blocked(Item(g, 'node', n, t, t + 1, loaded, agent)):     # 기다림
-                    nxt.append(((n, t + 1, i), gc + 1.0))
-                for m in g.adj[n]:                                                 # 엣지 지나기
-                    d = self.dur[(n, m)]
+                    nxt.append(((n, t + 1, i, hd), gc + 1.0))
+                for m in g.adj[n]:
+                    he = round(g.heading(n, m)) % 360
+                    r = self.turn(hd, he)
+                    if r:                                                          # 먼저 그 엣지 방향으로 제자리 회전
+                        if not blocked(Item(g, 'node', n, t, t + r, loaded, agent)):
+                            nxt.append(((n, t + r, i, he), gc + r))
+                        continue
+                    d = self.dur[(n, m)]                                           # 엣지 지나기
                     if blocked(Item(g, 'edge', (n, m), t, t + d, loaded, agent)) or \
                             blocked(Item(g, 'node', m, t + d, t + d, loaded, agent)):
                         continue
-                    nxt.append(((m, t + d, i), gc + d + self.penalty(n, m) + 0.1))   # 0.1: 괜히 돌아다니지 말고 제자리 대기
+                    nxt.append(((m, t + d, i, he), gc + d + self.penalty(n, m) + 0.1))   # 0.1: 괜히 돌아다니지 말고 제자리 대기
             for st, c in nxt:
                 if c < gbest.get(st, INF):
                     gbest[st] = c
-                    prev[st] = (n, t, i)
+                    prev[st] = (n, t, i, hd)
                     heapq.heappush(openq, (c + h(st[0], st[2]), next(tick), c, st))
         return None
 
@@ -223,7 +238,7 @@ class Planner:
             a = A[aid]
             legs = list(a['legs'])
             while legs:
-                p = self.astar(aid, a['start'], a['t0'], legs, statics + cons)
+                p = self.astar(aid, a['start'], a['t0'], legs, statics + cons, a.get('heading'))
                 if p is not None:
                     return p
                 if len(legs) == 1:
@@ -297,7 +312,7 @@ class Planner:
             mine = [c for c in cons if c.agent != a['id']]
             legs, p = list(a['legs']), None
             while legs and p is None:
-                p = self.astar(a['id'], a['start'], a['t0'], legs, mine)
+                p = self.astar(a['id'], a['start'], a['t0'], legs, mine, a.get('heading'))
                 legs = legs[:-1]
             if p is None:                      # 못 풀면 그 자리에 계속 있는 것으로 (뒤 로봇이 피하게)
                 cons.append(Item(self.g, 'node', a['start'], 0, INF, a['loaded'], a['id']))

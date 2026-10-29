@@ -109,7 +109,7 @@ BODY_CLEAR_CM = 14.5                    # 지나간 노드는 이만큼 멀어�
 
 class Params:
     def __init__(self, **kw):
-        self.speed = 10.0          # cm/s 주행 속도
+        self.speed = 4.5           # cm/s — 실측 시간(graph/edge_times.yaml)이 없는 엣지에만 씀 (10-29 실측: 라인·벽 ≈ 4.2~4.6 cm/s)
         self.dock_s = 20.0         # 정밀 주차
         self.load_s = 10.0         # 관제 PC/OMX 적재 (가상: 주차 끝 알림 뒤 이 시간 지나면 적재 완료)
         self.spin_s = 8.0          # 병실 제자리 360° 회전 = 배송 완료
@@ -174,6 +174,37 @@ class Graph:
             self.seg_near[(a, b)] = {m for m in self.nodes if m not in (a, b)
                                      and seg_dist(self.xy(m), self.xy(a), self.xy(b)) < NEAR_CM}
         self._dist = {}
+        # 실측 엣지 시간 (driving/tools/edge_run.py → edge_costs.py → graph/edge_times.yaml). 없으면 길이 ÷ 속도
+        self.time, self.rot = {}, None
+        tp = os.path.join(os.path.dirname(path), 'edge_times.yaml')
+        if os.path.exists(tp):
+            t = yaml.safe_load(open(tp)) or {}
+            for v in (t.get('edges') or {}).values():
+                if (v['a'], v['b']) in self.edge:
+                    self.time[(v['a'], v['b'])] = float(v['move_s'])
+            R = t.get('rotate')
+            if R:
+                self.rot = (float(R['r0_s']), float(R['s_per_deg']))
+
+    def heading(self, a, b):
+        (ax, ay), (bx, by) = self.xy(a), self.xy(b)
+        return math.degrees(math.atan2(by - ay, bx - ax)) % 360
+
+    def edge_s(self, a, b, speed):
+        """a→b 이동 시간 s: 실측 중앙값 (방향별), 없으면 길이 ÷ speed"""
+        return self.time.get((a, b)) or self.edge[(a, b)]['L'] / speed
+
+    def rot_s(self, h0, h1):
+        """제자리 회전 시간 s (실측 식 r0 + 각도·s_per_deg). 모르는 방향(None)·회전 식 없음·1.5° 미만이면 0"""
+        if h0 is None or h1 is None or self.rot is None:
+            return 0.0
+        d = abs((h1 - h0 + 180) % 360 - 180)
+        return 0.0 if d < 1.5 else self.rot[0] + self.rot[1] * d
+
+    def time_to(self, a, b, speed):
+        """배차·ETA 용: 거리 기준 최단 경로를 실측 시간으로 (회전 제외)"""
+        p = self.path(a, b)
+        return sum(self.edge_s(p[i], p[i + 1], speed) for i in range(len(p) - 1)) if p else 1e9
 
     def xy(self, n):
         return tuple(self.nodes[n]['xy'])
@@ -302,7 +333,8 @@ class Robot:
         self.depart = None          # CBS 계획: path[i] 에서 떠나도 되는 시각 (없으면 바로)
         self.plan_wait = False
         self.num, self.name = None, rid        # 관제 PC 로봇 번호, 이름 (robots.yaml)
-        self.heading = 0.0          # deg, 마지막으로 달린 엣지 방향
+        self.heading = 0.0          # deg, 마지막으로 달린 엣지 방향 (경로 계획의 회전 비용 시작 방향)
+        self.turn_left = None       # CBS 시각 없이 갈 때: 다음 엣지 방향으로 남은 회전 시간 s
         self.batch = None
 
     @property
@@ -364,7 +396,7 @@ class FMS:
         self._next_dispatch = 0.0
         self.auto_rate = 0.0         # 분당 자동 주문 수
         self._next_auto = None
-        self.planner = Planner(self.g, self.p.speed, step=self.p.plan_step, near_cm=NEAR_CM, wrong_lane=self.p.wrong_lane)
+        self.planner = Planner(self.g, self.p.speed, step=self.p.plan_step, near_cm=NEAR_CM, wrong_lane=self.p.wrong_lane)   # 실측 시간·회전
         self.plan_stats = dict(replans=0, cbs=0, prioritized=0, failed=0, last=None)
         self.last_plans = {}
 
@@ -459,7 +491,7 @@ class FMS:
             raise Conflict('bad_batch_state', f'묶음 {b.bid} 상태가 {b.status} (assigned 일 때만 ready)')
         r = b.robot
         b.status, b.status_t = 'called', self.t
-        eta = self.g.dist(r.node, PHARMACY) / self.p.speed + self.p.dock_s
+        eta = self.g.time_to(r.node, PHARMACY, self.p.speed) + self.p.dock_s
         self.log(f'관제 PC → FMS: 묶음 {b.bid} 준비 완료 → {r.id} 약제실로')
         self.emit('robot_called', batch_id=b.bid, robot=r.num, eta_s=round(eta))
         return round(eta)
@@ -901,19 +933,22 @@ class FMS:
                       and r.k < len(r.path) - 1)
             busy = (r.step and r.step['kind'] in self.ACT_KINDS and any(s['kind'] == 'move' for s in r.queue))
             if moving:
-                a = dict(id=r.id, loaded=r.loaded, wait=r.wait_s,
+                a = dict(id=r.id, loaded=r.loaded, wait=r.wait_s, heading=r.heading,
                          legs=self.legs_for(r, r.step['to'], 0.0, r.queue))
                 if r.edge_t > 0:
                     u, v = r.path[r.k], r.path[r.k + 1]
-                    t0 = max(1, math.ceil((g.edge[(u, v)]['L'] - r.edge_t) / self.p.speed / step))
-                    a.update(start=v, t0=t0, prefix=[Item(g, 'edge', (u, v), 0, t0, r.loaded, r.id, fixed=True)])
+                    left = (1 - r.edge_t / g.edge[(u, v)]['L']) * g.edge_s(u, v, self.p.speed)   # 남은 실측 시간
+                    t0 = max(1, math.ceil(left / step))
+                    a.update(start=v, t0=t0, heading=g.heading(u, v),
+                             prefix=[Item(g, 'edge', (u, v), 0, t0, r.loaded, r.id, fixed=True)])
                 else:
                     a.update(start=r.node, t0=0)
                 agents.append(a)
                 movers[r.id] = r
             elif busy:
                 legs = self.legs_for(r, r.node, self.act_time(r.step, r.timer), r.queue)
-                agents.append(dict(id=r.id, loaded=r.loaded, wait=0.0, start=r.node, t0=0, legs=legs, plan_only=True))
+                agents.append(dict(id=r.id, loaded=r.loaded, wait=0.0, start=r.node, t0=0, legs=legs, plan_only=True,
+                                   heading=r.heading))
             else:
                 statics.append(Item(g, 'node', r.node, 0, INF, r.loaded, r.id, zones=r.holds()[2]))
         if not movers:
@@ -1068,6 +1103,17 @@ class FMS:
                                  and n not in {x.node for x in self.robots} and not (self.g.near[n] & avoid)), None)
                 if spot:
                     self.start_task(o, 'yield', [dict(kind='move', to=spot)], f'{r.id} 에게 비켜 줌 → {spot}')
+            elif (o.step and o.step['kind'] == 'move' and not o.step.get('started') and not o.step.get('sidestep')
+                  and o.wait_s > 1.0 and r.wait_s > 1.0):
+                # 차례를 기다리느라 서 있는 로봇(아직 출발 전)이 길을 막으면 그 로봇도 비킨다.
+                # 10-29: R2 가 약제실 차례를 T2_190 (POCKET 으로 가는 유일한 길)에서 기다리고, 약제실의 R1 은 102호의 R3 를,
+                # R3 는 POCKET 으로 가려고 R2 를 기다림 → 실측 시간(더 느림)에서 영구 교착 (R1 은 CBS 출발 시각 대기라 교착 검사에 안 걸림)
+                found = self.sidestep_spot(o, [x for x in self.robots if x is not o])
+                if found:
+                    self.log(f'{o.id} 가 차례 기다리다 {r.id} 길을 막음 → {found[0]} 로 비킴', 'warn')
+                    o.queue.insert(0, dict(o.step, started=False))
+                    o.step = dict(kind='move', to=found[0], sidestep=True)
+                    self.next_step_init_move(o)
         if r.step['started'] and r.wait_s - r.replan_t > self.p.replan_s:   # 다른 길 찾아보기
             r.replan_t = r.wait_s
             if self.p.planner == 'cbs':
@@ -1087,25 +1133,36 @@ class FMS:
             if r.path is None:
                 self.next_step(r)
                 return
-            dist = p.speed * dt
+            tt = dt                                     # 이번 틱에 쓸 수 있는 시간 s (엣지마다 실측 속도로 움직임)
             r.plan_wait = False
-            while dist > 1e-9:
+            while tt > 1e-9:
                 if r.k >= len(r.path) - 1:
                     break
                 if r.edge_t == 0 and r.depart is not None and self.t < r.depart[r.k] - 1e-9:
-                    r.plan_wait = True                  # CBS 가 정한 출발 시각까지 기다림
+                    r.plan_wait = True                  # CBS 가 정한 출발 시각까지 기다림 (제자리 회전 시간도 여기 들어 있음)
                     break
                 if r.res_to <= r.k and not self.try_reserve(r):
                     break
                 a, b = r.path[r.k], r.path[r.k + 1]
+                if r.edge_t == 0 and r.depart is None:  # CBS 시각이 없으면 엣지 방향으로 도는 시간을 직접
+                    if r.turn_left is None:
+                        r.turn_left = self.g.rot_s(r.heading, self.g.heading(a, b))
+                    use = min(tt, r.turn_left)
+                    r.turn_left -= use
+                    tt -= use
+                    if r.turn_left > 1e-9:
+                        break
                 L = self.g.edge[(a, b)]['L']
-                d = min(dist, L - r.edge_t)
+                v = L / self.g.edge_s(a, b, p.speed)    # cm/s
+                d = min(v * tt, L - r.edge_t)
                 r.edge_t += d
                 r.since += d
-                dist -= d
+                tt -= d / v
+                r.heading = self.g.heading(a, b)
                 if r.edge_t >= L - 1e-9:
                     r.k += 1
                     r.edge_t = 0.0
+                    r.turn_left = None
                     r.prev_node, r.since = a, 0.0
                     r.node = b
                     if r.k >= r.res_to:
