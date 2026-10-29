@@ -24,6 +24,7 @@ SPEED = 0.05                # m/s, 테이프 따라가기
 XFER_SPEED = 0.03           # m/s, 차선 바꾸기
 KP, KD = 8.0, 15.0          # line_follow.py 10-26 보정 시험 값
 WMAX = 0.4
+ROT_SETTLE_FIX = 1.0        # s, 보정 회전 앞과 마지막 확인 전 대기 (AMCL 이 확실히 따라오게)
 ROT_SETTLE = 0.3            # s, 회전 앞뒤로 AMCL 이 따라오게 멈추는 시간 (10-29: 0.6 → 0.3, rot_test 로 끝 오차 ≤1.5° 확인)
 ROT_WMAX = 1.5              # rad/s, 제자리 회전 최대 각속도 (10-29: 0.3 → 0.6 → 1.5 = velocity_smoother 한도. 회전이 주행 시간의 34% 라서. 90° 7.5 → 3.6 s)
 MAX_DEV = 0.04              # m, 차선 축에서 AMCL 옆 벗어남 한도 (테이프가 지도 축과 1~2° 어긋남)
@@ -60,8 +61,10 @@ class Driver:
         wmax = ROT_WMAX if wmax is None else wmax
         settle = ROT_SETTLE if settle is None else settle
         tgt = math.radians(heading_deg)
-        for _ in range(3):
-            self.spin(settle)                                # AMCL 이 따라오게 잠깐 멈춤
+        for k in range(3):
+            # AMCL 이 따라오게 잠깐 멈춤. 보정 회전(2번째부터)은 더 오래 기다림 — 10-29 6364 B2_20: 0.3 s 로는 AMCL 방향이
+            # 덜 갱신돼 보정을 엉뚱하게 해서 3번 뒤에도 4.5° 어긋남 (rotate_err)
+            self.spin(settle if k == 0 else ROT_SETTLE_FIX)
             err = wrap(tgt - self.pose()[2])
             if abs(err) < math.radians(tol_deg):
                 return 'ok'
@@ -74,7 +77,7 @@ class Driver:
                     break
                 self.n.cmd(0.0, math.copysign(max(0.08, min(wmax, 1.5 * abs(e))), e))
             self.stop()
-        self.spin(settle)
+        self.spin(ROT_SETTLE_FIX)
         return 'ok' if abs(wrap(tgt - self.pose()[2])) < math.radians(3) else 'rotate_err'
 
     # ---------- 테이프 따라가기 ----------
