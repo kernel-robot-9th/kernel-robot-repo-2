@@ -49,6 +49,7 @@ nodes:
   S15: {type: way, xy: [15, 80], note: '단일차선 협로 (30cm). 10-26 엶'}
   ROOM4_L: {type: stop, xy: [35, 178], heading: 90, name: 101호 4인실 왼쪽}
   PHARMACY: {type: stop, xy: [98.9, 178.8], heading: 90, name: 약제실 OMX, dock: aruco}
+  PHARMACY_DOCK: {type: dock, xy: [98.9, 187.2], heading: 90, note: '정밀 주차 자리 (마커 기준, 정차점보다 ~8cm 안쪽. aruco_ref amcl_axle y 188.9 → 라이다 187.2). /drive 전용'}
   ROOM4_R: {type: stop, xy: [175, 178], heading: 90, name: 102호 4인실 오른쪽}
   ROOM1_LU: {type: stop, xy: [15, 112], heading: 180, name: 103호 1인실 왼쪽 위}
   ROOM1_LD: {type: stop, xy: [15, 50], heading: 180, name: 106호 1인실 왼쪽 아래}
@@ -82,3 +83,4 @@ edges:            # 양방향. 차선 노드(B1_130 등)도 a/b 로 쓸 수 있�
   - {a: T2_190, b: POCKET, mode: nav, zone: pocket, note: 복도 동쪽 끝 → 대기 포켓}
   - {a: ROOM4_L, b: GT40U, mode: nav, zone: room4_l}
   - {a: PHARMACY, b: GT99U, mode: nav, zone: pharmacy}
+  - {a: PHARMACY, b: PHARMACY_DOCK, mode: dock, zone: pharmacy, note: '들어가기 = precise_dock.py, 나오기 = 방향 그대로 뒤로 (10-29)'}

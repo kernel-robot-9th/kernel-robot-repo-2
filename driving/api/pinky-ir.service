@@ -1,0 +1,16 @@
+# 바닥 IR 센서 노드 (pinky_sensor_adc, /ir_sensor/range 20 Hz) — 테이프 주행(/drive, edge_run)에 필요. 설치: install_service.sh
+#   systemctl --user status|restart|stop pinky-ir      journalctl --user -u pinky-ir -f
+# 10-29: 재부팅하면 손으로 띄워야 했음 → 서비스로
+[Unit]
+Description=Pinky floor IR sensor node (pinky_sensor_adc)
+
+[Service]
+ExecStart=/bin/bash -c 'source %h/pinky_map_rev3/api/ros_env.sh && exec ros2 run pinky_sensor_adc main_node'
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGINT
+TimeoutStopSec=10
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target

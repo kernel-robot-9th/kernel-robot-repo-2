@@ -9,7 +9,9 @@
 #   GET  /dests                       목적지 이름 목록
 #   GET  /plan?x=60&y=145[&heading=]  경로만 (움직이지 않음). ?dest=PHARMACY, &from=x,y,heading (지금 위치 대신)
 #   POST /goto   {"x":60,"y":145,"heading":180} 또는 {"dest":"PHARMACY","dock":false}  → 202 {job}
-#   POST /cancel                      지금 작업 멈춤
+#   POST /cancel                      지금 작업 멈춤 (/goto 작업 또는 /drive·/action 명령)
+#   POST /drive  {"cmd_id":..,"route":["B2_78","B2_40",..],"next":..,"end_heading":..}  FMS 구간 주행 → 202 (api/drive_ctl.py)
+#   POST /action {"cmd_id":..,"kind":"spin"|"rotate"[,"heading":..]}   제자리 동작 → 202. 진행은 GET /status 의 drive 칸
 #   GET  /jobs/<id>                   작업 상태 (GET /jobs = 최근 목록)
 #   POST /set_pose {"name":"A"} | {"x":182.7,"y":24,"heading":180} | {"find":true}   AMCL 시작 위치 넣기 (tools/set_pose.py)
 #   GET/PUT /notify {"url":..,"dests":["PHARMACY"]}   도착 신호: 그 목적지 작업이 성공하면(dock 이면 정밀 주차 끝) url 로 POST
@@ -37,6 +39,7 @@ sys.path.insert(0, HERE)
 from coords import map_to_user  # noqa: E402
 from follow_path_client import LIDAR_BEHIND_AXLE, build_poses, densify  # noqa: E402
 from graph_route import Graph  # noqa: E402
+from drive_ctl import DriveCtl  # noqa: E402
 import openapi  # noqa: E402
 
 LOGS = os.path.join(HERE, 'logs')
@@ -217,6 +220,7 @@ class Api:
         self.lock = threading.Lock()
         self.info = robot_info()
         self.notify_cfg = self.load_notify()
+        self.drive = DriveCtl(robot, LOGS, lambda: bool(self.job and self.job['state'] == 'running'))   # FMS 구간 주행
 
     def plan(self, body, start=None):
         if start is None:
@@ -241,6 +245,8 @@ class Api:
         with self.lock:
             if self.job and self.job['state'] == 'running':
                 return None, f'작업 {self.job["id"]} 가 도는 중 — 먼저 /cancel'
+            if self.drive.running():
+                return None, f'/drive 명령 {self.drive.s["cmd_id"]} 실행 중 — 먼저 /cancel'
             plan = self.plan(body)
             job = dict(id=uuid.uuid4().hex[:8], request=body, plan=plan, state='running', segment=0,
                        segments_total=len(plan['segments']), results=[], progress=None,
@@ -346,8 +352,8 @@ class Api:
         j = self.job
         return dict(robot=self.info, frame='diagram cm, lidar center, heading deg (0=+x, 90=+y)',
                     pose=p, localized=p is not None, nav2_ready=self.robot.nav_ready(),
-                    state=(j['state'] if j and j['state'] == 'running' else 'idle'),
-                    job=summary(j) if j else None)
+                    state=(j['state'] if j and j['state'] == 'running' else 'driving' if self.drive.running() else 'idle'),
+                    job=summary(j) if j else None, drive=self.drive.status())
 
 
 def summary(j):
@@ -379,7 +385,8 @@ def make_app(api):
     def index():
         return jsonify(api='pinky', robot=api.info, endpoints=['GET /status', 'GET /dests', 'GET /plan?x=&y=[&heading=]|?dest=',
                        'POST /goto {x,y[,heading]} | {dest[,dock]}', 'POST /cancel', 'GET /jobs', 'GET /jobs/<id>',
-                       'POST /set_pose {name} | {x,y,heading} | {find:true}', 'GET|PUT /notify'],
+                       'POST /set_pose {name} | {x,y,heading} | {find:true}', 'GET|PUT /notify',
+                       'POST /drive {cmd_id,route,next?,end_heading?}', 'POST /action {cmd_id,kind,heading?}'],
                        docs='/docs', openapi='/openapi.json')
 
     @app.get('/openapi.json')
@@ -428,8 +435,21 @@ def make_app(api):
             return err(409, busy)
         return jsonify(job=summary(job), plan=job['plan']), 202
 
+    @app.post('/drive')
+    def drive():
+        code, body = api.drive.start_drive(request.get_json(silent=True) or {})
+        return jsonify(body), code
+
+    @app.post('/action')
+    def action():
+        code, body = api.drive.start_action(request.get_json(silent=True) or {})
+        return jsonify(body), code
+
     @app.post('/cancel')
     def cancel():
+        if api.drive.running():
+            api.drive.cancel()
+            return jsonify(canceled=api.drive.s['cmd_id'], state=api.drive.s['state'], drive=api.drive.status())
         j = api.job
         if not j or j['state'] != 'running':
             api.robot.halt()
@@ -476,7 +496,7 @@ def make_app(api):
 
     @app.post('/set_pose')
     def set_pose():
-        if api.job and api.job['state'] == 'running':
+        if (api.job and api.job['state'] == 'running') or api.drive.running():
             return err(409, '주행 중에는 못 넣음 — 먼저 /cancel')
         b = request.get_json(silent=True) or {}
         if b.get('find'):
