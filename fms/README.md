@@ -45,6 +45,28 @@ python3 fms/sim_server.py --host 0.0.0.0 --control-url http://<관제 PC IP>:800
 
 방 번호: 101호~108호, 수술실 (약제실은 상태 표시용, 주문 목적지 아님). 로봇 번호 1~3 ↔ 핑키 이름은 [`robots.yaml`](robots.yaml).
 
+## 2-1. 실제 핑키로 (관제 PC 에서 도커, 2026-10-29)
+
+`robots.yaml` 에 `url` 이 있는 로봇은 실제 핑키로 움직인다 (`--real-table`). 핑키 API(`driving/api`, 포트 8080)의
+`POST /drive` · `POST /action` 을 보내고 `GET /status` 를 0.3초마다 읽는다 (`robot_link.py`).
+
+```bash
+cd fms
+CONTROL_URL=http://<관제 서버>:<포트> docker compose up -d --build     # 화면·API: http://<관제 PC>:8770
+docker compose logs -f fms
+```
+
+- 로봇 주소: `robots.yaml` 의 `url` (DHCP 라 바뀔 수 있음 — `curl http://<IP>:8080/status` 의 `robot.serial` 로 확인).
+  컨테이너에 붙여 쓰므로 고친 뒤 `docker compose restart fms`. 시리얼이 표와 다르면 그 로봇은 오류로 둔다.
+- 띄우기 전: 핑키마다 노드 위에 놓고 위치 맞추기 (`POST <로봇>:8080/set_pose {"find": true}`). FMS 는 로봇이 보고한 노드에서 시작한다.
+- **띄우면 바로 움직인다**: 노는 로봇은 주차 자리로, 주문이 오면 배송. 실제 로봇이 있으면 시간은 1배속만.
+- 이동 = 계획(CBS)에서 다음 대기 지점까지 묶어 `/drive`. 정밀 주차 = `PHARMACY → PHARMACY_DOCK` 엣지, 병실 = `/action spin`.
+- 늦음 (엣지가 예상 × 1.5 + 2초 넘음) → 다시 계획. 실패 → 그 자리를 차지한 채 멈춤 + 관제 PC 에 `robot_error`.
+  사람이 확인한 뒤 `POST /api/control {"clear_fault": "R1"}` → 엣지 중간이면 `"@here"` 로 마저 가고 이어서.
+- 가상 로봇만: `FMS_ARGS="--no-auto-omx" docker compose up -d` (가상 OMX 까지 켜려면 `FMS_ARGS=" "`).
+- 도커 없이: `python3 sim_server.py --host 0.0.0.0 --real-table --no-auto-omx --control-url <URL>`
+  (한 대만: `--real pinky_6364=http://192.168.129.68:8080 --robots 3` → 나머지는 가상).
+
 ## 3. 화면 (http://<FMS IP>:8770)
 
 - **주문 넣기**: 방 버튼 하나 = 주문 1건. **자동 주문**(분당 N건), **배속**, **로봇 수**, **경로**(A*+CBS / 최단 경로+예약), **다시 시작**.

@@ -56,19 +56,22 @@ def load_walls():
 
 
 class Sim:
-    def __init__(self, control_url=None):
+    def __init__(self, control_url=None, links=None, n_robots=3):
         self.lock = threading.Lock()
         self.speed = 1.0
         self.paused = False
         self.f = None
-        self.reset(3)
+        self.links = links or {}      # 이름 → robot_link.HttpLink (실제 로봇). 다시 시작해도 연결은 그대로
+        self.reset(n_robots)
         self.push = Pusher(self, control_url)
         threading.Thread(target=self.loop, daemon=True).start()
 
     def reset(self, n, auto=0.0, planner='cbs', auto_omx=None):
         with self.lock:
             old = self.f
-            self.f = FMS(n_robots=n, params=Params(planner=planner))
+            self.f = FMS(n_robots=n, params=Params(planner=planner), links=self.links)
+            if self.links:
+                self.speed = 1.0                           # 실제 로봇이 있으면 실시간만
             self.f.auto_rate = auto
             self.f.clock = now_iso
             if old is not None:
@@ -285,8 +288,13 @@ class H(BaseHTTPRequestHandler):
                     made = [SIM.f.add_order(room, item).as_dict() for room, item in reqs]
                 return self.send(200, made[0] if isinstance(b, dict) and 'orders' not in b else made)
             if self.path == '/api/control':
-                if 'speed' in b:
+                if 'speed' in b and not SIM.links:              # 실제 로봇이 있으면 실시간만
                     SIM.speed = max(0.1, min(50.0, float(b['speed'])))
+                if 'clear_fault' in b:                           # 실제 로봇 실패 표시 지우고 이어서 {"clear_fault": "R1"}
+                    with SIM.lock:
+                        for rr in SIM.f.robots:
+                            if rr.id == b['clear_fault'] or rr.name == b['clear_fault']:
+                                SIM.f.clear_fault(rr)
                 if 'paused' in b:
                     SIM.paused = bool(b['paused'])
                 if 'auto_rate' in b:
@@ -314,8 +322,20 @@ def main():
     ap.add_argument('--host', default='127.0.0.1', help='다른 PC 에서 붙으려면 0.0.0.0')
     ap.add_argument('--control-url', default=None, help='관제 PC 주소 (예: http://192.168.129.135:8000). 로봇 상태·이벤트를 여기로 POST')
     ap.add_argument('--no-auto-omx', action='store_true', help='가상 관제 PC 끔: ready·loaded 를 진짜 관제 PC 가 보냄')
+    ap.add_argument('--real', action='append', default=[], metavar='이름=URL',
+                    help='실제 로봇 (robots.yaml 이름). 예: --real pinky_6364=http://192.168.129.68:8080 — 나머지 로봇은 가상')
+    ap.add_argument('--real-table', action='store_true', help='robots.yaml 에 url 이 있는 로봇은 모두 실제 로봇으로')
+    ap.add_argument('--robots', type=int, default=3, help='로봇 수 (실제 + 가상)')
     a = ap.parse_args()
-    SIM = Sim(a.control_url)
+    from robot_link import HttpLink
+    links = {}
+    reals = [x.split('=', 1) for x in a.real]
+    if a.real_table:
+        from fms_core import ROBOT_TABLE
+        reals += [(row['name'], row['url']) for row in ROBOT_TABLE if row.get('url')]
+    for name, url in reals:
+        links[name] = HttpLink(name, url)
+    SIM = Sim(a.control_url, links, a.robots)
     SIM.f.p.auto_omx = not a.no_auto_omx
     g = SIM.f.g
     segs, ghost = load_walls()
@@ -328,7 +348,7 @@ def main():
                parking=PARKING)
     srv = ThreadingHTTPServer((a.host, a.port), H)
     print(f'FMS 시뮬레이터: http://{a.host}:{a.port}  (API v1 Swagger: /docs, 관제 PC 로 보내기: {SIM.push.url or "끔"}, '
-          f'가상 OMX {"켬" if SIM.f.p.auto_omx else "끔"})')
+          f'가상 OMX {"켬" if SIM.f.p.auto_omx else "끔"}, 실제 로봇 {list(links) or "없음"})')
     srv.serve_forever()
 
 
