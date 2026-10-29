@@ -19,7 +19,7 @@ Pinky Pro 가 병원 아레나(210 × 200 cm)를 주행 그래프대로 달리�
 |---|---|
 | `corridor_drive.py` | 협로 라이다 벽 따라가기 (벽 없는 구간은 AMCL), 접촉 검사, `--stop-on-tape` 로 협로에서 나올 때 IR 로 차선 테이프 위에 멈춤 |
 | `line_follow.py` | IR 3채널 라인트레이싱 (PD 조향, 튀는 값 중앙값 필터, 바닥 값은 채널마다 최근 2초 최댓값으로 따라감). 흰색·바닥 값은 **로봇별 보정 파일** `~/.config/pinky/ir_cal.json` 을 읽음 (로봇마다 센서 감도가 달라 고정값 안 씀) |
-| `lane_drive.py` | 교행 복도 단계 실행: 테이프 따라가기 / 제자리 회전 / 테이프 없는 차선 바꾸기, 구간별 시간 기록. 테이프를 놓치면 마지막 본 쪽으로 돌며 0.8초 다시 찾음. 제자리 회전 최대 1.5 rad/s, 앞뒤 AMCL 대기 0.3 s (10-29, 90° 7.5 → 3.6 s) |
+| `lane_drive.py` | 교행 복도 단계 실행: 테이프 따라가기 / 제자리 회전 / 테이프 없는 차선 바꾸기, 구간별 시간 기록. 테이프를 놓치면 마지막 본 쪽으로 돌며 0.8초 다시 찾음. 제자리 회전 최대 1.5 rad/s, 앞뒤 AMCL 대기 0.3 s (보정 회전이 필요하면 1.0 s) (10-29, 90° 7.5 → 3.6 s) |
 | `edge_run.py` | 엣지 시간 측정: 영역 안 모든 방향 엣지를 덮는 경로를 짜서 엣지마다 실제 주행 방식으로 달리며 회전·이동 시간을 따로 기록 (`edge_logs/`). line = 테이프, wall = 벽 따라가기(벽 쪽은 그래프의 wall 선분으로), nav·벽 없는 문 앞 = AMCL 축선 직진 5 cm/s (Nav2 는 `--nav2`). `--new-only` / `--min-n 2` 로 덜 잰 엣지만, `--done-log <기록>` 으로 끊긴 한 바퀴 이어 돌기, `--skip a-b`, `--pre rotate:90 straight:3` 로 자리 맞추기. 배터리는 기본으로 안 봄 (`--batt-stop`) |
 | `edge_costs.py` | 측정 기록 → 방향별 엣지 이동 시간(중앙값) + 회전 시간 식. `--write` 로 `graph/edge_times.yaml` (FMS 경로 계획용). `--rot` = 회전 식은 지정한 기록만으로 (회전 속도를 바꾼 뒤) |
 | `rot_test.py` | 제자리 회전 시간 재기 (`--wmax`, `--settle` 로 설정 비교) |
@@ -38,7 +38,7 @@ Pinky Pro 가 병원 아레나(210 × 200 cm)를 주행 그래프대로 달리�
 | `graph_spec.yaml` | 사람·편집기가 고치는 원본 (차선, 갈림목, 노드, 엣지). `lane_skip:` = 못 가는 차선 노드 (지금 T2_20 — 콘센트 자리) |
 | `build_graph.py` | `graph_spec.yaml` → `graph.yaml` + `graph.png`. 차선 노드·차선 엣지(line)·갈림목 transfer(경계점↔차선, 차선↔차선)를 자동으로 만들고 엣지마다 벽 여유(빈 로봇 Ø11 / 그릇 Ø14)를 계산 |
 | `graph.yaml`, `graph.png` | 만들어진 그래프 (API 와 FMS 가 읽음 — FMS 는 복사하지 말고 이 파일을 가리킬 것). 그림의 목적지에 방 번호(101~108호·수술실·약제실) |
-| `edge_times.yaml` | **실측 엣지 시간** (10-27~29, pinky_6364·ee3a): 방향별 엣지 142개 전부(엣지마다 3~7번)의 이동 시간 중앙값·최소·최대·측정 횟수 + 회전 시간 식 (1.5 rad/s 회전 기준 ≈ 1.9 s + 1.8 s/90°: 90° 3.7 s, 180° 5.2 s). `tools/edge_costs.py --write` 로 만듦 |
+| `edge_times.yaml` | **실측 엣지 시간** (10-27~29, pinky_6364·ee3a): 방향별 엣지 142개 전부(엣지마다 4~9번)의 이동 시간 중앙값·최소·최대·측정 횟수 + 회전 시간 식 (1.5 rad/s 회전 기준 ≈ 2.1 s + 2.1 s/90°). 두 로봇 차이 평균 0.02 s → 표 하나로 씀. `tools/edge_costs.py --write` 로 만듦 |
 | `graph_editor.py`, `editor.html` | 브라우저 편집기 (`python3 graph/graph_editor.py` → http://localhost:8765) |
 
 ## maps/ · launch/ · config/
