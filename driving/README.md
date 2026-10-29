@@ -44,6 +44,7 @@ Pinky Pro 가 병원 아레나(210 × 200 cm)를 주행 그래프대로 달리�
 ## maps/ · launch/ · config/
 
 - `maps/map_drawn.*` — 실측 벽으로 그린 지도 (AMCL·Nav2·스캔 확인용, 맵 m × 100 = 그림 cm). `map_rev3*` 는 SLAM 원본·보정본 (지도 도구용 참고)
+  - 10-29: 왼쪽 외벽을 실측 스캔(B2_40·L80·T1_40)으로 고침 — 아래쪽(y 0~35)이 5~6cm 왼쪽이었음 (`tools/left_wall_measured.json` → `make_drawn_map.py`)
 - `launch/nav2_followpath.launch.py`, `config/nav2_params_followpath.yaml` — `pinky-nav2.service` 가 띄우는 Nav2 (map_server + amcl + controller + velocity_smoother, 플래너 없음)
 
 ## 로봇에 배포

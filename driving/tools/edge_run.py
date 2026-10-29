@@ -167,12 +167,18 @@ class Runner:
         x, y, th = self.dr.pose()
         return (x - self.LB * math.cos(th)) * 100, (y - self.LB * math.sin(th)) * 100, math.degrees(th) % 360
 
-    def move(self, a, b, mode, hd):
+    def move(self, a, b, mode, hd, nxt=None):
         N = self.N
         bx, by = N[b]['xy']
         if mode == 'line':
             tgt = bx if hd in (0, 180) else by
-            return self.dr.follow(hd, tgt, 'lidar'), {}
+            if nxt is None:
+                return self.dr.follow(hd, tgt, 'lidar'), {}
+            # 다음 엣지로 꺾는 제자리 회전은 바퀴 축 중심이라 라이다(1.7cm 뒤)가 옆으로 밀린다. 회전 뒤 라이다가 노드에 오게
+            # 바퀴 축을 노드 + LB·cos(꺾는 각) 에 세운다 (90° 면 축 = 노드). 10-29: B2_78→B2_40 뒤 90° 돌아 GB40 으로
+            # 올라갈 때 1.7cm 왼쪽에서 출발해 벽 따라가기가 80~84° 로 꺾임
+            u = 1 if hd in (0, 90) else -1
+            return self.dr.follow(hd, tgt + u * self.LB * 100 * math.cos(math.radians(nxt - hd)), 'axle'), {}
         if mode == 'transfer' and N[b]['type'] == 'lane':
             return self.dr.transfer(by if hd in (90, 270) else bx), {}
         if mode == 'nav' or (mode == 'transfer' and not wall_of(N, self.E, a, b)):
@@ -340,7 +346,7 @@ def main():
             extra = {}
             run.dr.trace = []
             if st == 'ok':
-                st, extra = run.move(na, nb, mode, round(hd) % 360)
+                st, extra = run.move(na, nb, mode, round(hd) % 360, round(moves[i][3]) % 360 if i < len(moves) else None)
             t2 = time.time()
             for r in run.dr.trace:
                 ft.write(f'{i},' + ','.join('' if v is None else str(v) for v in r) + '\n')
