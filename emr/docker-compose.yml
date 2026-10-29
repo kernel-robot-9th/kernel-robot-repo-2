@@ -13,7 +13,7 @@ services:
       POSTGRES_PASSWORD: emr
       POSTGRES_DB: emr
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"   # 이 PC 안에서만 (개발 계정 emr/emr — 2026-10-23 보안). api는 컨테이너 네트워크의 db로 접속
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -32,6 +32,10 @@ services:
       JWT_EXPIRE_MINUTES: 480
       CORS_ORIGINS: '["http://localhost:5173"]'
       SEED: ${SEED:-0}
+      AUTH_DISABLED: ${AUTH_DISABLED:-0}   # 1이면 로그인(JWT) 끔 — 누구나 관리자(N001)로 (2026-10-22, 시연·시험용)
+      ROBOT_KEY_DISABLED: ${ROBOT_KEY_DISABLED:-0}   # 1이면 로봇 API 키 끔 — 키 없으면 로봇 1호로 (2026-10-22, 시연·시험용)
+      VOICE_PARSER: ${VOICE_PARSER:-disabled}   # gemini면 음성 배송 예약 초안 켬 — 녹음이 Google 클라우드로 나간다 (2026-10-26)
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}       # .env에만 둔다
     ports:
       - "8000:8000"
     volumes:

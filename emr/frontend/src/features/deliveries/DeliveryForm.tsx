@@ -7,15 +7,39 @@
 //   - toLocalInput/toIso datetime-local ↔ ISO 변환
 //   - useNow             현재 시각 상태 (렌더 중 Date.now() 호출 대신)
 //   - DeliveryForm       initial 없으면 POST /deliveries, 있으면 PATCH /deliveries/{id}
+//   - CandidateChips     음성 초안이 확정 못 한 품목·장소의 후보 버튼
+// 새 예약에는 '말로 예약'(VoiceDraftBar, 2026-10-26)이 붙는다 — 초안으로 목적지·품목 줄을 채울 뿐, 예약은 '예약'을 눌러야 한다.
+// 음성으로 채운 줄의 비품이 약품이면 '확인함'을 표시해야 예약할 수 있다(사용자 결정: 약품은 자동 확정하지 않음)
 // =============================================================================
 import { useEffect, useState } from 'react'
 import { useDeliveryMutations, useLocations, useSupplies } from '../../api/hooks'
-import type { Delivery, DeliveryCreate } from '../../api/types'
+import type { Delivery, DeliveryCreate, VoiceCandidate, VoiceDraft } from '../../api/types'
 import { Button, Input, Label, Select } from '../../components/ui'
+import { VoiceDraftBar } from '../voice/VoiceDraftBar'
 
 interface ItemRow {
   supply_id: number | ''
   quantity: number
+  voice?: { spokenName: string; candidates: VoiceCandidate[] }   // 음성 초안으로 채운 줄
+  checked?: boolean                                              // 음성으로 채운 약품 줄을 간호사가 확인함
+}
+
+const EMPTY_ROW: ItemRow = { supply_id: '', quantity: 1 }
+
+/** 확정 못 한 품목·장소의 후보. [입력] candidates / onPick(id) [출력] 버튼 줄 */
+function CandidateChips({ candidates, onPick }: { candidates: VoiceCandidate[]; onPick: (id: number) => void }) {
+  if (candidates.length === 0) return null
+  return (
+    <div className="flex flex-wrap items-center gap-1 text-xs">
+      <span className="text-slate-500">후보:</span>
+      {candidates.map(candidate => (
+        <button key={candidate.id} type="button" onClick={() => onPick(candidate.id)}
+          className="rounded border border-blue-200 bg-white px-2 py-0.5 text-blue-700 hover:bg-blue-50">
+          {candidate.name}
+        </button>
+      ))}
+    </div>
+  )
 }
 
 /** datetime-local 값 → ISO 8601 (타임존 포함). 백엔드는 aware datetime만 받는다. */
@@ -59,8 +83,9 @@ export function DeliveryForm({ initial, onDone }: Props) {
   const [destination, setDestination] = useState<number | ''>(initial?.destination_location_id ?? '')
   const [scheduled, setScheduled] = useState(initial ? toLocalInput(new Date(initial.scheduled_at)) : defaultScheduled)
   const [items, setItems] = useState<ItemRow[]>(
-    initial?.items.map(i => ({ supply_id: i.supply_id, quantity: i.quantity })) ?? [{ supply_id: '', quantity: 1 }],
+    initial?.items.map(i => ({ supply_id: i.supply_id, quantity: i.quantity })) ?? [EMPTY_ROW],
   )
+  const [locationCandidates, setLocationCandidates] = useState<VoiceCandidate[]>([])
 
   const setItem = (i: number, patch: Partial<ItemRow>) =>
     setItems(rows => rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)))
@@ -71,6 +96,20 @@ export function DeliveryForm({ initial, onDone }: Props) {
   const availableQuantity = (supplyId: number) =>
     (stockBySupplyId.get(supplyId) ?? 0) + (reservedByThisDelivery.get(supplyId) ?? 0)
   const exceedsStock = (row: ItemRow) => row.supply_id !== '' && row.quantity > availableQuantity(row.supply_id)
+  const medicationIds = new Set((supplies.data ?? []).filter(supply => supply.category === 'medication').map(supply => supply.id))
+  const needsCheck = (row: ItemRow) => row.voice !== undefined && row.supply_id !== '' && medicationIds.has(row.supply_id)
+
+  /** 음성 초안 → 목적지·품목 줄. 예약 시각은 그대로 둔다. [입력] draft [출력] 없음 */
+  const applyDraft = (draft: VoiceDraft) => {
+    setDestination(draft.location.location_id ?? '')
+    setLocationCandidates(draft.location.location_id === null ? draft.location.candidates : [])
+    setItems(draft.items.length === 0 ? [EMPTY_ROW] : draft.items.map(item => ({
+      supply_id: item.supply_id ?? '',
+      quantity: item.quantity,
+      voice: { spokenName: item.spoken_name, candidates: item.candidates },
+      checked: false,
+    })))
+  }
 
   // 백엔드 규칙과 동일: 미래 시각, 품목 1개 이상, 같은 비품은 한 줄, 재고 이하
   const isFuture = scheduled !== '' && new Date(scheduled).getTime() > nowMs
@@ -78,7 +117,7 @@ export function DeliveryForm({ initial, onDone }: Props) {
     destination !== '' &&
     isFuture &&
     items.length > 0 &&
-    items.every(r => r.supply_id !== '' && r.quantity > 0 && !exceedsStock(r)) &&
+    items.every(r => r.supply_id !== '' && r.quantity > 0 && !exceedsStock(r) && (!needsCheck(r) || r.checked)) &&
     new Set(items.map(r => r.supply_id)).size === items.length
 
   const submit = () => {
@@ -88,7 +127,7 @@ export function DeliveryForm({ initial, onDone }: Props) {
       scheduled_at: toIso(scheduled),
       items: items.map(r => ({ supply_id: Number(r.supply_id), quantity: r.quantity })),
     }
-    const done = () => { if (!initial) setItems([{ supply_id: '', quantity: 1 }]); onDone?.() }
+    const done = () => { if (!initial) { setItems([EMPTY_ROW]); setLocationCandidates([]) } onDone?.() }
     if (initial) update.mutate({ id: initial.id, body }, { onSuccess: done })
     else create.mutate(body, { onSuccess: done })
   }
@@ -100,29 +139,31 @@ export function DeliveryForm({ initial, onDone }: Props) {
 
   return (
     <div className="space-y-3 rounded border border-slate-200 bg-white p-4">
-      <h2 className="font-medium">{initial ? `예약 #${initial.id} 변경` : '새 배송 예약'}</h2>
+      <h2 className="font-medium">{initial ? `신청 NO ${initial.id} 변경` : '새 물품 신청'}</h2>
+      {!initial && <VoiceDraftBar onDraft={applyDraft} />}
       <div className="grid grid-cols-2 gap-3">
         <Label text="목적지">
           <Select value={destination} onChange={e => setDestination(e.target.value === '' ? '' : Number(e.target.value))}>
             <option value="">선택</option>
             {locOptions.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
           </Select>
+          {destination === '' && <CandidateChips candidates={locationCandidates} onPick={setDestination} />}
         </Label>
-        <Label text="예약 시각 (미래)">
+        <Label text="보낼 시간">
           <Input type="datetime-local" value={scheduled} onChange={e => setScheduled(e.target.value)} />
         </Label>
       </div>
-      {scheduled !== '' && !isFuture && <p className="text-xs text-red-600">예약 시각은 지금보다 뒤여야 합니다</p>}
+      {scheduled !== '' && !isFuture && <p className="text-xs text-red-600">보낼 시간은 지금보다 뒤여야 합니다</p>}
 
       <div className="space-y-2">
         <span className="text-sm text-slate-600">품목</span>
         {items.map((row, i) => (
           <div key={i} className="space-y-1">
             <div className="flex gap-2">
-              <Select value={row.supply_id} onChange={e => setItem(i, { supply_id: e.target.value === '' ? '' : Number(e.target.value) })}>
+              <Select value={row.supply_id} onChange={e => setItem(i, { supply_id: e.target.value === '' ? '' : Number(e.target.value), checked: false })}>
                 <option value="">비품 선택</option>
                 {(supplies.data ?? []).map(s => (
-                  <option key={s.id} value={s.id}>{s.code} · {s.name} (예약 가능 {availableQuantity(s.id)})</option>
+                  <option key={s.id} value={s.id}>{s.code} · {s.name} (신청 가능 {availableQuantity(s.id)})</option>
                 ))}
               </Select>
               <div className="w-24">
@@ -133,19 +174,31 @@ export function DeliveryForm({ initial, onDone }: Props) {
                 삭제
               </Button>
             </div>
+            {row.voice && (
+              <p className="text-xs text-slate-500">들은 말: “{row.voice.spokenName}”</p>
+            )}
+            {row.voice && row.supply_id === '' && (
+              <CandidateChips candidates={row.voice.candidates} onPick={supplyId => setItem(i, { supply_id: supplyId, checked: false })} />
+            )}
+            {needsCheck(row) && (
+              <label className="flex items-center gap-2 rounded bg-amber-50 px-2 py-1 text-xs text-amber-800">
+                <input type="checkbox" checked={row.checked ?? false} onChange={e => setItem(i, { checked: e.target.checked })} />
+                약품입니다 — 품목·수량을 확인했습니다 (확인해야 예약할 수 있습니다)
+              </label>
+            )}
             {row.supply_id !== '' && exceedsStock(row) && (
-              <p className="text-xs text-amber-700">예약 가능한 수량({availableQuantity(row.supply_id)}개)보다 많습니다</p>
+              <p className="text-xs text-amber-700">신청 가능한 수량({availableQuantity(row.supply_id)}개)보다 많습니다</p>
             )}
           </div>
         ))}
-        <Button variant="secondary" onClick={() => setItems(rows => [...rows, { supply_id: '', quantity: 1 }])}>
+        <Button variant="secondary" onClick={() => setItems(rows => [...rows, EMPTY_ROW])}>
           + 품목 추가
         </Button>
       </div>
 
       <div className="flex items-center gap-3">
         <Button onClick={submit} disabled={!valid || mutation.isPending}>
-          {mutation.isPending ? '저장 중…' : initial ? '변경 저장' : '예약'}
+          {mutation.isPending ? '저장 중…' : initial ? '변경 저장' : '신청'}
         </Button>
         {initial && <Button variant="secondary" onClick={onDone}>취소</Button>}
       </div>

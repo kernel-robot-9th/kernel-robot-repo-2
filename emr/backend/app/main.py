@@ -18,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-from app.api.router import api_router
+from app.api.router import api_router, api_v2_router
 from app.core.config import settings
 from app.core.database import engine
 from app.core.exceptions import DomainError
@@ -39,6 +39,12 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
         conn.execute(text("SELECT 1"))
     notification_hub.start()
     log.info("startup", env=settings.ENV, db=settings.db_host_for_log())
+    if settings.AUTH_DISABLED:
+        log.warning("auth_disabled", acting_as=settings.AUTH_DISABLED_AS,
+                    detail="JWT login is OFF — anyone on the network acts as this admin (AUTH_DISABLED=1)")
+    if settings.ROBOT_KEY_DISABLED:
+        log.warning("robot_key_disabled", acting_as_robot_id=settings.ROBOT_KEY_DISABLED_AS,
+                    detail="robot API key check is OFF — calls without a key act as this robot (ROBOT_KEY_DISABLED=1)")
     yield
     await notification_hub.stop()
     engine.dispose()
@@ -66,8 +72,11 @@ def create_app() -> FastAPI:
             {"name": "maps", "description": "맵 관리 — 맵 yaml 파일 이름과 resolution·origin"},
             {"name": "locations", "description": "장소 관리 — 배송 위치, 맵 좌표(미터·라디안), 소속 맵"},
             {"name": "deliveries", "description": "배송 일정 예약 — 간호사 본인 예약 등록·조회·변경·취소 (로그인 필요)"},
+            {"name": "delivery-events", "description": "배송 기록 — 예약·변경·취소·출발·도착·수령·실패 (관리자 목록, 2026-10-21)"},
             {"name": "robots", "description": "로봇 관리 — 등록·조회·수정·삭제, 종류(매니퓰레이터·AMR)·이름·상태"},
             {"name": "notifications", "description": "알림 — 재고 부족 목록과 실시간 스트림(SSE) (로그인 필요)"},
+            {"name": "bedside-devices", "description": "병상 단말 관리 — 등록·병실·키 발급 (관리자, 2026-10-22)"},
+            {"name": "bedside-access", "description": "병상 단말 전용 — 환자 비품 요청·\"받았습니다\". `X-Bedside-Api-Key`로 호출"},
             {"name": "robot-access", "description": "로봇 전용 — 배송 수령 확인. 간호사 토큰이 아니라 `X-Robot-Api-Key`(로봇별 키)로 호출"},
         ],
         docs_url="/docs" if settings.ENV != "prod" else None,  # 운영에선 OpenAPI 비노출
@@ -100,6 +109,7 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     app.include_router(api_router, prefix="/api/v1")
+    app.include_router(api_v2_router, prefix="/api/v2")   # 고도화 중인 기능 — 음성 (2026-10-26)
     return app
 
 

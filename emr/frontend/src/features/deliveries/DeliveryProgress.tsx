@@ -3,32 +3,21 @@
 // 역할   : 배송 단계 표시 — 예약 → 출발 → 도착 → 수령, 실패·취소는 사유와 함께 (로드맵 2단계, 2026-10-20)
 // 작성일 : 2026-10-20
 // 구성   :
-//   - useNowMs          지금 시각 (30초마다) — '예약 시각이 지났는지' 안내용
+//   - (useNowMs는 useNowMs.ts로 옮김, 2026-10-22)
 //   - DeliveryProgress  한 줄 단계 표시 + 지금 단계의 시각·로봇 이름
 // =============================================================================
-import { useEffect, useState } from 'react'
 import type { Delivery } from '../../api/types'
 import { DELIVERY_FAILURE_REASON_LABEL } from '../../api/types'
+import { formatHourMinute } from '../../lib/dateFormat'
+import { useNowMs } from './useNowMs'
 
 const STEPS = [
-  { status: 'reserved', label: '예약' },
+  { status: 'reserved', label: '신청' },
   { status: 'dispatched', label: '출발' },
   { status: 'arrived', label: '도착' },
-  { status: 'received', label: '수령' },
+  { status: 'received', label: '받음' },
 ] as const
 
-const time = (iso: string | null) => iso ? new Date(iso).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : ''
-
-/** 지금 시각(ms). 렌더 중에 Date.now()를 부르지 않도록 상태로 두고 주기적으로 갱신한다.
- *  [입력] intervalMs [출력] number */
-function useNowMs(intervalMs = 30_000): number {
-  const [nowMs, setNowMs] = useState(() => Date.now())
-  useEffect(() => {
-    const timer = window.setInterval(() => setNowMs(Date.now()), intervalMs)
-    return () => window.clearInterval(timer)
-  }, [intervalMs])
-  return nowMs
-}
 
 /** 지금 단계의 순번 (실패는 어디서 멈췄는지로). [입력] delivery [출력] 0~3 */
 function stepIndex(delivery: Delivery): number {
@@ -45,7 +34,8 @@ export function DeliveryProgress({ delivery }: { delivery: Delivery }) {
   const current = stepIndex(delivery)
   const failed = delivery.status === 'failed'
   const overdue = delivery.status === 'reserved' && new Date(delivery.scheduled_at).getTime() <= nowMs
-  const hasCoordinates = delivery.destination_location?.map_x_m != null
+  // 로봇은 로봇 목적지 이름(robot_dest)이 있는 장소의 배송만 가져간다 (2026-10-27, 전에는 좌표·복귀 장소 맵)
+  const robotCanGo = delivery.destination_location?.robot_dest != null
 
   return (
     <div className="space-y-1">
@@ -66,12 +56,12 @@ export function DeliveryProgress({ delivery }: { delivery: Delivery }) {
         })}
       </ol>
       <p className="text-xs text-slate-500">
-        {delivery.status === 'reserved' && !hasCoordinates && <span className="text-amber-700">목적지 좌표가 없어 로봇이 맡지 않습니다 (관리자에게 장소 좌표 등록 요청)</span>}
-        {delivery.status === 'reserved' && hasCoordinates && (overdue ? '로봇 배정을 기다리는 중' : '예약 시각이 되면 로봇이 출발합니다')}
-        {delivery.status === 'dispatched' && `${delivery.assigned_robot_name ?? '로봇'} 출발 ${time(delivery.dispatched_at)}`}
-        {delivery.status === 'arrived' && `${delivery.assigned_robot_name ?? '로봇'} 도착 ${time(delivery.arrived_at)} · 수령 마감 ${time(delivery.receipt_deadline_at)}`}
-        {delivery.status === 'received' && `수령 ${time(delivery.received_at)}`}
-        {failed && <span className="text-red-700">{delivery.failure_reason ? DELIVERY_FAILURE_REASON_LABEL[delivery.failure_reason] : '실패'} · 재고는 되돌렸습니다</span>}
+        {delivery.status === 'reserved' && !robotCanGo && <span className="text-amber-700">운반 로봇이 갈 수 없는 장소라 출발하지 않습니다. 관리자에게 문의해 주세요.</span>}
+        {delivery.status === 'reserved' && robotCanGo && (overdue ? '곧 운반 로봇이 출발합니다.' : '보낼 시간이 되면 운반 로봇이 출발합니다.')}
+        {delivery.status === 'dispatched' && `운반 로봇이 ${formatHourMinute(delivery.dispatched_at)}에 출발했습니다.`}
+        {delivery.status === 'arrived' && '병동에 도착했습니다. 받아 주세요.'}
+        {delivery.status === 'received' && `${formatHourMinute(delivery.received_at)} 받음`}
+        {failed && <span className="text-red-700">{delivery.failure_reason ? DELIVERY_FAILURE_REASON_LABEL[delivery.failure_reason] : '배송하지 못했습니다.'}</span>}
       </p>
     </div>
   )

@@ -4,6 +4,8 @@
 # 작성일 : 2026-10-14
 # 구성   :
 #   - create/list/get/update/cancel  
+#   - events  배송 한 건의 기록 — 예약 간호사 본인·관리자 (2026-10-21, 로드맵 4단계)
+#   - receipt "받았습니다" 버튼 수령 — 도착한 본인 배송 (2026-10-22, 마커 대신)
 # =============================================================================
 from __future__ import annotations
 
@@ -14,7 +16,9 @@ from app.models.enums import DeliveryStatus
 from app.schemas.delivery import (
     DeliveryCreate, DeliveryOut, DeliveryUpdate,
 )
+from app.schemas.delivery_event import DeliveryEventOut
 from app.services.delivery import DeliveryService
+from app.services.delivery_events import DeliveryEventService
 
 router = APIRouter()
 UNAUTHORIZED_RESPONSE = {401: {"description": "토큰 없음·만료"}}
@@ -68,6 +72,22 @@ def get_delivery(db: DB, nurse: CurrentNurse, delivery_id: int) -> DeliveryOut:
     return DeliveryOut.model_validate(DeliveryService(db).get(delivery_id, nurse.id))
 
 
+@router.get(
+    "/{delivery_id}/events", response_model=list[DeliveryEventOut],
+    summary="배송 기록 (한 건)",
+    description="예약·변경·취소·출발·도착·수령·실패를 일어난 순서로. 예약한 간호사 본인과 관리자만. "
+                "2026-10-21 이전에 만든 배송은 기록이 없다.",
+    responses={**UNAUTHORIZED_RESPONSE, 403: {"description": "다른 간호사의 예약 (관리자는 가능)"},
+               404: {"description": "예약 없음"}},
+)
+def list_delivery_history(db: DB, nurse: CurrentNurse, delivery_id: int) -> list[DeliveryEventOut]:
+    """
+    [입력] delivery_id / nurse
+    [출력] list[DeliveryEventOut]
+    """
+    return [DeliveryEventOut.model_validate(event) for event in DeliveryEventService(db).history(delivery_id, nurse)]
+
+
 @router.patch(
     "/{delivery_id}", response_model=DeliveryOut,
     summary="배송 예약 변경",
@@ -96,3 +116,18 @@ def cancel_delivery(db: DB, nurse: CurrentNurse, delivery_id: int) -> DeliveryOu
     [출력] DeliveryOut: cancelled
     """
     return DeliveryOut.model_validate(DeliveryService(db).cancel(delivery_id, nurse.id))
+
+
+@router.post(
+    "/{delivery_id}/receipt", response_model=DeliveryOut,
+    summary='"받았습니다" (수령 확인)',
+    description="arrived → received. 도착한 본인 배송만. 로봇(배송 실행기)은 대기 중 /robot/me로 알아차리고 돌아간다. "
+                "NURSE_RECEIPT_METHOD=marker로 마커를 되살리면 409 delivery_receipt_by_marker (2026-10-22)",
+    responses={**OWNERSHIP_RESPONSES, 409: {"description": "도착 전이거나 끝난 배송 (delivery_not_arrived) · 마커 방식 (delivery_receipt_by_marker)"}},
+)
+def confirm_delivery_receipt(db: DB, nurse: CurrentNurse, delivery_id: int) -> DeliveryOut:
+    """
+    [입력] delivery_id / nurse
+    [출력] DeliveryOut: received
+    """
+    return DeliveryOut.model_validate(DeliveryService(db).confirm_receipt(delivery_id, nurse.id))
