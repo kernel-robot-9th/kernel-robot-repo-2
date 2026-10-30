@@ -177,6 +177,7 @@ class DriveCtl:
         drv, N, E, s = self.drv, self.N, self.E, self.s
         try:
             drv.dr.spin(0.3)   # 쉬는 동안 낡은 TF·odom 갱신
+            through = False
             for i, (a, b) in enumerate(pairs):
                 mode = E[(a, b)]['mode']
                 hd = round(face(N, E, a, b)) % 360
@@ -184,7 +185,7 @@ class DriveCtl:
                          edge_t0=time.time(), state='rotating')
                 t0 = time.time()
                 st = 'ok'
-                if not (resume and i == 0) and abs(angdiff(hd, drv.lidar_pose()[2])) > 1.5:
+                if not (resume and i == 0) and not through and abs(angdiff(hd, drv.lidar_pose()[2])) > 1.5:
                     st = drv.rotate(hd)
                 t1 = time.time()
                 if st == 'ok':
@@ -195,10 +196,14 @@ class DriveCtl:
                     else:
                         nh = None if end_h is None else round(float(end_h)) % 360
                     s['state'], s['node'] = 'driving', None
-                    st, extra = drv.move(a, b, mode, hd, nh)
+                    # 다음 엣지가 같은 방향·같은 방식(테이프·벽)이면 b 에서 서지 않고 이어 감 (10-30 사용자)
+                    through = (i + 1 < len(pairs) and nh == hd and mode in ('line', 'wall')
+                               and E[pairs[i + 1]]['mode'] == mode)
+                    st, extra = drv.move(a, b, mode, hd, nh, through)
                 else:
-                    extra = {}
-                drv.dr.spin(0.3)
+                    extra, through = {}, False
+                if not through:
+                    drv.dr.spin(0.3)
                 x, y, th = drv.lidar_pose()
                 s['results'].append(dict(a=a, b=b, mode=mode, status=st, rot_s=round(t1 - t0, 2), move_s=round(time.time() - t1, 2),
                                          end=[round(x, 1), round(y, 1), round(th, 1)], extra=extra))

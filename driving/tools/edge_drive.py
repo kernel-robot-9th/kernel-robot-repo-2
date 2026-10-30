@@ -148,15 +148,15 @@ class EdgeDriver:
     def rotate(self, hd):
         return self.dr.rotate(hd)
 
-    def move(self, a, b, mode, hd, nxt=None):
+    def move(self, a, b, mode, hd, nxt=None, through=False):
         """엣지 a→b 를 달림 (회전은 부르는 쪽이 먼저: face()). hd = 진행 방향 deg, nxt = 다음 엣지 방향 (모르면 None).
-        반환 (status, extra dict)"""
+        through = b 에서 서지 않고 같은 방향 다음 엣지로 이어 감 (line·wall). 반환 (status, extra dict)"""
         N = self.N
         bx, by = N[b]['xy']
         if mode == 'line':
             tgt = bx if hd in (0, 180) else by
-            if nxt is None:
-                return self.dr.follow(hd, tgt, 'lidar'), {}
+            if nxt is None or through:
+                return self.dr.follow(hd, tgt, 'lidar', through), {}
             # 다음 엣지로 꺾는 제자리 회전은 바퀴 축 중심이라 라이다(1.7cm 뒤)가 옆으로 밀린다. 회전 뒤 라이다가 노드에 오게
             # 바퀴 축을 노드 + LB·cos(꺾는 각) 에 세운다 (90° 면 축 = 노드). 10-29: B2_78→B2_40 뒤 90° 돌아 GB40 으로
             # 올라갈 때 1.7cm 왼쪽에서 출발해 벽 따라가기가 80~84° 로 꺾임
@@ -176,7 +176,7 @@ class EdgeDriver:
         if mode in ('transfer', 'wall'):     # 차선 → 협로 입구, 협로 벽 따라가기
             side, off = wall_side(N, self.E, a, b)
             cd = self._cd(side, off)
-            r = cd.run(N[a]['xy'], N[b]['xy'], should_stop=self._stop)
+            r = cd.run(N[a]['xy'], N[b]['xy'], should_stop=self._stop, through=through)
             r['side'] = side
             return r.pop('status'), r
         return f'mode_{mode}_todo', {}
