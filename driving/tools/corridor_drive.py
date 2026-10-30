@@ -211,10 +211,11 @@ class CorridorDrive:
             self.send(0, max(-0.6, min(0.6, 1.5 * err)) if abs(err) > math.radians(8) else math.copysign(0.15, err))
         self.stop(); return False
 
-    def run(self, p0_cm, p1_cm, final_heading=None, log_path=None, should_stop=None, stop_on_tape=False):
+    def run(self, p0_cm, p1_cm, final_heading=None, log_path=None, should_stop=None, stop_on_tape=False, through=False):
         """p0 -> p1 축선을 따라 벽 따라가기. 반환 dict(status=ok|blocked|contact|timeout|lost|canceled|no_tape|ir_stale, ...)
         should_stop: 매 주기 부르는 함수, True 면 멈추고 canceled (API 서버의 취소)
-        stop_on_tape: p1 = 차선 위 점. IR 가 테이프를 밟으면 바퀴 축이 테이프 위에 올 때까지 가서 멈춤"""
+        stop_on_tape: p1 = 차선 위 점. IR 가 테이프를 밟으면 바퀴 축이 테이프 위에 올 때까지 가서 멈춤
+        through: 끝에서 감속·정지 없이 그대로 (다음 엣지가 같은 방향으로 이어짐, 10-30 사용자)"""
         p0 = (p0_cm[0] / 100, p0_cm[1] / 100); p1 = (p1_cm[0] / 100, p1_cm[1] / 100)
         if stop_on_tape:
             from line_follow import tape_pos
@@ -268,10 +269,11 @@ class CorridorDrive:
             else:
                 remain = L - m['s']
             if remain < 0.003:
-                self.stop(); status = 'ok'; break
-            v = max(0.03, min(self.v, self.v * remain / 0.08))
+                status = 'ok'; break
+            v = self.v if through else max(0.03, min(self.v, self.v * remain / 0.08))
             self.send(v, control(e, th_rel))
-        self.stop()
+        if not (through and status == 'ok'):
+            self.stop()
         if status == 'ok' and final_heading is not None:
             self.rotate_to(math.radians(final_heading))
         R = np.array(rows) if rows else np.zeros((0, 12))

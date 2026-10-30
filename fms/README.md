@@ -7,6 +7,49 @@
 - 지도: 같은 저장소 `driving/graph/graph.yaml`(주행 그래프), `driving/tools/real_walls.yaml`(벽)을 그대로 읽는다 → **`driving/` 폴더도 있어야 돈다**.
   그래프를 바꾸려면 `driving/graph/graph_spec.yaml` 을 고치고 `python3 driving/graph/build_graph.py`.
 
+## 0. 처음 실행하기 — 실제 핑키 3대 + 관제 PC(EMR) (2026-10-30)
+
+노드 이름·로봇 IP 를 몰라도 이 순서대로 하면 된다. 망은 team2 공유기(`team2_5G` / `team2_2_4G`, 10.42.0.x).
+
+| 번호 | 이름 | 시리얼 (`/status` 의 `robot.serial`) |
+| --- | --- | --- |
+| 1 | pinky_6364 | 0d4763d873e291b7 |
+| 2 | pinky_ee3a | 8ab6b3c36a27f120 |
+| 3 | pinky_62f4 | 1cdda27b956a1efc |
+
+1. **핑키 켜기.** 1~2분 뒤 bringup·Nav2·IR·로봇 API(포트 8080)가 저절로 뜬다(사용자 systemd 서비스). 손으로 띄우지 말 것.
+2. **로봇 주소 확인.** [`robots.yaml`](robots.yaml) 의 `url` 이 맞는지: `curl http://<IP>:8080/status`.
+   IP 가 바뀌었으면(DHCP) 같은 망의 PC 에서 아래로 찾아서 `robots.yaml` 의 `url` 을 고친다.
+   ```bash
+   for i in $(seq 2 254); do (curl -s -m 0.5 http://10.42.0.$i:8080/status | python3 -c "import json,sys; print('10.42.0.$i', json.load(sys.stdin)['robot']['serial'])" 2>/dev/null &); done; sleep 2
+   ```
+3. **핑키를 테이프 위 노드에 놓기.** 노드 = 차선 테이프 위의 갈림길·표시점 ([`driving/graph/graph.png`](../driving/graph/graph.png) 의 점).
+   어느 노드인지는 몰라도 되지만 **노드에서 5 cm 안, 테이프와 나란히(차선 방향)** 놓는다. 다른 핑키·사람·물건은 필드에서 치운다.
+4. **FMS 띄우기** (관제 PC, 저장소 루트에서):
+   ```bash
+   cd fms
+   CONTROL_URL=http://localhost:8000 FMS_ARGS="--real-table" docker compose up -d --build
+   ```
+   화면: `http://<관제 PC>:8770`. `FMS_ARGS="--real-table"` = 가상 OMX 켬(준비 완료·적재 완료를 FMS 가 시간 지나면 스스로 냄).
+   실제 OMX 를 쓰면(EMR `FMS_OMX_ENABLED=1`) 기본값(`--real-table --no-auto-omx`)으로 띄운다.
+5. **위치 찾기.** 화면 오른쪽 '로봇' 카드마다 `위치 확인 안 됨` 이 보이면 **[위치 찾기]** (~1분, 라이다 스캔으로 맵 전체에서 찾음).
+   `✅ 위치 맞음` → FMS 가 그 로봇을 저절로 붙인다. **붙자마자 움직인다** (노는 로봇은 가장 가까운 빈 주차 자리로).
+6. **EMR 에서 배송 넣기.** EMR `.env` 의 `FMS_BASE_URL=http://<FMS PC>:8770`. EMR 장소의 로봇 목적지(`robot_dest`)는
+   `101호`~`108호`, `수술실`. EMR 로봇 번호표(`FMS_ROBOT_MAP`, 기본 FMS 1→EMR 1, 2→3, 3→4)에 맞는 EMR 로봇이 있어야 진행 상태가 보인다.
+
+화면 로봇 카드의 빨간 글씨 = 할 일:
+
+| 화면 | 할 일 |
+| --- | --- |
+| 로봇 API 응답 없음 | 전원·Wi-Fi(team2) 확인, `robots.yaml` 주소 확인(2번) 뒤 `docker compose restart fms` |
+| 이 주소에 다른 로봇이 있음 | IP 가 바뀜 → 2번 |
+| 위치 확인 안 됨 / 재부팅됨 | 테이프 위 노드에 놓고 [위치 찾기] |
+| 노드 위에 있지 않음 | 노드에서 5 cm 안으로 옮기고 [위치 찾기] |
+| 멈춤 (lost·blocked·contact 등, 주행 중 실패) | 로봇을 눈으로 확인(테이프 위·막힌 것 치움) → [확인했음 · 이어서] |
+
+- FMS 가 붙인 뒤에는 로봇을 손으로 옮기지 않는다 (FMS 가 모름). 옮겼으면 `docker compose restart fms` 후 5번.
+- 로봇 쪽 코드·서비스는 `driving/` ([`driving/README.md`](../driving/README.md)). 로봇에 SSH 로 들어갈 일은 보통 없다.
+
 ## 1. 실행
 
 필요한 것: Python 3.8 이상, PyYAML (`pip install pyyaml`). 그 밖엔 표준 라이브러리만 쓴다.
@@ -58,7 +101,8 @@ docker compose logs -f fms
 
 - 로봇 주소: `robots.yaml` 의 `url` (DHCP 라 바뀔 수 있음 — `curl http://<IP>:8080/status` 의 `robot.serial` 로 확인).
   컨테이너에 붙여 쓰므로 고친 뒤 `docker compose restart fms`. 시리얼이 표와 다르면 그 로봇은 오류로 둔다.
-- 띄우기 전: 핑키마다 노드 위에 놓고 위치 맞추기 (`POST <로봇>:8080/set_pose {"find": true}`). FMS 는 로봇이 보고한 노드에서 시작한다.
+- 위치: 핑키를 노드 위에 놓고 화면의 [위치 찾기] (= 로봇 `POST :8080/set_pose {"find": true}`, 0번 5). 위치 확인 전에는
+  FMS 가 붙이지 않고 로봇도 `/drive` 를 거절한다. 확인되면 FMS 가 저절로 붙이고, 로봇이 보고한 노드에서 시작한다.
 - **띄우면 바로 움직인다**: 노는 로봇은 주차 자리로, 주문이 오면 배송. 실제 로봇이 있으면 시간은 1배속만.
 - 이동 = 계획(CBS)에서 다음 대기 지점까지 묶어 `/drive`. 정밀 주차 = `PHARMACY → PHARMACY_DOCK` 엣지, 병실 = `/action spin`.
 - 늦음 (엣지가 예상 × 1.5 + 2초 넘음) → 다시 계획. 실패 → 그 자리를 차지한 채 멈춤 + 관제 PC 에 `robot_error`.
@@ -154,7 +198,7 @@ python3 fms/run_headless.py --minutes 120 --rate 2 --seed 1     # --robots 2, --
   - 지나간 노드는 몸체가 14.5 cm 멀어질 때까지 붙잡는다.
 - **교착 풀기**: 서로 기다리는 고리가 3 s 넘으면, 다른 로봇이 잡은 곳·갈 길·실은 로봇이 지날 복도 구간을 피해
   갈 수 있는 가장 가까운 차선 노드나 협로 안 경유점으로 한 대를 비킨 뒤 원래 일을 이어 간다.
-- **주차 자리**: 복도 서쪽 끝 B1_20, B2_20, T1_20 + 아래 복도 동쪽 끝 B1_195. (T2_20 은 콘센트 자리라 그래프에서 뺌, 10-28) CHARGER 는 막다른 두 칸(POCKET→CHARGER)이라 뺐다.
+- **주차 자리** (10-30): B1_20, B2_20, B1_78, B1_130, B1_180, B1_195, T1_20, T2_130, T1_175. 로봇별 고정 자리가 아니라 가장 가까운 빈자리, 다른 로봇이 지금 가는 길 위(와 그 가까이)는 뺀다. 차선 위 자리에 서 있다가 다른 로봇 길을 막으면 비켜 준다. (T2_20 은 콘센트 자리라 그래프에서 뺌, 10-28) CHARGER 는 막다른 두 칸(POCKET→CHARGER)이라 뺐다.
   같은 x 의 두 차선 자리(짝)에는 약 실은 로봇을 둘 세우지 않는다 (나란히 서면 그 복도 끝을 아무도 못 지나감).
 - **막다른 목적지 차례**: 같은 구역을 더 오래 기다린 로봇이 먼저. 어떤 로봇이 15 s 넘게 기다리는 구역을 새로 지나가는 이동은 보류
   (막다른 곳에 갇혀 그 구역으로만 나올 수 있는 로봇은 예외). 이게 없으면 POCKET 을 2000 s 넘게 못 받는 로봇이 생겼다.

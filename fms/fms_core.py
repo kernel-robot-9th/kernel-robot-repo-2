@@ -99,7 +99,9 @@ def parse_request(body):
         item = next((q[k] for k in ITEM_KEYS if k in q), '약')
         out.append((resolve_room(room), item))
     return out
-PARKING = ['B1_20', 'B2_20', 'T1_20', 'B1_195']   # 노는 로봇 주차 자리 (통행을 안 막는 복도 끝). T2_20 은 콘센트 자리라 그래프에서 뺌 (10-28)
+# 노는 로봇 주차 자리: 로봇별 고정이 아니라 가장 가까운 빈자리. 차선 위 자리는 다른 로봇 길을 막으면 waiting() 이 비키게 함
+# (10-30 사용자). T2_20 은 콘센트 자리라 그래프에서 뺌 (10-28)
+PARKING = ['B1_20', 'B2_20', 'B1_78', 'B1_130', 'B1_180', 'B1_195', 'T1_20', 'T2_130', 'T1_175']
 # B2_195 는 수술실 입구(GB180)에 너무 가까워 뺌.
 # CHARGER 는 막다른 곳이라 뺌. 같은 x 의 두 차선 자리(짝)에 약 실은 로봇 둘을 세우면 그 복도 끝을 아무도 못 지나가므로 짝은 하나만
 EAST_LANE = {'B': 'B1', 'T': 'T1'}                           # 우측통행: 동쪽(+x)으로 갈 때 쓰는 차선 (아래쪽 차선)
@@ -732,8 +734,11 @@ class FMS:
                      and self.g.nodes[m].get('lane', ' ')[0] == lane[0]), None)
 
     def free_parking(self, r, taken, avoid=()):
-        """가장 가까운 빈 주차 자리. 약을 실었으면 짝 자리에 실은 로봇이 있거나 누가 가는 중인 자리는 뺀다"""
+        """가장 가까운 빈 주차 자리. 약을 실었으면 짝 자리에 실은 로봇이 있거나 누가 가는 중인 자리는 뺀다.
+        다른 로봇이 지금 가는 길 위(와 그 가까이)의 자리도 뺀다"""
         occ = {o.node: o for o in self.robots if o is not r}
+        onpath = {n for o in self.robots if o is not r and o.path for n in o.path[o.k:]}
+        onpath |= {m for n in onpath for m in self.g.near[n]}
         going = {}
         for o in self.robots:
             if o is not r:
@@ -742,7 +747,7 @@ class FMS:
                         going[st['to']] = o
         spots = []
         for s in PARKING:
-            if s in occ or s in taken or s in avoid or s in going:
+            if s in occ or s in taken or s in avoid or s in going or s in onpath:
                 continue
             m = self.parking_partner(s)
             if r.loaded and m and ((m in occ and occ[m].loaded) or (m in going and going[m].loaded) or m in taken):
@@ -1029,6 +1034,11 @@ class FMS:
                 continue
             if r.edge_t > 0:
                 nodes, dep = [r.path[r.k]] + nodes, [now] + dep
+            elif (r.depart is not None and r.k + 1 < len(r.path) and len(nodes) > 1
+                  and nodes[:2] == r.path[r.k:r.k + 2]):
+                # 다음 엣지가 같으면 이미 기다린(회전한) 시간을 버리지 않는다. 10-30: 막힌 로봇이 2초마다 다시 계획 →
+                # 회전 대기 중인 R2 의 출발이 매번 '지금 + 회전 시간'으로 밀려 영영 못 떠남 (그 R2 가 막힌 로봇의 길을 막음)
+                dep[0] = min(dep[0], r.depart[r.k])
             r.path, r.depart = nodes, dep
             r.k = 0
             r.res_to = 1 if r.edge_t > 0 else 0         # 지나는 중인 엣지만 남기고 예약은 출발 시각에 다시
@@ -1583,7 +1593,8 @@ class FMS:
                            queue=[{k: v for k, v in s.items() if k in ('kind', 'to', 'room')} for s in r.queue],
                            path=r.path[r.k:] if r.step and r.step['kind'] == 'move' and r.path else [],
                            res_to=max(0, r.res_to - r.k), wait=r.wait_why if r.wait_s > 0 else '',
-                           real=r.link is not None, fault=r.fault, at_dock=r.at_dock,
+                           real=r.link is not None, fault=r.fault, at_dock=r.at_dock, name=r.name,
+                           url=r.link.url if r.link else None, find=r.link.find if r.link else None,
                            wait_s=round(r.wait_s, 1), timer=round(r.timer, 1),
                            plan=self.last_plans.get(r.id, []) if (r.step and (r.step['kind'] != 'move' or r.step.get('started'))) else [],
                            held=dict(nodes=sorted(n), edges=[list(x) for x in e], zones=sorted(z))))

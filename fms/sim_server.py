@@ -295,6 +295,10 @@ class H(BaseHTTPRequestHandler):
                         for rr in SIM.f.robots:
                             if rr.id == b['clear_fault'] or rr.name == b['clear_fault']:
                                 SIM.f.clear_fault(rr)
+                if 'find_pose' in b:                             # 실제 로봇 위치 찾기 {"find_pose": "R1"} (화면 버튼)
+                    for rr in SIM.f.robots:
+                        if rr.link and b['find_pose'] in (rr.id, rr.name):
+                            rr.link.find_pose()
                 if 'paused' in b:
                     SIM.paused = bool(b['paused'])
                 if 'auto_rate' in b:
