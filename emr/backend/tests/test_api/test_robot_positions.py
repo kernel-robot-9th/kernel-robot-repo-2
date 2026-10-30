@@ -85,14 +85,14 @@ def test_positions_need_login(client, monkeypatch):
 
 
 @requires_db
-def test_battery_and_contamination_for_cards(client, logged_in_client):
-    """10-30 지도 아래 로봇 카드: FMS battery·contamination(0~100) → battery_percent·contamination_percent.
+def test_fatigue_and_contamination_for_cards(client, logged_in_client):
+    """10-30 지도 아래 로봇 카드: FMS fatigue(피로도, 10-30 battery에서 이름 바뀜)·contamination(0~100) → fatigue_percent·contamination_percent.
     칸이 없거나 숫자가 아니거나 범위 밖이면 null이고 위치는 그대로 저장."""
     client.post(ROBOT_STATUS, json={"robots": [
-        _robot(1, 10, 10, 0, battery=70, contamination=10),
+        _robot(1, 10, 10, 0, fatigue=70, contamination=10),
         _robot(2, 20, 20, 0),
-        _robot(3, 30, 30, 0, battery="full", contamination=150),
+        _robot(3, 30, 30, 0, fatigue="full", contamination=150),
     ]})
     robots = logged_in_client.get(POSITIONS).json()["robots"]
-    assert [(robot["battery_percent"], robot["contamination_percent"]) for robot in robots] == [(70, 10), (None, None), (None, None)]
+    assert [(robot["fatigue_percent"], robot["contamination_percent"]) for robot in robots] == [(70, 10), (None, None), (None, None)]
     assert [robot["fms_robot_number"] for robot in robots] == [1, 2, 3]

@@ -147,7 +147,7 @@ export interface RobotPosition {
   place: string | null          // 사람이 읽는 위치 (아래 복도, 101호 …)
   reported_at: string
   is_stale: boolean             // 연결 끊김 (오래 못 받음 또는 online=false)
-  battery_percent: number | null        // 0~100 — FMS가 계산한 값 (실제 센서 아님, 2026-10-30)
+  fatigue_percent: number | null        // 피로도 0~100 — FMS가 계산한 값 (실제 배터리 아님, 2026-10-30)
   contamination_percent: number | null  // 0~100 — FMS가 계산한 값
 }
 export interface RobotPositions {

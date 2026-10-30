@@ -25,7 +25,7 @@ const DRAG_MIN_PX_ON_SCREEN = 6   // 이보다 짧게 끌면 방향 없이 위�
 const SMOOTH_IMAGE_MIN_WIDTH_PX = 1000   // 이보다 큰 이미지(평면도)는 줄일 때 글자가 깨지지 않게 부드럽게, 작은 SLAM 맵은 픽셀 그대로
 const ROBOT_COLOR = '#ea580c'
 const STALE_ROBOT_COLOR = '#94a3b8'
-const LOW_BATTERY_PERCENT = 20         // FMS pharmacy_min_battery — 이 값 이하면 약제실에 가지 못한다
+const LOW_FATIGUE_PERCENT = 20         // FMS pharmacy_min_fatigue — 이 값 이하면 약제실에 가지 못한다
 const HIGH_CONTAMINATION_PERCENT = 50  // 4인실 한 번 다녀온 만큼
 // FMS 로봇 state → 화면 글자 (fms/API.md 상태 값). 모르는 값은 그대로 보여 준다
 const ROBOT_STATE_LABEL: Record<string, string> = {
@@ -56,7 +56,7 @@ function RobotCards({ robots }: { robots: RobotPosition[] }) {
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
         {robots.map(robot => {
           const name = robot.robot_name ?? robot.fms_robot_name ?? `FMS ${robot.fms_robot_number}`
-          const battery = robot.battery_percent
+          const fatigue = robot.fatigue_percent
           const contamination = robot.contamination_percent
           const stateLabel = robot.state ? (ROBOT_STATE_LABEL[robot.state] ?? robot.state) : '—'
           return (
@@ -70,8 +70,8 @@ function RobotCards({ robots }: { robots: RobotPosition[] }) {
                 <span className="text-xs text-slate-500">{robot.is_stale ? '연결 끊김' : stateLabel}</span>
               </div>
               <p className="text-xs text-slate-500">{robot.place ?? '위치 모름'}</p>
-              <PercentBar label="배터리" percent={battery}
-                tone={battery != null && battery <= LOW_BATTERY_PERCENT ? 'bg-red-500' : 'bg-green-500'} />
+              <PercentBar label="피로도" percent={fatigue}
+                tone={fatigue != null && fatigue <= LOW_FATIGUE_PERCENT ? 'bg-red-500' : 'bg-green-500'} />
               <PercentBar label="오염도" percent={contamination}
                 tone={contamination == null || contamination === 0 ? 'bg-green-500'
                   : contamination >= HIGH_CONTAMINATION_PERCENT ? 'bg-red-500' : 'bg-amber-400'} />
@@ -79,7 +79,7 @@ function RobotCards({ robots }: { robots: RobotPosition[] }) {
           )
         })}
       </div>
-      <p className="pt-1 text-xs text-slate-400">배터리·오염도는 FMS가 계산한 값입니다.</p>
+      <p className="pt-1 text-xs text-slate-400">피로도·오염도는 FMS가 계산한 값입니다(실제 배터리 아님).</p>
     </div>
   )
 }

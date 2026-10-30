@@ -1,6 +1,6 @@
 # =============================================================================
 # 파일   : app/services/fms_robot_positions.py
-# 역할   : 팀원 FMS가 1초마다 보내는 로봇 상태(robot-status)의 마지막 위치·배터리·오염도를 메모리에 두고, 병원 지도용으로 돌려준다 (2026-10-29)
+# 역할   : 팀원 FMS가 1초마다 보내는 로봇 상태(robot-status)의 마지막 위치·피로도·오염도를 메모리에 두고, 병원 지도용으로 돌려준다 (2026-10-29)
 # 작성일 : 2026-10-29
 # 구성   :
 #   - FmsRobotPosition        로봇 한 대의 마지막 값 (FMS 단위 그대로: cm, °)
@@ -9,7 +9,8 @@
 #   - RobotPositionService    list_positions() — 맵 id(FMS_MAP_NAME)·EMR 로봇(FMS_ROBOT_MAP)을 붙이고 cm→m, °→rad
 # DB에 쓰지 않는다(로드맵: 위치 보고는 매번 저장하지 않음). 재시작하면 비지만 FMS가 1초 뒤 다시 보낸다.
 # FMS pose: 경기장 그림 cm, 왼쪽 아래 원점, heading ° (0 = +x, 90 = +y) — fms/API.md 공통 규칙
-# 배터리·오염도(2026-10-30, 지도 아래 카드): 0~100, 실제 센서가 아니라 FMS 모델 값(병실마다 배터리 −10, 1인실 오염 +10·4인실 +50)
+# 피로도·오염도(2026-10-30, 지도 아래 카드): 0~100, 실제 센서가 아니라 FMS 모델 값(병실마다 피로도 −10, 1인실 오염 +10·4인실 +50).
+# FMS가 10-30 `battery`를 `fatigue`(피로도, 가상 배터리)로 이름을 바꿨다(fms/API.md)
 # =============================================================================
 from __future__ import annotations
 
@@ -40,7 +41,7 @@ class FmsRobotPosition:
     state: str | None
     place: str | None
     received_at: datetime
-    battery_percent: float | None = None         # FMS battery (0~100), 없거나 범위 밖이면 None
+    fatigue_percent: float | None = None         # FMS fatigue 피로도 (0~100), 없거나 범위 밖이면 None
     contamination_percent: float | None = None   # FMS contamination (0~100)
 
 
@@ -93,7 +94,7 @@ class FmsRobotPositionStore:
                 x_cm=x_cm, y_cm=y_cm, heading_deg=heading_deg,
                 online=robot.get("online") is not False,   # 칸이 없으면 온라인으로 본다 — 오래된 값은 is_stale이 잡는다
                 state=_text(robot.get("state")), place=_text(robot.get("place")), received_at=received_at,
-                battery_percent=_percent(robot.get("battery")), contamination_percent=_percent(robot.get("contamination")),
+                fatigue_percent=_percent(robot.get("fatigue")), contamination_percent=_percent(robot.get("contamination")),
             ))
         with self._lock:
             for position in positions:
@@ -139,6 +140,6 @@ class RobotPositionService:
                 map_x_m=position.x_cm / 100, map_y_m=position.y_cm / 100, map_yaw_rad=math.radians(position.heading_deg),
                 online=position.online, state=position.state, place=position.place, reported_at=position.received_at,
                 is_stale=not position.online or age_seconds > settings.FMS_POSITION_STALE_SECONDS,
-                battery_percent=position.battery_percent, contamination_percent=position.contamination_percent,
+                fatigue_percent=position.fatigue_percent, contamination_percent=position.contamination_percent,
             ))
         return RobotPositionsOut(map_id=fms_map.id if fms_map else None, robots=robots)

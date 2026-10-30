@@ -28,7 +28,7 @@ class RobotPositionOut(BaseModel):
     place: str | None = Field(description="FMS가 보낸 사람이 읽는 위치 (아래 복도, 101호 …)")
     reported_at: datetime = Field(description="EMR이 이 값을 받은 시각")
     is_stale: bool = Field(description="online=false이거나 FMS_POSITION_STALE_SECONDS보다 오래 받지 못함 — 화면은 '연결 끊김'")
-    battery_percent: float | None = Field(description="FMS battery 0~100 — 실제 센서가 아니라 FMS 모델 값(2026-10-30). 없으면 null")
+    fatigue_percent: float | None = Field(description="FMS fatigue 피로도 0~100 — 실제 배터리가 아니라 FMS 모델 값(2026-10-30, 병실마다 −10·충전 자리 100). 없으면 null")
     contamination_percent: float | None = Field(description="FMS contamination 0~100 — FMS 모델 값(2026-10-30). 없으면 null")
 
 
