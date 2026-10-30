@@ -22,6 +22,7 @@ class HttpLink:
         self.n = 0
         self.q = queue.Queue()
         self.peers, self.peers_new = None, False   # 다른 로봇 위치 (가장 최근 것만 보냄)
+        self.find = None            # 위치 찾기 진행: {state: running|ok|fail, t, msg}
         threading.Thread(target=self._poll, daemon=True).start()
         threading.Thread(target=self._send_loop, daemon=True).start()
         threading.Thread(target=self._peer_loop, daemon=True).start()
@@ -103,6 +104,22 @@ class HttpLink:
         cid = self._cid()
         self.q.put((cid, '/action', dict(cmd_id=cid, kind=kind, **kw)))
         return cid
+
+    def find_pose(self):
+        """로봇 POST /set_pose {"find": true}: 스캔만으로 맵 전체에서 위치 찾기 (~1분, 노드 이름 몰라도 됨).
+        맞으면 로봇이 pose_confirmed → FMS check_real 이 다시 붙임. 오래 걸려서 따로 스레드"""
+        if self.find and self.find['state'] == 'running':
+            return
+        self.find = dict(state='running', t=time.time(), msg='스캔으로 맵 전체에서 찾는 중… (~1분)')
+
+        def run():
+            try:
+                code, b = self._req('/set_pose', {'find': True}, timeout=170)
+                msg = (b.get('output') or [b.get('why') or b.get('error') or ''])[-1]
+                self.find = dict(state='ok' if code == 200 else 'fail', t=time.time(), msg=msg)
+            except Exception as e:  # noqa: BLE001
+                self.find = dict(state='fail', t=time.time(), msg=f'{type(e).__name__}: {e}')
+        threading.Thread(target=run, daemon=True).start()
 
     def cancel(self):
         self.q.put((self._cid(), '/cancel', {}))
