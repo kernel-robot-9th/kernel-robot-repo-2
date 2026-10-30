@@ -12,6 +12,7 @@
 // 음성으로 채운 줄의 비품이 약품이면 '확인함'을 표시해야 예약할 수 있다(사용자 결정: 약품은 자동 확정하지 않음)
 // 여러 병동 (2026-10-30, 사용자 "한번에 여러 병동을 배송"): 새 신청에 '+ 병동 추가' — 병동마다 신청 1건, 보낼 시간은 같다.
 // 재고는 모든 병동 합계로 확인한다. 음성 초안은 마지막 병동을 채운다. 변경은 신청 1건(병동 1곳)만
+// 즉시 (2026-10-30, 사용자 "즉시 기능"): 보낼 시간에 '즉시'를 고르면 누른 순간의 시각으로 신청 — 백엔드가 "지금"을 받고 다음 회차(5초)에 FMS로 보낸다
 // =============================================================================
 import { useEffect, useState } from 'react'
 import { useDeliveryMutations, useLocations, useSupplies } from '../../api/hooks'
@@ -91,6 +92,7 @@ export function DeliveryForm({ initial, onDone }: Props) {
   const nowMs = useNow(30_000)
 
   const [scheduled, setScheduled] = useState(initial ? toLocalInput(new Date(initial.scheduled_at)) : defaultScheduled)
+  const [sendNow, setSendNow] = useState(false)   // 즉시 — 보낼 시간 = 누른 순간
   const [wards, setWards] = useState<WardRow[]>(() => initial
     ? [{
         destination: initial.destination_location_id,
@@ -144,7 +146,8 @@ export function DeliveryForm({ initial, onDone }: Props) {
     ward.items.length > 0 &&
     ward.items.every(r => r.supply_id !== '' && r.quantity > 0 && !exceedsStock(r) && (!needsCheck(r) || r.checked)) &&
     new Set(ward.items.map(r => r.supply_id)).size === ward.items.length
-  const valid = isFuture && !hasDuplicateWard && wards.every(wardValid)
+  const valid = (sendNow || isFuture) && !hasDuplicateWard && wards.every(wardValid)
+  const scheduledIso = () => (sendNow ? new Date().toISOString() : toIso(scheduled))
 
   const toWard = (ward: WardRow): DeliveryWard => ({
     destination_location_id: Number(ward.destination),
@@ -155,12 +158,12 @@ export function DeliveryForm({ initial, onDone }: Props) {
     if (!valid) return
     const done = () => { if (!initial) setWards([emptyWard()]); onDone?.() }
     if (wards.length > 1) {
-      createMulti.mutate({ scheduled_at: toIso(scheduled), destinations: wards.map(toWard) }, { onSuccess: done })
+      createMulti.mutate({ scheduled_at: scheduledIso(), destinations: wards.map(toWard) }, { onSuccess: done })
       return
     }
     const [onlyWard] = wards
     if (!onlyWard) return
-    const body: DeliveryCreate = { ...toWard(onlyWard), scheduled_at: toIso(scheduled) }
+    const body: DeliveryCreate = { ...toWard(onlyWard), scheduled_at: scheduledIso() }
     if (initial) update.mutate({ id: initial.id, body }, { onSuccess: done })
     else create.mutate(body, { onSuccess: done })
   }
@@ -174,10 +177,18 @@ export function DeliveryForm({ initial, onDone }: Props) {
     <div className="space-y-3 rounded border border-slate-200 bg-white p-4">
       <h2 className="font-medium">{initial ? `신청 NO ${initial.id} 변경` : '새 물품 신청'}</h2>
       {!initial && <VoiceDraftBar onDraft={applyDraft} />}
-      <Label text="보낼 시간">
-        <Input type="datetime-local" value={scheduled} onChange={e => setScheduled(e.target.value)} />
-      </Label>
-      {scheduled !== '' && !isFuture && <p className="text-xs text-red-600">보낼 시간은 지금보다 뒤여야 합니다</p>}
+      {/* label로 감싸지 않는다 — 안의 버튼이 글자 클릭을 가져간다 */}
+      <div className="space-y-1 text-sm">
+        <span className="block text-slate-600">보낼 시간</span>
+        <div className="flex gap-2">
+          <Button variant={sendNow ? 'primary' : 'secondary'} onClick={() => setSendNow(true)}>즉시</Button>
+          <Button variant={sendNow ? 'secondary' : 'primary'} onClick={() => setSendNow(false)}>시간 지정</Button>
+        </div>
+        {sendNow
+          ? <p className="text-xs text-slate-500">신청하면 바로 보냅니다</p>
+          : <Input type="datetime-local" aria-label="보낼 시간" value={scheduled} onChange={e => setScheduled(e.target.value)} />}
+      </div>
+      {!sendNow && scheduled !== '' && !isFuture && <p className="text-xs text-red-600">보낼 시간은 지금보다 뒤여야 합니다</p>}
 
       {wards.map((ward, wardIndex) => (
         <div key={wardIndex} className={wards.length > 1 ? 'space-y-3 rounded border border-slate-200 p-3' : 'space-y-3'}>
