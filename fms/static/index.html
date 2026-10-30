@@ -42,6 +42,8 @@ canvas { width: 100%; height: auto; display: block; }
 .bar { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
 .bar i { display: block; height: 100%; }
 .wait { color: var(--warn); font-size: 11.5px; }
+.fault { color: var(--bad); font-size: 11.5px; font-weight: 600; }
+.rbtn { font-size: 11.5px; margin: 3px 4px 0 0; }
 .next { color: var(--quiet); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .stats div { text-align: center; }
@@ -204,6 +206,28 @@ function draw() {
   }
 }
 
+// 실제 로봇: 무엇이 문제고 사람이 무엇을 하면 되는지 (10-30: 처음 쓰는 사람도 노드 이름 없이 붙일 수 있게)
+const FAULT = {unreachable: '로봇 API 응답 없음 — 전원·Wi-Fi(team2)·robots.yaml 주소 확인',
+  wrong_robot: '이 주소에 다른 로봇이 있음 — robots.yaml 주소 확인',
+  not_localized: '위치 확인 안 됨 — 테이프 위 아무 노드에 차선 방향으로 놓고 [위치 찾기]',
+  not_at_node: '노드 위에 있지 않음 — 테이프 위 노드에 놓고 [위치 찾기]',
+  rebooted: '재부팅됨 — 테이프 위 노드에 놓고 [위치 찾기]'};
+const FINDABLE = ['not_localized', 'not_at_node', 'rebooted'];
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+window.findPose = id => post('/api/control', {find_pose: id}).then(tick);
+window.clearFault = id => confirm(`${id}: 로봇을 확인했고 이어서 달려도 되나요?`) && post('/api/control', {clear_fault: id}).then(tick);
+function realInfo(r) {
+  if (!r.real) return '';
+  const f = r.fault, fd = r.find, running = fd && fd.state === 'running';
+  let h = `<div class="next">실제 로봇 ${esc(r.name)} · ${esc(r.url)}</div>`;
+  if (f) h += `<div class="fault">${FAULT[f.code] ? esc(FAULT[f.code]) : esc(`멈춤 (${f.code})${f.why ? ' — ' + f.why : ''}`)}</div>`;
+  if (fd && (running || Date.now() / 1000 - fd.t < 120))
+    h += `<div class="${fd.state === 'fail' ? 'fault' : 'next'}">위치 찾기: ${esc(fd.msg)}</div>`;
+  if (f && FINDABLE.includes(f.code) && !running) h += `<button class="rbtn" onclick="findPose('${r.id}')">위치 찾기</button>`;
+  if (f && !FINDABLE.includes(f.code) && !['unreachable', 'wrong_robot'].includes(f.code))
+    h += `<button class="rbtn" onclick="clearFault('${r.id}')">확인했음 · 이어서</button>`;
+  return h;
+}
 function bar(v, col) { return `<div class="bar"><i style="width:${Math.max(0, Math.min(100, v))}%;background:${col}"></i></div>`; }
 
 function render() {
@@ -233,6 +257,7 @@ function render() {
       ${r.plan && r.plan.length ? `<div class="next">계획: ${r.plan.filter(g => g.leave == null || g.leave > S.t).map(g =>
           `${ROOM_LABEL[g.node] || PLACE[g.node] || g.node} ${fmt(g.arrive)}~${g.leave == null ? '' : fmt(g.leave)}`).join(' → ')}</div>` : ''}
       ${r.wait ? `<div class="wait">기다림 ${r.wait_s}s · ${r.wait}</div>` : ''}
+      ${realInfo(r)}
     </div></div>`;
   }
   $('robots').innerHTML = h;
