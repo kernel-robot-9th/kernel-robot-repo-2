@@ -1,0 +1,36 @@
+delivery_id	request_id	fms_order_id	batch_id	fms_robot	status	sent_kst	delivered_kst
+138	emr-d138-s4-1	o-4	b-2	2	assigned	16:27:31	
+138	emr-d138-s4-2	o-5	b-2	2	assigned	16:27:31	
+139	emr-d139-s1-1	o-6	b-3	3	assigned	16:27:31	
+140	emr-d140-s3-1	o-7	b-2	2	assigned	16:27:31	
+141	emr-d141-s3-1	o-8	b-4	1	assigned	16:27:46	
+142	emr-d142-s2-1	o-9			queued	16:27:56	
+143	emr-d143-s3-1	o-10			queued	16:28:06	
+143	emr-d143-s3-2	o-11			queued	16:28:06	
+144	emr-d144-s2-1	o-12			queued	16:28:06	
+145	emr-d145-s3-1	o-13			queued	16:28:06	
+146	emr-d146-s3-1	o-14			queued	16:28:21	
+147	emr-d147-s1-1	o-15			queued	16:28:21	
+148	emr-d148-s4-1	o-16			queued	16:28:31	
+149	emr-d149-s2-1	o-17			queued	16:28:31	
+150	emr-d150-s2-1	o-18			queued	16:28:31	
+151	emr-d151-s2-1	o-19			queued	16:28:41	
+152	emr-d152-s2-1	o-20			queued	16:28:57	
+152	emr-d152-s2-2	o-21			queued	16:28:57	
+153	emr-d153-s3-1	o-22			queued	16:28:57	
+154	emr-d154-s4-1	o-23			queued	16:28:57	
+155	emr-d155-s4-1	o-24			queued	16:29:07	
+155	emr-d155-s4-2	o-25			queued	16:29:07	
+156	emr-d156-s2-1	o-26			queued	16:29:07	
+157	emr-d157-s1-1	o-27			queued	16:29:07	
+158	emr-d158-s1-1	o-28			queued	16:29:17	
+159	emr-d159-s2-1	o-29			queued	16:29:17	
+160	emr-d160-s3-1	o-30			queued	16:29:32	
+160	emr-d160-s3-2	o-31			queued	16:29:32	
+161	emr-d161-s1-1	o-32			queued	16:29:32	
+162	emr-d162-s1-1	o-33			queued	16:29:32	
+163	emr-d163-s3-1	o-34			queued	16:29:42	
+163	emr-d163-s3-2	o-35			queued	16:29:42	
+164	emr-d164-s1-1	o-36			queued	16:29:42	
+165	emr-d165-s3-1	o-37			queued	16:29:42	
+166	emr-d166-s3-1	o-38			queued	16:29:57	
