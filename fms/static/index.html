@@ -226,7 +226,7 @@ function render() {
     const next = r.queue.filter(q => q.kind === 'spin').map(q => ROOM_LABEL[q.room]).join(', ');
     h += `<div class="robot"><div class="dot" style="background:${r.color}"></div><div>
       <div class="rrow"><span><b>${r.id}</b> <span class="state">${STATE[r.state] || r.state}${r.task ? ' · ' + TASK[r.task] : ''}</span></span><span class="state">${step}</span></div>
-      <div class="bars"><span>배터리</span>${bar(r.battery, r.battery <= 20 ? css('--bad') : css('--good'))}<span>${r.battery}</span>
+      <div class="bars"><span>피로도</span>${bar(r.fatigue, r.fatigue <= 20 ? css('--bad') : css('--good'))}<span>${r.fatigue}</span>
       <span>오염도</span>${bar(r.contam, r.contam >= 100 ? css('--bad') : css('--warn'))}<span>${r.contam}</span>
       <span>적재</span>${bar(r.load / 3 * 100, r.color)}<span>${r.load}/3</span></div>
       ${r.orders.length ? `<div class="next">주문 ${r.orders.map(o => '#' + o).join(' ')}${next ? ' · 다음: ' + next : ''}</div>` : ''}

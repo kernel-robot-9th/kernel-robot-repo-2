@@ -78,7 +78,7 @@ def main():
     tail = f", 계산 중앙 {ms[len(ms) // 2]}ms · 95% {ms[int(len(ms) * 0.95)]}ms · 최대 {ms[-1]}ms" if ms else ''
     print(f"계획: {ps['replans']}번 (CBS {ps['cbs']}, 우선순위 {ps['prioritized']}, 못 풂 {ps['failed']}){tail}")
     for r in f.robots:
-        print(f'  {r.id}: {r.state_name():9s} node {r.node:10s} 배터리 {r.battery:3d} 오염 {r.contam:3d} 적재 {r.load} 주문 {len(r.assigned)} '
+        print(f'  {r.id}: {r.state_name():9s} node {r.node:10s} 피로도 {r.fatigue:3d} 오염 {r.contam:3d} 적재 {r.load} 주문 {len(r.assigned)} '
               f'{("기다림 " + r.wait_why) if r.wait_s else ""}')
     kinds = collections.Counter(e['msg'].split(':')[0] for e in ev)
     print('경고·위반 종류:', dict(kinds))

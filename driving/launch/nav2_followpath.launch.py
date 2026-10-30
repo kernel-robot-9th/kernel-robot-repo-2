@@ -4,7 +4,7 @@
 import os
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, GroupAction, SetEnvironmentVariable
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, GroupAction, SetEnvironmentVariable
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node, PushRosNamespace
 
@@ -31,6 +31,9 @@ def generate_launch_description():
         DeclareLaunchArgument('log_level', default_value='info'),
         GroupAction([
             PushRosNamespace(ns),
+            # 다른 핑키를 지운 스캔 /scan_filtered → AMCL (tools/scan_peer_filter.py, 위치는 FMS → API /peers, 10-29)
+            ExecuteProcess(cmd=['python3', os.path.join(ROOT, 'tools', 'scan_peer_filter.py')], name='scan_peer_filter',
+                           output='screen'),
             # 위치 추정
             Node(package='nav2_map_server', executable='map_server', name='map_server', output='screen',
                  parameters=common + [{'yaml_filename': map_yaml}], remappings=tf, arguments=args),
