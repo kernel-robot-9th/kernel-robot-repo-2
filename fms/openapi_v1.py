@@ -42,7 +42,7 @@ ROBOT = {'type': 'object', 'properties': {
     'place': {'type': 'string', 'example': '오른쪽 협로'},
     'destination': {'type': ['object', 'null'], 'properties': {'node': {'type': 'string'}, 'room': {'type': ['string', 'null']}}},
     'path': {'type': 'array', 'items': {'type': 'string'}},
-    'battery': {'type': 'integer'}, 'contamination': {'type': 'integer'},
+    'fatigue': {'type': 'integer'}, 'contamination': {'type': 'integer'},
     'load': {'type': 'integer'}, 'capacity': {'type': 'integer', 'example': 3},
     'batch_id': {'type': ['string', 'null']}, 'orders': {'type': 'array', 'items': {'type': 'string'}}}}
 

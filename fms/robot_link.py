@@ -21,8 +21,10 @@ class HttpLink:
         self.sent = {}              # cmd_id → (http 코드, 응답) 보낸 결과
         self.n = 0
         self.q = queue.Queue()
+        self.peers, self.peers_new = None, False   # 다른 로봇 위치 (가장 최근 것만 보냄)
         threading.Thread(target=self._poll, daemon=True).start()
         threading.Thread(target=self._send_loop, daemon=True).start()
+        threading.Thread(target=self._peer_loop, daemon=True).start()
 
     def _req(self, path, body=None, timeout=3.0):
         r = urllib.request.Request(self.url + path, method='GET' if body is None else 'POST',
@@ -54,6 +56,20 @@ class HttpLink:
                 self.sent[cid] = self._req(path, body)
             except Exception as e:  # noqa: BLE001
                 self.sent[cid] = (None, {'error': 'unreachable', 'why': f'{type(e).__name__}: {e}'})
+
+    def _peer_loop(self):
+        """다른 로봇 위치 → 로봇 POST /peers (AMCL 스캔에서 그 둘레를 지움, 로봇 tools/scan_peer_filter.py)"""
+        while True:
+            if self.peers_new:
+                self.peers_new = False
+                try:
+                    self._req('/peers', dict(peers=self.peers), timeout=1.0)
+                except Exception:  # noqa: BLE001
+                    pass
+            time.sleep(0.1)
+
+    def set_peers(self, pts):
+        self.peers, self.peers_new = [dict(x=round(x, 1), y=round(y, 1)) for x, y in pts], True
 
     # ---- 읽기 ----
     def alive(self):

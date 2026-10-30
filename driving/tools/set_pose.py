@@ -102,6 +102,19 @@ class Node:
         return self.amcl[-1] if self.amcl else None
 
 
+CONFIRM_FILE = os.path.expanduser('~/.config/pinky/pose_set.json')
+
+
+def mark_confirmed(lx, ly, th):
+    """위치 확인 표시 (API 가 읽음: 이 시각이 AMCL 이 뜬 뒤면 '위치 확인됨'). 10-30: 재부팅한 로봇이 초기 위치(A)를 그대로 보고해
+    FMS 가 엉뚱한 노드에서 출발시킨 일 → 확인 전에는 /drive 거절"""
+    import json
+    import time
+    os.makedirs(os.path.dirname(CONFIRM_FILE), exist_ok=True)
+    json.dump(dict(t=time.time(), lidar_cm=[round(100 * lx, 1), round(100 * ly, 1)], heading=round(math.degrees(th) % 360, 1)),
+              open(CONFIRM_FILE, 'w'))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('where', nargs='*', help='이름(A, start_A, omx_stop…) 또는 "x,y heading" (그림 cm, deg)')
@@ -159,6 +172,8 @@ def main():
     print(f'스캔 확인: AMCL 자세에서 벽 3cm 안 {100 * sc0:.0f}%, 가장 잘 맞는 자세와 차이 {100 * dd:.1f}cm·{dth:+.1f}°')
     good = sc0 >= OK_MATCH and dd <= OK_DIST and abs(dth) <= OK_DEG
     print('✅ 위치 맞음' if good else '⚠️ 위치가 의심스러움 — 로봇이 그 자리에 있는지 확인하거나 --find 로 다시 넣기')
+    if good:
+        mark_confirmed(alx, aly, ath)
     node.n.destroy_node(); node.rclpy.shutdown()
     return 0 if good else 1
 

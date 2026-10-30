@@ -74,6 +74,8 @@ class DriveCtl:
         p = self.robot.pose()
         if p is None:
             return 409, dict(error='not_localized', why='map → base_footprint TF 없음 (/set_pose)')
+        if hasattr(self.robot, 'pose_confirmed') and not self.robot.pose_confirmed():
+            return 409, dict(error='not_localized', why='재부팅·Nav2 재시작 뒤 위치 확인 안 함 — 노드에 놓고 POST /set_pose')
         return None
 
     def duplicate(self, body):

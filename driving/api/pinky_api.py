@@ -12,6 +12,7 @@
 #   POST /cancel                      지금 작업 멈춤 (/goto 작업 또는 /drive·/action 명령)
 #   POST /drive  {"cmd_id":..,"route":["B2_78","B2_40",..],"next":..,"end_heading":..}  FMS 구간 주행 → 202 (api/drive_ctl.py)
 #   POST /action {"cmd_id":..,"kind":"spin"|"rotate"[,"heading":..]}   제자리 동작 → 202. 진행은 GET /status 의 drive 칸
+#   POST /peers  {"peers":[{"x":..,"y":..}]}  다른 로봇 위치 (FMS 가 0.3초마다) → AMCL 스캔에서 그 둘레를 지움 (tools/scan_peer_filter.py)
 #   GET  /jobs/<id>                   작업 상태 (GET /jobs = 최근 목록)
 #   POST /set_pose {"name":"A"} | {"x":182.7,"y":24,"heading":180} | {"find":true}   AMCL 시작 위치 넣기 (tools/set_pose.py)
 #   GET/PUT /notify {"url":..,"dests":["PHARMACY"]}   도착 신호: 그 목적지 작업이 성공하면(dock 이면 정밀 주차 끝) url 로 POST
@@ -36,7 +37,7 @@ ROOT = os.path.dirname(HERE)
 TOOLS = os.path.join(ROOT, 'tools')
 sys.path.insert(0, TOOLS)
 sys.path.insert(0, HERE)
-from coords import map_to_user  # noqa: E402
+from coords import map_to_user, user_to_map  # noqa: E402
 from follow_path_client import LIDAR_BEHIND_AXLE, build_poses, densify  # noqa: E402
 from graph_route import Graph  # noqa: E402
 from drive_ctl import DriveCtl  # noqa: E402
@@ -58,6 +59,19 @@ def robot_info():
     except Exception:  # noqa: BLE001
         ips = []
     return dict(serial=serial, hostname=socket.gethostname(), ips=ips)
+
+
+CONFIRM_FILE = os.path.expanduser('~/.config/pinky/pose_set.json')   # tools/set_pose.py 가 위치를 확인하면 씀
+
+
+def boot_id():
+    try:
+        return open('/proc/sys/kernel/random/boot_id').read().strip()
+    except OSError:
+        return None
+
+
+BOOT_ID = boot_id()   # 재부팅하면 바뀜 → FMS 가 알아챔
 
 
 def wait_future(f, timeout, cancel=None):
@@ -85,9 +99,14 @@ class Robot:
         self.tfb = Buffer(); self.tfl = TransformListener(self.tfb, self.node)
         self.fp = ActionClient(self.node, FollowPath, 'follow_path')
         self.cmd = self.node.create_publisher(Twist, 'cmd_vel_nav', 10)
+        from geometry_msgs.msg import PoseArray
+        self.PoseArray = PoseArray
+        self.peer_pub = self.node.create_publisher(PoseArray, 'peer_poses', 10)   # → scan_peer_filter
+        self.peers = dict(n=0, t=None)
         self.ex = MultiThreadedExecutor(); self.ex.add_node(self.node)
         threading.Thread(target=self.ex.spin, daemon=True).start()
         self.cd = None   # CorridorDrive: 자기 노드를 작업 스레드에서 spin_once 로 돌림 (위 executor 와 따로)
+        self._conf = (0.0, False)   # (확인한 시각, 결과) — 2초마다만 다시 봄
 
     def pose(self):
         """라이다 중심 dict(x, y cm, heading deg, age_s) 또는 None (map → base_footprint TF 없음 = AMCL/Nav2 안 뜸)"""
@@ -104,6 +123,34 @@ class Robot:
         now = self.node.get_clock().now().nanoseconds * 1e-9
         return dict(x=round(x, 1), y=round(y, 1), heading=round(math.degrees(math.atan2(hy - y, hx - x)), 1),
                     age_s=round(now - stamp, 2))
+
+    def publish_peers(self, peers):
+        """다른 로봇 라이다 중심 [(x, y) 그림 cm] → /peer_poses (map 프레임 m)"""
+        from geometry_msgs.msg import Pose
+        m = self.PoseArray(); m.header.frame_id = 'map'; m.header.stamp = self.node.get_clock().now().to_msg()
+        for x, y in peers:
+            q = Pose(); q.position.x, q.position.y = user_to_map(x, y); q.orientation.w = 1.0
+            m.poses.append(q)
+        self.peer_pub.publish(m)
+        self.peers = dict(n=len(peers), t=time.time())
+
+    def pose_confirmed(self):
+        """AMCL 이 뜬 뒤 /set_pose(set_pose.py)로 위치를 확인했나. 재부팅·Nav2 재시작 직후 AMCL 은 설정의 초기 위치(A)를 그대로
+        내므로 '위치 있음' 만으로는 못 믿음 (10-30: 재부팅한 62f4 를 FMS 가 B2_180 에 있다고 보고 출발시킴)"""
+        now = time.time()
+        if now - self._conf[0] < 2.0:
+            return self._conf[1]
+        ok = False
+        try:
+            t_set = json.load(open(CONFIRM_FILE)).get('t', 0.0)
+            pid = subprocess.run(['pgrep', '-f', 'nav2_amcl/amcl'], capture_output=True, text=True, timeout=2).stdout.split()
+            if pid:
+                et = int(subprocess.run(['ps', '-o', 'etimes=', '-p', pid[0]], capture_output=True, text=True, timeout=2).stdout)
+                ok = t_set > now - et
+        except (OSError, ValueError, subprocess.SubprocessError):
+            ok = False
+        self._conf = (now, ok)
+        return ok
 
     def nav_ready(self):
         return self.fp.server_is_ready()
@@ -350,10 +397,13 @@ class Api:
     def status(self):
         p = self.robot.pose()
         j = self.job
-        return dict(robot=self.info, frame='diagram cm, lidar center, heading deg (0=+x, 90=+y)',
-                    pose=p, localized=p is not None, nav2_ready=self.robot.nav_ready(),
+        return dict(robot=dict(self.info, boot_id=BOOT_ID), frame='diagram cm, lidar center, heading deg (0=+x, 90=+y)',
+                    pose=p, localized=p is not None, pose_confirmed=p is not None and self.robot.pose_confirmed(),
+                    nav2_ready=self.robot.nav_ready(),
                     state=(j['state'] if j and j['state'] == 'running' else 'driving' if self.drive.running() else 'idle'),
-                    job=summary(j) if j else None, drive=self.drive.status())
+                    job=summary(j) if j else None, drive=self.drive.status(),
+                    peers=dict(n=self.robot.peers['n'], age_s=None if self.robot.peers['t'] is None
+                               else round(time.time() - self.robot.peers['t'], 1)))
 
 
 def summary(j):
@@ -444,6 +494,16 @@ def make_app(api):
     def action():
         code, body = api.drive.start_action(request.get_json(silent=True) or {})
         return jsonify(body), code
+
+    @app.post('/peers')
+    def peers():
+        b = request.get_json(silent=True) or {}
+        try:
+            pts = [(float(p['x']), float(p['y'])) for p in b.get('peers', [])]
+        except (KeyError, TypeError, ValueError):
+            return err(400, '{"peers": [{"x": cm, "y": cm}, ...]}')
+        api.robot.publish_peers(pts)
+        return jsonify(ok=True, n=len(pts))
 
     @app.post('/cancel')
     def cancel():
