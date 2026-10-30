@@ -42,7 +42,7 @@ amcl:
     z_max: 0.05
     z_rand: 0.1                    # [②] 0.5 -> 0.1
     z_short: 0.05
-    scan_topic: scan
+    scan_topic: scan_filtered       # 10-29: 다른 핑키를 지운 스캔 (tools/scan_peer_filter.py). 위치가 안 오면 /scan 그대로
     set_initial_pose: true
     initial_pose:                  # [②] map_drawn 기준 A 표시점 (라이다 중심 (182.7, 24) cm, 180°) 의 바퀴 축
       x: 1.810
