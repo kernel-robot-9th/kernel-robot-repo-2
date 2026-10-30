@@ -1,13 +1,15 @@
 flowchart TB
-  %% 병원 배송 로봇 SW 3계층 구조 — 지금 구현 기준 (2026-10-27, calibration 브랜치)
+  %% 병원 배송 로봇 SW 3계층 구조 — 지금 구현 기준 (2026-10-29, calibration 브랜치 bf3f112 — 팀원 fms·driving 병합. 10-30 Vision 정리)
   %% EMR = 상위 관제: 바깥 연결은 팀원 FMS·팀원 OMX 둘뿐 (Pinky에 직접 붙지 않음)
+  %% Robot Layer: FMS(fms/, 관제 PC) → Pinky API(driving/api, 로봇 위) → ROS 2 Nav2. OMX만 저장소 밖
   %% draw.io: Arrange > Insert > Advanced > Mermaid 에 붙여 넣기
-  %% 색: 초록=구현 / 노랑=일부·다르게 / 빨강=없음 / 파랑=팀원 담당(이 저장소 밖), 점선 테두리=Priority O(옵션)
-  %% 뺀 것: 비상 조작 콘솔, Safety Monitor
+  %% 색: 초록=구현 / 노랑=일부·다르게 / 빨강=없음 / 파랑=팀원 담당(FMS·주행은 저장소 안 fms/·driving/, OMX는 밖), 점선 테두리=Priority O(옵션)
+  %% 뺀 것: 비상 조작 콘솔, Safety Monitor, 응급 상황 감지(10-30 — 그래서 Vision은 RealSense가 아니라 카메라)
+  %% 수령은 '받았습니다' 버튼(10-30 결정) — ArUco 마커 인증 블록은 뺌
 
   subgraph P["Presentation Layer — GUI · EMR 웹 React :5173"]
     direction LR
-    UI["간호사 관제 UI<br/>물품 관리 · 물품 신청/단계(신청→출발→도착→받음)/기록 · 받았습니다 · 알림 · 병원 지도 · 환경 설정<br/>없음: 지도 위 로봇 위치, 응급 알림, OMX 화면<br/>SR-01,04,05,06,07,08,09"]:::part
+    UI["간호사 관제 UI<br/>물품 관리 · 물품 신청/단계(신청→준비→출발→도착→받음)/기록 · 받았습니다(수령 버튼) · 알림 · 병원 지도(로봇 위치 1초) · 환경 설정<br/>없음: OMX 화면, 로봇 배터리·오염도<br/>SR-01,04,05,06,07,08,09"]:::part
     BED["병상 단말 (환자)<br/>환자 품목 요청 · 받았습니다<br/>SR-02, SR-06"]:::ok
     VOI["음성 물품 신청 (그림 밖)<br/>말로 신청 → 초안 → 폼 확인 후 신청 (Gemini, /api/v2)<br/>안내 음성: 브라우저 내장 TTS · /voice/speak"]:::ok
   end
@@ -16,15 +18,15 @@ flowchart TB
     direction TB
     REQ["Request Service<br/>간호사 물품 신청 등록·변경·취소 + 병상 환자 요청<br/>SRD-02, SR-02"]:::ok
     INV["Inventory Service<br/>비품 등록·편집·검색·삭제, 재고, 유효기간<br/>SRD-01, SR-01"]:::ok
-    DSP["Task Dispatcher<br/>EMR → FMS 주문(물품 1개 = 1건) · 배차는 FMS<br/>FMS 이벤트 → 출발·도착·실패, 버튼 수령<br/>예전 claim은 FMS를 켜면 막힘<br/>SR-04"]:::part
-    FLT["Fleet State Manager<br/>FMS robot-status 1초마다 받음 (위치·배터리·오염도)<br/>없음: 저장·지도 표시<br/>SR-09"]:::part
-    ALT["Alert Service<br/>재고 부족 · 배송 단계 · 실패→관리자 (SSE)<br/>없음: 응급·추적 실패 알림<br/>SR-07, SR-08"]:::part
+    DSP["Task Dispatcher<br/>EMR → FMS 주문(물품 1개 = 1건) · 배차는 FMS<br/>FMS 이벤트 → 준비(호출)·출발(정밀 주차 끝)·도착·실패, 버튼 수령<br/>예전 claim은 FMS를 켜면 막힘<br/>SR-04"]:::part
+    FLT["Fleet State Manager<br/>FMS robot-status 1초마다 → 마지막 위치 메모리<br/>GET /robot-positions → 병원 지도 (10-29)<br/>SR-09"]:::ok
+    ALT["Alert Service<br/>재고 부족 · 배송 단계 · 실패→관리자 (SSE)<br/>없음: 추적 실패·로봇 멈춤 알림<br/>SR-07, SR-08"]:::part
     AUTH["Auth / 역할 관리<br/>간호사 JWT · 관리자/간호사 · 로봇별 키 · 병상 단말 키<br/>시험 중 로그인·로봇 키 꺼 둠<br/>SR-06, SR-08"]:::part
     LOG["Monitoring & Logging [O]<br/>배송 기록 delivery_events + 서버 로그<br/>OMX 완료 신호는 로그만<br/>SR-05"]:::partopt
     MED["Media Relay [O]<br/>없음<br/>SR-07"]:::noneopt
     MAP["Map Registry<br/>Pinky 맵 · 장소 = FMS 방 번호(101호~108호, 수술실)<br/>robot_dest = FMS room<br/>SR-09"]:::ok
     OMXC["OMX 연동 (그림 밖)<br/>FMS 묶음마다 /command {blue,green} → ready<br/>→ 정밀 주차 뒤 /pinky → loaded<br/>관리자 명령·상태, 완료 신호"]:::ok
-    DB[("관계형 DB · PostgreSQL 16<br/>비품·배송·배송 기록·맵·장소·로봇·병상 단말<br/>FMS 주문 fms_orders · OMX 적재 fms_batches")]:::part
+    DB[("관계형 DB · PostgreSQL 16<br/>비품·배송·배송 기록·맵·장소·로봇·병상 단말<br/>FMS 주문 fms_orders · OMX 적재 fms_batches (0017)")]:::part
     OBJ[("오브젝트 스토리지 [O]<br/>없음<br/>SRD-07")]:::noneopt
     %% 보이지 않는 연결로 4열 배치 (서비스 → 횡단 기능 → 저장소)
     REQ ~~~ AUTH ~~~ DB
@@ -33,29 +35,31 @@ flowchart TB
     FLT ~~~ ALT ~~~ MED
   end
 
-  subgraph R["Robot Layer — 팀원 담당 (이 저장소 밖)"]
+  subgraph R["Robot Layer — 팀원 담당 (FMS·주행은 저장소 안 fms/·driving/, OMX는 밖)"]
     direction TB
-    subgraph RP["Pinky Pro AMR · 팀원 FMS API v1 (:8770, 인증 없음 · 10-27 시험은 시뮬레이터)"]
+    subgraph RF["관제 PC · 팀원 FMS API v1 (fms/, 도커 :8770, 인증 없음)"]
       direction LR
-      RTM["Robot Task Manager<br/>팀원 FMS — 주문 묶기·배차·경로·교통·충전<br/>이벤트·로봇 상태를 EMR로 보냄<br/>SR-04, SR-09"]:::team
-      NAV["Navigation<br/>Nav2 · SLAM · 약제실 정밀 주차<br/>병실 칸 진입은 조정 중<br/>SR-04, SR-09"]:::team
-      TRK["Nurse Tracking<br/>없음 (우리 pinky_marker 10-23 삭제)<br/>SR-08"]:::none
+      RTM["Robot Task Manager<br/>팀원 FMS — 주문 묶기·배차 · A* + CBS 경로(실측 엣지 시간)<br/>구간 예약·교착 풀기·충전·오염 처리<br/>이벤트·로봇 상태를 EMR로 보냄<br/>SR-04, SR-09"]:::team
     end
-    subgraph RO["OMX-F 로봇팔 · 팀원 OMX API :8000"]
+    subgraph RP["Pinky Pro AMR (로봇마다) · Pinky API (driving/api, Flask :8080)"]
+      direction LR
+      NAV["Navigation<br/>/drive 구간 주행 · /action 제자리 동작<br/>Nav2 FollowPath · AMCL · 협로 벽 따라가기 · IR 테이프<br/>카메라 ArUco 약제실 정밀 주차<br/>SR-04, SR-09"]:::team
+      TRK["Nurse Tracking<br/>다른 팀원 진행 중<br/>SR-08"]:::team
+    end
+    subgraph RO["OMX-F 로봇팔 · 팀원 OMX API :8000 (저장소 밖)"]
       direction LR
       MAN["Manipulation<br/>click pick 집기 · 양팔로 들고 대기 · Pinky 위 내려놓기<br/>SR-11, SR-13 [O]"]:::team
       VID["비품 식별 / 포즈 추정<br/>YOLO blue_gauze · green_gauze<br/>SR-10, SR-12 [O]"]:::team
     end
-    subgraph V["Vision Subsystem (계획: RealSense)"]
+    subgraph V["Vision Subsystem (카메라)"]
       direction LR
-      EMG["응급 상황 감지 [O]<br/>없음<br/>SRD-07, SR-07"]:::noneopt
-      ARU["ArUco 마커 인증<br/>EMR 일회용 수령 마커·확인 API는 있음 (꺼 둠)<br/>없음: 카메라 노드 → 지금은 버튼 수령<br/>SR-06, SR-08"]:::part
-      PER["사람 검출 + 트래커<br/>없음<br/>SR-08"]:::none
+      PER["사람 검출 + 트래커<br/>다른 팀원 진행 중<br/>SR-08"]:::team
     end
   end
 
   P <-->|"REST /api/v1 (JWT) + SSE 알림 · 계획: REST + WebSocket"| A
-  A <-->|"EMR→FMS: POST /orders · /batches/{id}/ready·loaded<br/>FMS→EMR: POST /fms/robot-status (1초) · /fms/events<br/>계획: rosbridge / MQTT"| RP
+  A <-->|"EMR→FMS: POST /orders · /batches/{id}/ready·loaded<br/>FMS→EMR: POST /fms/robot-status (1초) · /fms/events<br/>계획: rosbridge / MQTT"| RF
+  RF <-->|"FMS→Pinky: POST /drive · /action · /cancel<br/>FMS←Pinky: GET /status (0.3초)"| RP
   A <-->|"EMR→OMX: POST /command {blue,green} · /pinky · GET /status<br/>OMX→EMR: GET /robot/{request_id}/end-point"| RO
 
   classDef ok fill:#dff3e4,stroke:#1d6b34,color:#1d2330
@@ -68,6 +72,7 @@ flowchart TB
   style P fill:#e9f0fb,stroke:#9db6e0
   style A fill:#eaf4ec,stroke:#9cc7a6
   style R fill:#fbf1e4,stroke:#e2b980
+  style RF fill:#fffaf3,stroke:#e2b980
   style RP fill:#fffaf3,stroke:#e2b980
   style RO fill:#fffaf3,stroke:#e2b980
   style V fill:#fffaf3,stroke:#e2b980
