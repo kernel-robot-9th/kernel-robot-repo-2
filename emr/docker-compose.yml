@@ -40,7 +40,7 @@ services:
       FMS_OMX_ENABLED: ${FMS_OMX_ENABLED:-0}    # 1이면 FMS 묶음을 실제 OMX로 싣는다 — 로봇팔이 움직인다 (2026-10-27, 계약 10.4)
       OMX_BASE_URL: ${OMX_BASE_URL:-http://10.42.0.147:8000}   # 팀원 OMX 주소 (10-28 바뀜). 컨테이너가 직접 못 닿으면 .env로 중계 주소
       FMS_PHARMACY_SIGNAL: ${FMS_PHARMACY_SIGNAL:-fms}   # pinky = 실물 Pinky /robot/arrived를 정밀 주차 끝으로 (FMS가 가상인 동안, 10-28)
-      OMX_COMMAND_FORMAT: ${OMX_COMMAND_FORMAT:-counts}   # sentence = 임시: 수량 무시하고 거즈 문장 (10-27, 실제 OMX가 문장만 받는 동안)
+      OMX_COMMAND_FORMAT: ${OMX_COMMAND_FORMAT:-counts}   # sentence = 임시: 수량 무시하고 거즈 문장 (10-27), fixed = 시연: 늘 blue 1·green 1 (10-30)
     ports:
       - "8000:8000"
     volumes:

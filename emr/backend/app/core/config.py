@@ -77,8 +77,10 @@ class Settings(BaseSettings):
     FMS_PHARMACY_SIGNAL: Literal["fms", "pinky"] = "fms"
     # OMX /command 형식 — counts = {"blue": N, "green": N} (10-27 결정). sentence = 임시(10-27 사용자: "임시 방편으로 이전 버전 API,
     # 수량 무시하고 거즈 문장으로") — 지금 실제 OMX(vision 47bcb47)가 문장만 받아서. 팀원 OMX가 개수 형식을 받으면 counts로 되돌린다.
-    # FMS 묶음(services/fms_omx.py)과 관리자 API(/omx/command) 둘 다 이 값을 따른다
-    OMX_COMMAND_FORMAT: Literal["counts", "sentence"] = "counts"
+    # FMS 묶음(services/fms_omx.py)과 관리자 API(/omx/command) 둘 다 이 값을 따른다.
+    # fixed = 시연(10-30 사용자 "OMX 갯수 부족으로 블루 1개, 그린 1개로 고정해서 보내주면 될거 같아 FMS으로 정상으로") —
+    # 개수와 상관없이 늘 {"blue": 1, "green": 1}, FMS 주문·묶음 개수는 그대로
+    OMX_COMMAND_FORMAT: Literal["counts", "sentence", "fixed"] = "counts"
 
     # 음성 배송 예약 초안 (2026-10-26, app/services/voice_request.py). 사용자 결정: Gemini로 시작, 로컬 모델은 나중에 같은 인터페이스로.
     # gemini면 녹음·문장이 Google 클라우드로 나간다 — 시연·시험 동안만. 키는 .env에만(문서·로그에 넣지 않는다)

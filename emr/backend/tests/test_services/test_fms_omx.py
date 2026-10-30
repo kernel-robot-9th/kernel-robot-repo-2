@@ -155,6 +155,17 @@ def test_sentence_mode_sends_gauze_sentence_once(client, db, arm, reserve_overdu
 
 
 @requires_db
+def test_fixed_mode_sends_one_blue_one_green(client, db, arm, reserve_overdue, monkeypatch):
+    """시연(10-30): OMX_COMMAND_FORMAT=fixed면 묶음 개수와 상관없이 {"blue": 1, "green": 1}, 묶음 개수는 그대로."""
+    monkeypatch.setattr(settings, "OMX_COMMAND_FORMAT", "fixed")
+    reserve_overdue(quantity=3)
+    batch = _assign(client, db, "b-1", ["o-1", "o-2", "o-3"])
+    _round(db)
+    assert arm["calls"] == [("omx", "command", {"blue": 1, "green": 1}, f"emr-b{batch.id}")]
+    assert (batch.blue_count, batch.green_count) == (3, 0)
+
+
+@requires_db
 def test_omx_format_not_supported_skips_loading(client, db, arm, reserve_overdue, monkeypatch):
     """10-28 사용자 "OMX 양식이 없으면 생략": /command가 422면 OMX 적재 없이 ready → 정밀 주차 → loaded (/pinky 없음)."""
     from app.clients.omx import OmxRejected
