@@ -24,6 +24,7 @@ SPEED = 0.05                # m/s, 테이프 따라가기
 XFER_SPEED = 0.03           # m/s, 차선 바꾸기
 KP, KD = 8.0, 15.0          # line_follow.py 10-26 보정 시험 값
 WMAX = 0.4
+ROT_SETTLE_FIX = 1.0        # s, 보정 회전 앞과 마지막 확인 전 대기 (AMCL 이 확실히 따라오게)
 ROT_SETTLE = 0.3            # s, 회전 앞뒤로 AMCL 이 따라오게 멈추는 시간 (10-29: 0.6 → 0.3, rot_test 로 끝 오차 ≤1.5° 확인)
 ROT_WMAX = 1.5              # rad/s, 제자리 회전 최대 각속도 (10-29: 0.3 → 0.6 → 1.5 = velocity_smoother 한도. 회전이 주행 시간의 34% 라서. 90° 7.5 → 3.6 s)
 MAX_DEV = 0.04              # m, 차선 축에서 AMCL 옆 벗어남 한도 (테이프가 지도 축과 1~2° 어긋남)
@@ -36,6 +37,7 @@ class Driver:
     def __init__(self):
         self.n = LineFollow()
         self.trace = []   # follow 중 (시각, 남은 cm, IR 3, 흰 정도 3, 테이프 위치 cm) — edge_run 이 엣지마다 저장
+        self.should_stop = None   # 매 주기 부르는 함수, True 면 멈추고 'canceled' (API /cancel)
         t_end = time.time() + 5
         while time.time() < t_end and (self.n.odom is None or self.n.ir is None or self.n.map_pose() is None):
             rclpy.spin_once(self.n, timeout_sec=0.05)
@@ -51,6 +53,9 @@ class Driver:
         for _ in range(5):
             self.n.cmd(0.0, 0.0); time.sleep(0.02)
 
+    def canceled(self):
+        return bool(self.should_stop and self.should_stop())
+
     def pose(self):
         """바퀴 축 (x, y) m, yaw"""
         return self.n.map_pose()
@@ -60,8 +65,10 @@ class Driver:
         wmax = ROT_WMAX if wmax is None else wmax
         settle = ROT_SETTLE if settle is None else settle
         tgt = math.radians(heading_deg)
-        for _ in range(3):
-            self.spin(settle)                                # AMCL 이 따라오게 잠깐 멈춤
+        for k in range(3):
+            # AMCL 이 따라오게 잠깐 멈춤. 보정 회전(2번째부터)은 더 오래 기다림 — 10-29 6364 B2_20: 0.3 s 로는 AMCL 방향이
+            # 덜 갱신돼 보정을 엉뚱하게 해서 3번 뒤에도 4.5° 어긋남 (rotate_err)
+            self.spin(settle if k == 0 else ROT_SETTLE_FIX)
             err = wrap(tgt - self.pose()[2])
             if abs(err) < math.radians(tol_deg):
                 return 'ok'
@@ -69,16 +76,19 @@ class Driver:
             t_end = time.time() + abs(err) / 0.1 + 5
             while time.time() < t_end:
                 rclpy.spin_once(self.n, timeout_sec=0.02)
+                if self.canceled():
+                    self.stop(); return 'canceled'
                 e = wrap(goal - self.n.odom[2])
                 if abs(e) < math.radians(0.7):
                     break
                 self.n.cmd(0.0, math.copysign(max(0.08, min(wmax, 1.5 * abs(e))), e))
             self.stop()
-        self.spin(settle)
+        self.spin(ROT_SETTLE_FIX)
         return 'ok' if abs(wrap(tgt - self.pose()[2])) < math.radians(3) else 'rotate_err'
 
     # ---------- 테이프 따라가기 ----------
-    def follow(self, heading_deg, target_cm, ref='axle'):
+    def follow(self, heading_deg, target_cm, ref='axle', through=False):
+        """through: 노드에서 감속·정지 없이 그대로 (다음 엣지도 같은 방향 테이프, 10-30 사용자)"""
         hd = math.radians(heading_deg)
         ux, uy = round(math.cos(hd)), round(math.sin(hd))   # 복도 축 방향만 (0/90/180/270)
         x0, y0, _ = self.pose()
@@ -93,12 +103,16 @@ class Driver:
 
         r0 = remain()
         if r0 <= 0:
+            if not through:
+                self.stop()   # 앞 엣지에서 서지 않고 넘어왔으면 여기서 세움
             return 'already_past'
         last_t, y_prev, dy, lost_since = 0.0, None, 0.0, None
         deadline = time.time() + r0 / SPEED * 2.5 + 5
         status = 'timeout'
         while time.time() < deadline:
             rclpy.spin_once(self.n, timeout_sec=0.02)
+            if self.canceled():
+                status = 'canceled'; break
             if time.time() - self.n.ir_t > 0.5:
                 status = 'ir_stale'; break
             r = remain()
@@ -125,9 +139,10 @@ class Driver:
                 k = min(1.0, dt / (DY_TAU + dt))
                 dy += k * ((yt - y_prev) / max(dt, 0.02) - dy)
             y_prev = yt
-            v = SPEED if r > 0.05 else max(0.015, SPEED * r / 0.05)
+            v = SPEED if (through or r > 0.05) else max(0.015, SPEED * r / 0.05)
             self.n.cmd(v, max(-WMAX, min(WMAX, KP * yt + KD * dy * (v / SPEED))))
-        self.stop()
+        if not (through and status == 'ok'):
+            self.stop()
         return status
 
     # ---------- 차선 바꾸기 (테이프 없음) ----------
@@ -145,6 +160,8 @@ class Driver:
         t_end = time.time() + (expect + 0.04) / XFER_SPEED * 2 + 5
         while time.time() < t_end:
             rclpy.spin_once(self.n, timeout_sec=0.02)
+            if self.canceled():
+                status = 'canceled'; break
             d = math.hypot(self.n.odom[0] - o0[0], self.n.odom[1] - o0[1])
             if seen_at is None:
                 if d > expect + 0.04:

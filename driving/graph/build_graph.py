@@ -18,8 +18,8 @@ import scan_fit as sf  # noqa: E402  (map_drawn 벽까지 거리 dmap)
 sys.argv = _argv
 BODY_R = {'bare': 5.5, 'bowl': 7.0}   # cm: 핑키 몸체 Ø11 / OMX 그릇 Ø14 실은 상태
 PANEL_Y = 0.0         # 아래 바깥벽 바닥 패널 앞면 (라이다엔 안 보여 맵에는 y=-1 에 벽) → 여유 계산에 따로 넣는다
-MODES = ('line', 'transfer', 'wall', 'nav')
-NODE_TYPES = ('gate', 'way', 'stop')
+MODES = ('line', 'transfer', 'wall', 'nav', 'dock')   # dock = 정밀 주차 자리(type dock)로 들어가기 / 나오기 (10-29)
+NODE_TYPES = ('gate', 'way', 'stop', 'dock')
 
 HEADER = """\
 # 주행 그래프 요약 (사람·편집기가 고치는 파일) → python3 build_graph.py → graph.yaml (노드·엣지 전부), graph.png
@@ -157,8 +157,8 @@ def draw(nodes, edges, out):
 
     def px(x, y):
         return diagram_px(x, y, S)
-    COL = {'line': (0, 150, 240), 'transfer': (200, 120, 200), 'wall': (40, 40, 220), 'nav': (50, 160, 50)}
-    W = {'line': 5, 'transfer': 2, 'wall': 5, 'nav': 3}
+    COL = {'line': (0, 150, 240), 'transfer': (200, 120, 200), 'wall': (40, 40, 220), 'nav': (50, 160, 50), 'dock': (200, 0, 200)}
+    W = {'line': 5, 'transfer': 2, 'wall': 5, 'nav': 3, 'dock': 3}
     for e in edges:
         c = (170, 170, 170) if e.get('deferred') else COL.get(e['mode'], (0, 0, 0))
         cv2.line(img, px(*nodes[e['a']]['xy']), px(*nodes[e['b']]['xy']), c, W.get(e['mode'], 2), cv2.LINE_AA)
@@ -173,7 +173,7 @@ def draw(nodes, edges, out):
         else:
             if n.get('role') == 'wait':
                 cv2.circle(img, p, 13, (0, 150, 240), 3, cv2.LINE_AA)
-            cv2.circle(img, p, {'lane': 6, 'gate': 7, 'way': 6}[t], (170, 170, 170) if dim else {'lane': (0, 90, 160), 'gate': (120, 0, 120), 'way': (60, 60, 60)}[t], -1, cv2.LINE_AA)
+            cv2.circle(img, p, {'lane': 6, 'gate': 7, 'way': 6, 'dock': 7}[t], (170, 170, 170) if dim else {'lane': (0, 90, 160), 'gate': (120, 0, 120), 'way': (60, 60, 60), 'dock': (200, 0, 200)}[t], -1, cv2.LINE_AA)
         if t == 'stop':   # 목적지: 방 번호(101호…)·수술실·약제실 + 노드 이름 — 한글이라 아래에서 PIL 로 씀
             nm = n.get('name', '')
             code = nm.split()[0] if nm[:3].isdigit() or nm.startswith('수술실') else ('약제실' if k == 'PHARMACY' else '')

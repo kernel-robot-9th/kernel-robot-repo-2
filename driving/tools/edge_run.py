@@ -32,60 +32,12 @@ import yaml
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-GRAPH = os.path.join(HERE, '..', 'graph', 'graph.yaml')
-SPEED = 0.05            # m/s, 벽 따라가기 속도 (테이프 따라가기는 lane_drive.SPEED = 0.05)
-BODY_R = 0.055          # m, 빈 로봇 (그릇 없음)
+from edge_drive import DRIVEABLE, TIMES, EdgeDriver, face, heading, load_graph, wall_of  # noqa: E402
 BATT_STOP = None        # 기본: 배터리 안 봄 (10-28 사용자: '배터리 보지 말아봐' — 측정값이 들쭉날쭉해 일찍 멈췄음). --batt-stop <%> 로 켬
 BATT_N = 12             # /battery/voltage 최근 12번(5초마다 → 1분)의 **중앙값** 전압으로 판단
 V_EMPTY, V_FULL = 6.8, 7.6   # pinkylib battery_percentage 와 같은 식 (6.8 V = 0 %, 7.6 V = 100 %)
 # 10-28: /battery/percent 를 5번 평균했더니 7.09 V(≈36 %)일 때 8.9 % 로 나와 일찍 멈춤 (사용자: '배터리 측정 이상해').
 #        percent 와 voltage 는 따로 읽은 값이고 한 번 읽을 때마다 ±0.15 V(≈±19 %) 흔들림 → 전압 1분 중앙값으로 바꿈
-TIMES = os.path.join(HERE, '..', 'graph', 'edge_times.yaml')
-DRIVEABLE = ('line', 'transfer', 'wall', 'nav')   # 이 도구가 달릴 수 있는 엣지 mode
-
-
-def wall_of(N, E, a, b):
-    """엣지 a→b 가 따라갈 벽 선분: wall 엣지면 그 wall, 협로 입구(gate)로 드는 transfer 면 그 gate 에 붙은 wall 엣지의 wall"""
-    e = E[(a, b)]
-    if e.get('wall'):
-        return e['wall']
-    for g in (b, a):
-        if N[g]['type'] == 'gate':
-            for (x, y), f in E.items():
-                if x == g and f.get('mode') == 'wall' and f.get('wall'):
-                    return f['wall']
-    return None
-
-
-def wall_side(N, E, a, b):
-    """(벽 쪽 'left'/'right', 축선-벽 cm). 벽 선분을 진행 방향 왼쪽/오른쪽으로 가름 (10-26: 오른쪽 협로는 늘 x=140 벽 —
-    올라갈 때 right, 내려갈 때 left)"""
-    w = wall_of(N, E, a, b)
-    if not w:
-        return 'right', 10.0
-    (ax, ay), (bx, by) = N[a]['xy'], N[b]['xy']
-    L = math.hypot(bx - ax, by - ay); ux, uy = (bx - ax) / L, (by - ay) / L
-    (wx0, wy0), (wx1, wy1) = w
-    mx, my = (wx0 + wx1) / 2, (wy0 + wy1) / 2
-    cross = ux * (my - ay) - uy * (mx - ax)          # > 0 = 벽이 왼쪽
-    return ('left' if cross > 0 else 'right'), round(abs(cross), 1)
-
-
-def load_graph(path=GRAPH):
-    g = yaml.safe_load(open(path))
-    N = {k: v for k, v in g['nodes'].items() if not v.get('deferred')}
-    E = {}
-    for e in g['edges']:
-        if e.get('deferred') or e['a'] not in N or e['b'] not in N:
-            continue
-        E[(e['a'], e['b'])] = e
-        E[(e['b'], e['a'])] = e
-    return N, E
-
-
-def heading(N, a, b):
-    (ax, ay), (bx, by) = N[a]['xy'], N[b]['xy']
-    return math.degrees(math.atan2(by - ay, bx - ax)) % 360
 
 
 def tour(N, E, start, keep, reps=1, hd=None, done=None):
@@ -137,20 +89,19 @@ def plan_moves(N, E, route):
         e = E.get((a, b))
         if e is None:
             raise SystemExit(f'엣지 없음: {a} → {b}')
-        out.append((a, b, e['mode'], heading(N, a, b), math.dist(N[a]['xy'], N[b]['xy'])))
+        out.append((a, b, e['mode'], face(N, E, a, b), math.dist(N[a]['xy'], N[b]['xy'])))   # 정밀 주차에서 나올 때는 뒤로
     return out
 
 
-class Runner:
+class Runner(EdgeDriver):
+    """측정용: 공용 엣지 주행(edge_drive.EdgeDriver) + 배터리 + --nav2"""
+
     def __init__(self, N, E):
         import rclpy
-        from corridor_drive import CorridorDrive
-        from lane_drive import LIDAR_BEHIND_AXLE, Driver
-        self.rclpy, self.N, self.E, self.LB = rclpy, N, E, LIDAR_BEHIND_AXLE
         from std_msgs.msg import Float32
         rclpy.init()
-        self.dr = Driver()
-        self.CorridorDrive = CorridorDrive
+        super().__init__(N, E)
+        self.rclpy = rclpy
         self.fp = None                                  # Nav2 FollowPath 액션 클라이언트 (--nav2 일 때만)
         self.use_nav2 = False
         self.batt = collections.deque(maxlen=BATT_N)   # /battery/voltage 최근 값 (5초마다 옴)
@@ -163,34 +114,10 @@ class Runner:
         v = sorted(self.batt)[len(self.batt) // 2]
         return max(0.0, min(100.0, (v - V_EMPTY) / (V_FULL - V_EMPTY) * 100))
 
-    def lidar_pose(self):
-        x, y, th = self.dr.pose()
-        return (x - self.LB * math.cos(th)) * 100, (y - self.LB * math.sin(th)) * 100, math.degrees(th) % 360
-
-    def move(self, a, b, mode, hd):
-        N = self.N
-        bx, by = N[b]['xy']
-        if mode == 'line':
-            tgt = bx if hd in (0, 180) else by
-            return self.dr.follow(hd, tgt, 'lidar'), {}
-        if mode == 'transfer' and N[b]['type'] == 'lane':
-            return self.dr.transfer(by if hd in (90, 270) else bx), {}
-        if mode == 'nav' or (mode == 'transfer' and not wall_of(N, self.E, a, b)):
-            if self.use_nav2:
-                return self.follow_path(N[a]['xy'], N[b]['xy'], hd)
-            # Nav2 대신: AMCL 축선 직진 + 라이다 접촉 검사 (벽 맞춤 없음). 10-28 Nav2 충돌 검사가 계단 통로·협로 입구에서
-            # 여유 3~5cm 를 '충돌'로 보고 멈춤 → 협로의 벽 없는 구간처럼 달림 (사용자)
-            cd = self.CorridorDrive(self.dr.n, 'right', 10.0, SPEED, tf_buffer=self.dr.n.tfb, body_r=BODY_R, use_wall=False)
-            r = cd.run(N[a]['xy'], N[b]['xy'])
-            r['drive'] = 'amcl'
-            return r.pop('status'), r
-        if mode in ('transfer', 'wall'):     # 차선 → 협로 입구, 협로 벽 따라가기
-            side, off = wall_side(N, self.E, a, b)
-            cd = self.CorridorDrive(self.dr.n, side, off, SPEED, tf_buffer=self.dr.n.tfb, body_r=BODY_R)
-            r = cd.run(N[a]['xy'], N[b]['xy'])
-            r['side'] = side
-            return r.pop('status'), r
-        return f'mode_{mode}_todo', {}
+    def move(self, a, b, mode, hd, nxt=None):
+        if self.use_nav2 and (mode == 'nav' or (mode == 'transfer' and not wall_of(self.N, self.E, a, b))):
+            return self.follow_path(self.N[a]['xy'], self.N[b]['xy'], hd)
+        return super().move(a, b, mode, hd, nxt)
 
     def follow_path(self, p0, p1, hd, timeout=None):
         """Nav2 FollowPath 로 p0→p1 직선 (라이다 중심 cm). 반환 (status, extra)"""
@@ -229,20 +156,6 @@ class Runner:
             return 'timeout', {}
         r = fr.result()
         return ('ok' if r.status == 4 else 'nav_fail'), dict(action_status=r.status, error_code=r.result.error_code)
-
-    def straight(self, cm, v=0.02):
-        """방향 유지하고 odom 으로 cm 만큼 천천히 직진 (노드 위에 올리기용)"""
-        n = self.dr.n
-        o0 = n.odom; yaw0 = o0[2]
-        t_end = time.time() + abs(cm) / 100 / v + 5
-        while time.time() < t_end:
-            self.rclpy.spin_once(n, timeout_sec=0.02)
-            d = math.hypot(n.odom[0] - o0[0], n.odom[1] - o0[1])
-            if d >= abs(cm) / 100:
-                self.dr.stop(); return 'ok'
-            err = math.atan2(math.sin(n.odom[2] - yaw0), math.cos(n.odom[2] - yaw0))
-            n.cmd(v, -2.0 * err)
-        self.dr.stop(); return 'timeout'
 
     def close(self):
         self.dr.stop()
@@ -340,7 +253,7 @@ def main():
             extra = {}
             run.dr.trace = []
             if st == 'ok':
-                st, extra = run.move(na, nb, mode, round(hd) % 360)
+                st, extra = run.move(na, nb, mode, round(hd) % 360, round(moves[i][3]) % 360 if i < len(moves) else None)
             t2 = time.time()
             for r in run.dr.trace:
                 ft.write(f'{i},' + ','.join('' if v is None else str(v) for v in r) + '\n')
