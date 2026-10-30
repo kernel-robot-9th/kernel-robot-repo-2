@@ -272,7 +272,7 @@ Pinky API는 **인증이 없다** — 지금은 그대로 진행(사용자 결�
 ### 10.2 FMS → EMR
 | 경로 | 인증 | 응답 | EMR이 하는 일 |
 |---|---|---|---|
-| `POST /api/v1/fms/robot-status` | 없음(사용자 결정) | 200 `{"ok": true}` | 로봇마다 마지막 pose·online·state·place를 EMR 메모리에 덮어씀(DB 없음) → 병원 지도 `GET /api/v1/robot-positions`(간호사 로그인, cm/100 = m, ° → rad, 5초 넘게 못 받으면 `is_stale`) — 2026-10-29 |
+| `POST /api/v1/fms/robot-status` | 없음(사용자 결정) | 200 `{"ok": true}` | 로봇마다 마지막 pose·online·state·place를 EMR 메모리에 덮어씀(DB 없음) → 병원 지도 `GET /api/v1/robot-positions`(간호사 로그인, cm/100 = m, ° → rad, 5초 넘게 못 받으면 `is_stale`) — 2026-10-29. `battery`·`contamination`(0~100, FMS 모델 값)도 `battery_percent`·`contamination_percent`로 → 지도 아래 로봇 카드 — 2026-10-30 |
 | `POST /api/v1/fms/events` | 없음 | 200 `{"ok": true, "handled": bool}` — **올바른 JSON이면 4xx를 주지 않는다**(FMS가 다시 안 보냄) | 아래 표. 바깥 HTTP 호출 없음, DB만 |
 
 | 이벤트 | EMR |

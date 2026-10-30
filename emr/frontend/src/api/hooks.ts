@@ -22,7 +22,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import { api, apiV2, bedsideApi } from './client'
 import type {
   AdminDeliveryEvent, BedsideApiKey, BedsideDelivery, BedsideDevice, BedsideDeviceCreate, BedsideDeviceUpdate,
-  BedsideMe, BedsideRequest, BedsideSupply, Delivery, DeliveryCreate, DeliveryEvent, DeliveryEventFilters, DeliveryUpdate,
+  BedsideMe, BedsideRequest, BedsideSupply, Delivery, DeliveryCreate, DeliveryEvent, DeliveryEventFilters, DeliveryMultiCreate, DeliveryUpdate,
   Location, MapInfo, Nurse, NurseCreate, NurseUpdate, PasswordChange, PasswordReset,
   Robot, RobotApiKey, RobotPositions, Supply, SupplyCreate, SupplyUpdate, VoiceDraft,
 } from './types'
@@ -164,7 +164,7 @@ export function useLocationMutations() {
   const qc = useQueryClient()
   const invalidate = () => qc.invalidateQueries({ queryKey: keys.locations })
   return {
-    create: useMutation({ mutationFn: (b: Omit<Location, 'id' | 'robot_dest'> & { robot_dest?: string | null }) => api.post<Location>('/locations', b), onSuccess: invalidate, meta: { action: '장소 등록' } }),
+    create: useMutation({ mutationFn: (b: Omit<Location, 'id' | 'robot_dest' | 'admin_note'> & { robot_dest?: string | null; admin_note?: string | null }) => api.post<Location>('/locations', b), onSuccess: invalidate, meta: { action: '장소 등록' } }),
     update: useMutation({
       mutationFn: ({ id, body }: { id: number; body: Partial<Omit<Location, 'id'>> }) =>
         api.patch<Location>(`/locations/${id}`, body),
@@ -220,6 +220,8 @@ export function useDeliveryMutations() {
   ])
   return {
     create: useMutation({ mutationFn: (b: DeliveryCreate) => api.post<Delivery>('/deliveries', b), onSuccess: invalidate, meta: { action: '물품 신청' } }),
+    // 여러 병동 신청 (2026-10-30) — 병동마다 1건
+    createMulti: useMutation({ mutationFn: (b: DeliveryMultiCreate) => api.post<Delivery[]>('/deliveries/multi', b), onSuccess: invalidate, meta: { action: '물품 신청' } }),
     // 변경·취소는 실패해도(409: 이미 취소됨 등) 목록을 다시 불러와 화면을 서버 상태에 맞춘다
     update: useMutation({
       mutationFn: ({ id, body }: { id: number; body: DeliveryUpdate }) => api.patch<Delivery>(`/deliveries/${id}`, body),

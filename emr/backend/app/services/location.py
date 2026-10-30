@@ -49,6 +49,7 @@ class LocationService:
             raise Conflict(f"location name {data.name} already exists", code="location_name_duplicate")
         self._check_robot_dest(data.robot_dest, None)
         location = Location(**data.model_dump())
+        location.admin_note = location.admin_note or None   # 빈 메모는 없음으로
         self._validate_map(location)
         return self.repo.add(location)
 
@@ -64,6 +65,8 @@ class LocationService:
         self._check_robot_dest(changes.get("robot_dest"), location.id)
         for field, value in changes.items():
             setattr(location, field, value)
+        if changes.get("admin_note") == "":   # 관리자 메모는 빈 문자열로 지운다 (2026-10-30)
+            location.admin_note = None
         self._validate_map(location)
         return location
 

@@ -3,7 +3,7 @@
 // 역할   : 배송 예약 폼 위의 "말로 예약" 막대 — 녹음(또는 문장) → 서버 초안 → onDraft로 폼을 채운다 (2026-10-26)
 // 작성일 : 2026-10-26 (~/voice_module VoiceRequestPanel.tsx를 줄여 옮김 — 확인 화면은 배송 예약 폼이 맡는다)
 // 구성   :
-//   - describeDraft()  초안을 읽어 줄 한 문장 ("A 약품 2개, 4인실 왼쪽. 확인 후 예약을 눌러 주세요.")
+//   - describeDraft()  초안을 읽어 줄 한 문장 ("A 약품 2개, 101호. 확인 후 예약을 눌러 주세요.")
 //   - VoiceDraftBar    🎤 말하기/멈추기 · 문장 입력 · 받아 적은 문장과 경고 표시
 // 예약은 여기서 만들지 않는다 — 간호사가 폼에서 보고 '예약'을 눌러야 한다(사용자 결정 2026-10-26)
 // =============================================================================
@@ -64,7 +64,7 @@ export function VoiceDraftBar({ onDraft }: { onDraft: (draft: VoiceDraft) => voi
           </Button>
         )}
         <div className="min-w-48 flex-1">
-          <Input value={text} placeholder="예: 4인실 왼쪽에 A 약품 두 개" maxLength={500}
+          <Input value={text} placeholder="예: 101호에 A 약품 두 개" maxLength={500}
             onChange={event => setText(event.target.value)}
             onKeyDown={event => { if (event.key === 'Enter') submitText() }} />
         </div>

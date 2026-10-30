@@ -5,6 +5,7 @@
 # 구성   :
 #   - DeliveryItemIn/Out  품목 라인
 #   - DeliveryCreate      예약 등록
+#   - DeliveryWardIn / DeliveryMultiCreate  여러 병동 신청 — 병동마다 1건 (2026-10-30)
 #   - DeliveryUpdate      예약 변경
 #   - DeliveryOut         간호사용 — 단계 시각·맡은 로봇·실패 사유·일회용 수령 마커 포함 (본인 예약만 나간다)
 #   - DeliveryReceiptIn   수령 확인 (로봇이 읽은 일회용 마커 번호)
@@ -32,6 +33,7 @@ FAILURE_REASON_DESCRIPTION = (
     "navigation_failed(주행 실패) | not_received(도착 후 수령 없음) | destination_blocked(금지 장소) | robot_error"
 )
 SCHEDULED_AT_DESCRIPTION = "배송 예정 시각. 시간대 필수(ISO 8601), 현재보다 미래"
+MULTI_DESTINATION_MAX = 10   # [검토 필요] 여러 병동 신청 한 번의 병동 수 — FMS 방 101~108호·수술실 9곳보다 조금 넉넉히 (2026-10-30)
 
 
 class DeliveryItemIn(BaseModel):
@@ -47,6 +49,23 @@ class DeliveryCreate(BaseModel):
     destination_location_id: int = Field(description="배송 위치 locations.id")
     scheduled_at: AwareDatetime = Field(description=SCHEDULED_AT_DESCRIPTION, examples=["2026-10-15T09:00:00+09:00"])
     items: list[DeliveryItemIn] = Field(description="같은 supply_id는 한 번만. 로봇 전용 장소(충전 등)로의 이동은 빈 목록 — '해당 사항 없음' (2026-10-22)")
+
+
+class DeliveryWardIn(BaseModel):
+    """여러 병동 신청의 병동 한 곳 (2026-10-30)."""
+
+    destination_location_id: int = Field(description="배송 위치 locations.id — 한 신청 안에서 한 번만")
+    items: list[DeliveryItemIn] = Field(description="DeliveryCreate.items와 같은 규칙")
+
+
+class DeliveryMultiCreate(BaseModel):
+    """여러 병동 신청 본문 (2026-10-30). 병동마다 신청이 1건씩 생긴다. 보낼 시간은 모두 같다."""
+
+    scheduled_at: AwareDatetime = Field(description=SCHEDULED_AT_DESCRIPTION, examples=["2026-10-30T10:00:00+09:00"])
+    destinations: list[DeliveryWardIn] = Field(
+        min_length=1, max_length=MULTI_DESTINATION_MAX,
+        description=f"병동 1~{MULTI_DESTINATION_MAX}곳. 같은 비품을 여러 병동에 보내면 합계로 재고를 확인한다",
+    )
 
 
 class DeliveryUpdate(BaseModel):

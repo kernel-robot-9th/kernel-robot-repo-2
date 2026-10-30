@@ -45,5 +45,7 @@ class Location(TimestampMixin, Base):
     robot_dest: Mapped[str | None] = mapped_column(String(64))
     # 로봇 전용 장소(충전·출발점·대기 포켓) — 비품 배송 불가, 품목 없는 로봇 이동만(도착 = 완료). 병상 병실 불가. 복귀 장소로는 쓴다 (2026-10-22, 0012)
     robot_only: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
+    # 관리자 메모 — 장소를 알아보기 쉽게 하는 설명(예: "4인실 왼쪽"). 관리자 화면에만 보인다 (2026-10-30, 0018)
+    admin_note: Mapped[str | None] = mapped_column(String(64))
 
     map: Mapped[Map | None] = relationship()

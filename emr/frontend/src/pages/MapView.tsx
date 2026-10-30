@@ -1,10 +1,11 @@
 // =============================================================================
 // 파일   : src/pages/MapView.tsx
-// 역할   : 맵 화면 — 올린 맵 이미지(실제 크기) 위에 장소 마커와 운반 로봇 위치. 관리자는 맵을 눌러 장소 위치·방향을 찍는다 (2026-10-19)
+// 역할   : 맵 화면 — 올린 맵 이미지(실제 크기) 위에 장소 마커와 운반 로봇 위치, 지도 아래 로봇 카드(배터리·오염도). 관리자는 맵을 눌러 장소 위치·방향을 찍는다 (2026-10-19)
 // 작성일 : 2026-10-14
 // 구성   :
 //   - toSvgPoint     화면 좌표 → SVG(이미지 픽셀) 좌표
-//   - MapView        맵 선택 → 이미지 + 장소 마커 + 운반 로봇 위치(주황) + (관리자) 찍기 + 로봇 상태 패널
+//   - RobotCards     지도 아래 로봇 카드 — 이름·상태·위치·배터리·오염도 막대 (2026-10-30)
+//   - MapView        맵 선택 → 이미지 + 장소 마커 + 운반 로봇 위치(주황) + 로봇 카드 + (관리자) 찍기 + 로봇 상태 패널
 // 좌표 변환은 features/maps/mapGeometry.ts (ROS map_server 규칙). 이미지가 없는 맵은 격자로 그린다
 // 로봇 위치(2026-10-29)는 팀원 FMS가 1초마다 보낸 마지막 값(GET /robot-positions) — 그 응답의 map_id 맵을 볼 때만 그린다
 // =============================================================================
@@ -14,6 +15,7 @@ import { apiUrl } from '../api/client'
 import { useIsAdmin, useLocations, useMaps, useRobotPositions, useRobots } from '../api/hooks'
 import { ROBOT_TYPE_LABEL } from '../api/types'
 import { ROBOT_STATUS_LABEL } from '../api/types'
+import type { RobotPosition } from '../api/types'
 import { Badge, LoadError, PageTitle, Select } from '../components/ui'
 import { LocationPicker } from '../features/maps/LocationPicker'
 import type { PickedPose } from '../features/maps/LocationPicker'
@@ -23,6 +25,64 @@ const DRAG_MIN_PX_ON_SCREEN = 6   // 이보다 짧게 끌면 방향 없이 위�
 const SMOOTH_IMAGE_MIN_WIDTH_PX = 1000   // 이보다 큰 이미지(평면도)는 줄일 때 글자가 깨지지 않게 부드럽게, 작은 SLAM 맵은 픽셀 그대로
 const ROBOT_COLOR = '#ea580c'
 const STALE_ROBOT_COLOR = '#94a3b8'
+const LOW_BATTERY_PERCENT = 20         // FMS pharmacy_min_battery — 이 값 이하면 약제실에 가지 못한다
+const HIGH_CONTAMINATION_PERCENT = 50  // 4인실 한 번 다녀온 만큼
+// FMS 로봇 state → 화면 글자 (fms/API.md 상태 값). 모르는 값은 그대로 보여 준다
+const ROBOT_STATE_LABEL: Record<string, string> = {
+  idle: '대기', reserved: '배차됨', moving: '이동', waiting: '길 막힘', docking: '정밀 주차', loading: '적재 대기',
+  spinning: '병실 도착', pausing: '잠시 멈춤', decon: '오염 제거', charging: '충전', error: '멈춤',
+}
+
+/** 0~100 막대 한 줄. [입력] label, percent(null이면 "—"), tone: 막대 색 Tailwind 클래스 */
+function PercentBar({ label, percent, tone }: { label: string; percent: number | null; tone: string }) {
+  return (
+    <div>
+      <div className="flex justify-between text-xs text-slate-500">
+        <span>{label}</span>
+        <span className="font-medium text-slate-700">{percent == null ? '—' : `${Math.round(percent)}%`}</span>
+      </div>
+      <div className="mt-0.5 h-1.5 rounded bg-slate-100">
+        <div className={`h-1.5 rounded ${tone}`} style={{ width: `${percent ?? 0}%` }} />
+      </div>
+    </div>
+  )
+}
+
+/** 지도 아래 로봇 카드 (2026-10-30). [입력] robots: 이 지도에 그리는 로봇 */
+function RobotCards({ robots }: { robots: RobotPosition[] }) {
+  if (robots.length === 0) return null
+  return (
+    <div className="px-2 pt-3">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        {robots.map(robot => {
+          const name = robot.robot_name ?? robot.fms_robot_name ?? `FMS ${robot.fms_robot_number}`
+          const battery = robot.battery_percent
+          const contamination = robot.contamination_percent
+          const stateLabel = robot.state ? (ROBOT_STATE_LABEL[robot.state] ?? robot.state) : '—'
+          return (
+            <div key={robot.fms_robot_number}
+              className={`space-y-2 rounded border p-3 ${robot.is_stale ? 'border-slate-200 bg-slate-50 opacity-70' : 'border-slate-200 bg-white'}`}>
+              <div className="flex items-center justify-between gap-2">
+                <span className="flex items-center gap-1.5 text-sm font-medium">
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: robot.is_stale ? STALE_ROBOT_COLOR : ROBOT_COLOR }} />
+                  {name}
+                </span>
+                <span className="text-xs text-slate-500">{robot.is_stale ? '연결 끊김' : stateLabel}</span>
+              </div>
+              <p className="text-xs text-slate-500">{robot.place ?? '위치 모름'}</p>
+              <PercentBar label="배터리" percent={battery}
+                tone={battery != null && battery <= LOW_BATTERY_PERCENT ? 'bg-red-500' : 'bg-green-500'} />
+              <PercentBar label="오염도" percent={contamination}
+                tone={contamination == null || contamination === 0 ? 'bg-green-500'
+                  : contamination >= HIGH_CONTAMINATION_PERCENT ? 'bg-red-500' : 'bg-amber-400'} />
+            </div>
+          )
+        })}
+      </div>
+      <p className="pt-1 text-xs text-slate-400">배터리·오염도는 FMS가 계산한 값입니다.</p>
+    </div>
+  )
+}
 
 /** 화면 좌표 → SVG 좌표(viewBox = 이미지 픽셀). [입력] svg, clientX, clientY [출력] { px, py } | null */
 function toSvgPoint(svg: SVGSVGElement, clientX: number, clientY: number): { px: number; py: number } | null {
@@ -159,6 +219,7 @@ export function MapView() {
                 })()}
               </svg>
             )}
+            <RobotCards robots={robotMarks} />
             {map && isAdmin && (   /* 지도 파일·해상도·원점은 관리자 정보 (2026-10-27) */
               <p className="px-2 pt-2 text-xs text-slate-500">
                 {map.file_name}{map.image_file_name ? ` · ${map.image_file_name} ${map.image_width_px}×${map.image_height_px}px` : ' · 이미지 없음(격자)'}

@@ -3,7 +3,7 @@
 # 역할   : 병원 지도용 로봇 위치 응답 (GET /robot-positions, 2026-10-29)
 # 작성일 : 2026-10-29
 # 구성   :
-#   - RobotPositionOut    로봇 한 대 — FMS robot-status 마지막 값을 EMR 맵 단위(m·rad)로
+#   - RobotPositionOut    로봇 한 대 — FMS robot-status 마지막 값을 EMR 맵 단위(m·rad)로, 배터리·오염도 % (2026-10-30)
 #   - RobotPositionsOut   map_id(그릴 맵) + 로봇들
 # =============================================================================
 from __future__ import annotations
@@ -28,6 +28,8 @@ class RobotPositionOut(BaseModel):
     place: str | None = Field(description="FMS가 보낸 사람이 읽는 위치 (아래 복도, 101호 …)")
     reported_at: datetime = Field(description="EMR이 이 값을 받은 시각")
     is_stale: bool = Field(description="online=false이거나 FMS_POSITION_STALE_SECONDS보다 오래 받지 못함 — 화면은 '연결 끊김'")
+    battery_percent: float | None = Field(description="FMS battery 0~100 — 실제 센서가 아니라 FMS 모델 값(2026-10-30). 없으면 null")
+    contamination_percent: float | None = Field(description="FMS contamination 0~100 — FMS 모델 값(2026-10-30). 없으면 null")
 
 
 class RobotPositionsOut(BaseModel):

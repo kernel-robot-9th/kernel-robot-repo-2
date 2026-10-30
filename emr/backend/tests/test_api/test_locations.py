@@ -17,13 +17,26 @@ def test_location_crud(logged_in_client, seed):
     assert response.status_code == 201, response.text
     location_id = response.json()["id"]
     assert response.json() == {"id": location_id, "name": "401호", "map_x_m": 1.0, "map_y_m": 2.0, "map_yaw_rad": 0.5,
-                               "map_id": map_id, "robot_dest": None, "robot_only": False, "map": {"id": seed["ward_map"].id, "name": "3병동", "file_name": "ward3.yaml", "resolution_m_per_pixel": 0.05, "origin_x_m": -10.0, "origin_y_m": -10.0, "origin_yaw_rad": 0.0, "has_image": False, "image_width_px": None, "image_height_px": None, "image_file_name": None, "updated_at": ANY}}
+                               "map_id": map_id, "robot_dest": None, "robot_only": False, "admin_note": None, "map": {"id": seed["ward_map"].id, "name": "3병동", "file_name": "ward3.yaml", "resolution_m_per_pixel": 0.05, "origin_x_m": -10.0, "origin_y_m": -10.0, "origin_yaw_rad": 0.0, "has_image": False, "image_width_px": None, "image_height_px": None, "image_file_name": None, "updated_at": ANY}}
 
     response = logged_in_client.patch(f"{URL}/{location_id}", json={"name": "401호(격리)"})
     assert response.json()["name"] == "401호(격리)" and response.json()["map_x_m"] == 1.0  # 좌표 유지
     assert "401호(격리)" in [location["name"] for location in logged_in_client.get(URL).json()]
     assert logged_in_client.delete(f"{URL}/{location_id}").status_code == 204
     assert logged_in_client.get(f"{URL}/{location_id}").status_code == 404
+
+
+@requires_db
+def test_location_admin_note(logged_in_client, seed):
+    """관리자 메모 (2026-10-30): 이름과 따로 — 넣기·바꾸기·빈 문자열로 지우기, null은 그대로."""
+    response = logged_in_client.post(URL, json={"name": "101호", "admin_note": "4인실 왼쪽"})
+    assert response.status_code == 201 and response.json()["admin_note"] == "4인실 왼쪽"
+    location_id = response.json()["id"]
+    assert logged_in_client.patch(f"{URL}/{location_id}", json={"admin_note": "4인실 창가"}).json()["admin_note"] == "4인실 창가"
+    assert logged_in_client.patch(f"{URL}/{location_id}", json={"admin_note": None}).json()["admin_note"] == "4인실 창가"
+    assert logged_in_client.patch(f"{URL}/{location_id}", json={"admin_note": ""}).json()["admin_note"] is None
+    assert logged_in_client.post(URL, json={"name": "102호", "admin_note": ""}).json()["admin_note"] is None
+    assert logged_in_client.post(URL, json={"name": "103호", "admin_note": "가" * 65}).status_code == 422
 
 
 @requires_db

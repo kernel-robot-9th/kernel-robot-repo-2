@@ -6,7 +6,7 @@
 //   - 공통      ApiError, Page
 //   - 인증      LoginIn, TokenOut, Nurse(역할), PasswordReset, PasswordChange
 //   - 마스터    Supply, Map, Location, Robot
-//   - 배송      Delivery, DeliveryItem, DeliveryCreate, DeliveryUpdate
+//   - 배송      Delivery, DeliveryItem, DeliveryCreate, DeliveryUpdate, DeliveryWard·DeliveryMultiCreate(여러 병동, 2026-10-30)
 //   - 배송 기록 DeliveryEvent, AdminDeliveryEvent, DeliveryEventFilters, DELIVERY_EVENT_LABEL (2026-10-21, 로드맵 4단계)
 //   - 병상 단말 BedsideDevice, BedsideApiKey (관리자), BedsideMe·BedsideSupply·BedsideDelivery·BedsideRequest (환자 화면, 2026-10-22)
 //   - 알림      NotificationEventType, LowStockEvent, DeliveryReceivedEvent (SSE /notifications/stream)
@@ -107,6 +107,7 @@ export interface Location {
   map_y_m: number | null
   map_yaw_rad: number | null
   robot_dest: string | null   // 로봇 목적지 이름 (팀원 Pinky API /dests, 예 PHARMACY). 실행기가 이 이름으로 주행 (2026-10-22)
+  admin_note: string | null   // 관리자 메모 (예 "4인실 왼쪽") — 관리자 화면에만 보여 준다 (2026-10-30)
 }
 
 export type RobotType = 'amr' | 'manipulator'
@@ -146,6 +147,8 @@ export interface RobotPosition {
   place: string | null          // 사람이 읽는 위치 (아래 복도, 101호 …)
   reported_at: string
   is_stale: boolean             // 연결 끊김 (오래 못 받음 또는 online=false)
+  battery_percent: number | null        // 0~100 — FMS가 계산한 값 (실제 센서 아님, 2026-10-30)
+  contamination_percent: number | null  // 0~100 — FMS가 계산한 값
 }
 export interface RobotPositions {
   map_id: number | null         // 위치를 그릴 맵 — 다른 맵을 보고 있으면 그리지 않는다
@@ -255,6 +258,15 @@ export interface DeliveryCreate {
   items: DeliveryItem[]
 }
 export type DeliveryUpdate = Partial<DeliveryCreate>
+/** 여러 병동 신청 (2026-10-30, POST /deliveries/multi) — 병동마다 신청 1건, 모두 되거나 모두 안 됨 */
+export interface DeliveryWard {
+  destination_location_id: number
+  items: DeliveryItem[]
+}
+export interface DeliveryMultiCreate {
+  scheduled_at: string
+  destinations: DeliveryWard[]
+}
 
 /** 한국어 라벨 — 화면 여러 곳에서 공유 */
 export const DELIVERY_STATUS_LABEL: Record<DeliveryStatus, string> = {

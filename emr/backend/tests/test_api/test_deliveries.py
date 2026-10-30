@@ -38,7 +38,7 @@ def test_delivery_create_list_get(client, seed, auth_headers):
     assert [r["id"] for r in client.get(URL, headers=auth_headers).json()] == [later["id"], created["id"]]  # 빠른 순
     assert client.get(f"{URL}/{created['id']}", headers=auth_headers).json()["destination_location"] == {
         "id": seed["room_301"].id, "name": "301호", "map_x_m": 12.5, "map_y_m": 3.2, "map_yaw_rad": 1.57,
-        "map_id": seed["ward_map"].id, "robot_dest": "ROOM_301", "robot_only": False, "map": {"id": seed["ward_map"].id, "name": "3병동", "file_name": "ward3.yaml", "resolution_m_per_pixel": 0.05, "origin_x_m": -10.0, "origin_y_m": -10.0, "origin_yaw_rad": 0.0, "has_image": False, "image_width_px": None, "image_height_px": None, "image_file_name": None, "updated_at": ANY}}
+        "map_id": seed["ward_map"].id, "robot_dest": "ROOM_301", "robot_only": False, "admin_note": None, "map": {"id": seed["ward_map"].id, "name": "3병동", "file_name": "ward3.yaml", "resolution_m_per_pixel": 0.05, "origin_x_m": -10.0, "origin_y_m": -10.0, "origin_yaw_rad": 0.0, "has_image": False, "image_width_px": None, "image_height_px": None, "image_file_name": None, "updated_at": ANY}}
     assert client.get(f"{URL}/999999", headers=auth_headers).status_code == 404
 
 
@@ -122,3 +122,55 @@ def test_reservation_rejected_when_stock_insufficient(client, seed, auth_headers
     response = client.patch(f"{URL}/{delivery_id}", headers=auth_headers, json={"items": [{"supply_id": blanket_id, "quantity": 6}]})
     assert response.status_code == 409 and response.json()["code"] == "stock_insufficient"
     assert client.get(f"{URL}/{delivery_id}", headers=auth_headers).json()["items"] == [{"supply_id": blanket_id, "quantity": 5}]
+
+
+def _multi_body(seed: dict, **overrides) -> dict:
+    return {"scheduled_at": _future(), "destinations": [
+        {"destination_location_id": seed["room_301"].id, "items": [{"supply_id": seed["medication"].id, "quantity": 3}]},
+        {"destination_location_id": seed["room_302"].id, "items": [
+            {"supply_id": seed["medication"].id, "quantity": 2}, {"supply_id": seed["blanket"].id, "quantity": 1}]},
+    ], **overrides}
+
+
+@requires_db
+def test_multi_ward_creates_one_delivery_per_ward(client, seed, auth_headers):
+    """여러 병동 신청 (2026-10-30): 병동마다 1건, 재고는 합계로, 기록도 병동마다."""
+    response = client.post(f"{URL}/multi", headers=auth_headers, json=_multi_body(seed))
+    assert response.status_code == 201, response.text
+    created = response.json()
+    assert [delivery["destination_location_id"] for delivery in created] == [seed["room_301"].id, seed["room_302"].id]
+    assert {delivery["status"] for delivery in created} == {"reserved"}
+    assert created[0]["scheduled_at"] == created[1]["scheduled_at"]
+    assert created[1]["items"] == [{"supply_id": seed["medication"].id, "quantity": 2}, {"supply_id": seed["blanket"].id, "quantity": 1}]
+    assert (_stock(client, seed["medication"].id, auth_headers), _stock(client, seed["blanket"].id, auth_headers)) == (5, 4)
+    for delivery in created:
+        events = client.get(f"{URL}/{delivery['id']}/events", headers=auth_headers).json()
+        assert [event["event_type"] for event in events] == ["reserved"]
+    # 만든 뒤에는 보통 신청과 같다 — 하나만 취소해도 그 병동 몫만 돌아온다
+    assert client.post(f"{URL}/{created[0]['id']}/cancel", headers=auth_headers).status_code == 200
+    assert _stock(client, seed["medication"].id, auth_headers) == 8
+
+
+@requires_db
+def test_multi_ward_rejects_all_or_nothing(client, seed, auth_headers):
+    medication_id = seed["medication"].id   # 재고 10
+    # 병동마다는 되지만 합계(6 + 6)가 모자라면 거절, 아무것도 생기지 않는다
+    too_many = _multi_body(seed, destinations=[
+        {"destination_location_id": seed["room_301"].id, "items": [{"supply_id": medication_id, "quantity": 6}]},
+        {"destination_location_id": seed["room_302"].id, "items": [{"supply_id": medication_id, "quantity": 6}]},
+    ])
+    response = client.post(f"{URL}/multi", headers=auth_headers, json=too_many)
+    assert response.status_code == 409 and response.json()["code"] == "stock_insufficient"
+    # 뒤 병동이 틀려도(없는 장소) 앞 병동까지 모두 거절
+    bad_location = _multi_body(seed)
+    bad_location["destinations"][1]["destination_location_id"] = 999999
+    response = client.post(f"{URL}/multi", headers=auth_headers, json=bad_location)
+    assert response.status_code == 400 and response.json()["code"] == "location_not_found"
+    same_ward = _multi_body(seed)
+    same_ward["destinations"][1]["destination_location_id"] = seed["room_301"].id
+    response = client.post(f"{URL}/multi", headers=auth_headers, json=same_ward)
+    assert response.status_code == 400 and response.json()["code"] == "delivery_destination_duplicate"
+    assert client.post(f"{URL}/multi", headers=auth_headers, json=_multi_body(seed, destinations=[])).status_code == 422
+    assert client.post(f"{URL}/multi", json=_multi_body(seed)).status_code == 401
+    assert _stock(client, medication_id, auth_headers) == 10
+    assert client.get(URL, headers=auth_headers).json() == []

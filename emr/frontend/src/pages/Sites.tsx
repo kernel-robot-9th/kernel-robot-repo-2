@@ -4,7 +4,8 @@
 //          조회는 누구나, 등록·수정·삭제 버튼은 관리자에게만 보인다 (백엔드도 403)
 // 작성일 : 2026-10-14
 // 구성   :
-//   - LocationsTab   POST/PATCH/DELETE /locations
+//   - LocationsTab   POST/PATCH/DELETE /locations. 관리자 메모("4인실 왼쪽" 같은 설명)는 관리자에게만 보이고 칸을 벗어나면 저장 (2026-10-30)
+//   - AdminNoteInput 관리자 메모 한 칸
 //   - MapsTab        맵 파일(yaml + pgm/png) 업로드·교체·삭제 (관리자, 2026-10-19). 장소 찍기는 맵 화면
 //   - RobotsTab      POST/PATCH/DELETE /robots, 로봇 API 키 발급·폐기 (관리자, 2026-10-19), 복귀 장소는 2026-10-27 없앰(팀원 FMS가 정함),
 //                    로봇 서버 주소 입력·claim 때 받은 배터리·오염도 보기 (2026-10-23)
@@ -23,12 +24,27 @@ import { RobotApiKeyDialog } from '../features/robots/RobotApiKeyDialog'
 import { formatDate, formatTime } from '../lib/dateFormat'
 
 // ---------- 장소 ----------
+/** 관리자 메모 한 칸 — 칸을 벗어날 때 바뀌었으면 저장, 비우면 지운다. [입력] location [출력] 입력 칸 */
+function AdminNoteInput({ location }: { location: Location }) {
+  const { update } = useLocationMutations()
+  const saved = location.admin_note ?? ''
+  const [value, setValue] = useState(saved)
+  const save = () => {
+    const note = value.trim()
+    if (note !== saved) update.mutate({ id: location.id, body: { admin_note: note } })
+  }
+  return (
+    <Input value={value} maxLength={64} placeholder="예: 4인실 왼쪽" aria-label={`${location.name} 관리자 메모`}
+      onChange={e => setValue(e.target.value)} onBlur={save} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }} />
+  )
+}
+
 function LocationsTab() {
   const locations = useLocations()
   const maps = useMaps()
   const { create, remove } = useLocationMutations()
   const isAdmin = useIsAdmin()
-  const [form, setForm] = useState<Omit<Location, 'id'>>({ name: '', map_id: null, map_x_m: null, map_y_m: null, map_yaw_rad: 0, robot_dest: null })
+  const [form, setForm] = useState<Omit<Location, 'id'>>({ name: '', map_id: null, map_x_m: null, map_y_m: null, map_yaw_rad: 0, robot_dest: null, admin_note: null })
 
   // 좌표 세 값은 함께 있거나 함께 없어야 한다 (백엔드 CHECK)
   const hasCoords = form.map_x_m != null && form.map_y_m != null && form.map_yaw_rad != null
@@ -41,7 +57,7 @@ function LocationsTab() {
     <div className="space-y-4">
       {isAdmin && (
         <div className="space-y-3 rounded border border-slate-200 bg-white p-4">
-          <div className="grid grid-cols-6 gap-3">
+          <div className="grid grid-cols-7 gap-3">
             <Label text="이름"><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="301호" /></Label>
             <Label text="맵">
               <Select value={form.map_id ?? ''} onChange={e => setForm(f => ({ ...f, map_id: num(e.target.value) }))}>
@@ -53,9 +69,10 @@ function LocationsTab() {
             <Label text="y (m)"><Input type="number" step="0.01" value={form.map_y_m ?? ''} onChange={e => setForm(f => ({ ...f, map_y_m: num(e.target.value) }))} /></Label>
             <Label text="yaw (rad)"><Input type="number" step="0.01" value={form.map_yaw_rad ?? ''} onChange={e => setForm(f => ({ ...f, map_yaw_rad: num(e.target.value) }))} /></Label>
             <Label text="로봇 목적지"><Input value={form.robot_dest ?? ''} onChange={e => setForm(f => ({ ...f, robot_dest: e.target.value.trim() || null }))} placeholder="PHARMACY" /></Label>
+            <Label text="관리자 메모"><Input value={form.admin_note ?? ''} maxLength={64} onChange={e => setForm(f => ({ ...f, admin_note: e.target.value || null }))} placeholder="4인실 왼쪽" /></Label>
           </div>
           <div className="flex items-center gap-3">
-            <Button disabled={!valid || create.isPending} onClick={() => create.mutate(form, { onSuccess: () => setForm(f => ({ ...f, name: '' })) })}>
+            <Button disabled={!valid || create.isPending} onClick={() => create.mutate(form, { onSuccess: () => setForm(f => ({ ...f, name: '', admin_note: null })) })}>
               장소 등록
             </Button>
             {!valid && form.name !== '' && <span className="text-xs text-slate-500">좌표를 넣으려면 x·y·yaw·맵 네 값이 모두 필요합니다</span>}
@@ -66,11 +83,12 @@ function LocationsTab() {
         <LoadError what="장소 목록" error={locations.error} onRetry={() => void locations.refetch()} />
       ) : (
         <Table>
-          <thead><tr><Th>이름</Th><Th>맵</Th><Th>x (m)</Th><Th>y (m)</Th><Th>yaw (rad)</Th><Th>로봇 목적지</Th>{isAdmin && <Th>{' '}</Th>}</tr></thead>
+          <thead><tr><Th>이름</Th>{isAdmin && <Th>관리자 메모</Th>}<Th>맵</Th><Th>x (m)</Th><Th>y (m)</Th><Th>yaw (rad)</Th><Th>로봇 목적지</Th>{isAdmin && <Th>{' '}</Th>}</tr></thead>
           <tbody>
             {(locations.data ?? []).map(l => (
               <tr key={l.id}>
                 <Td>{l.name}</Td>
+                {isAdmin && <Td><AdminNoteInput key={`${l.id}-${l.admin_note ?? ''}`} location={l} /></Td>}
                 <Td>{l.map_id == null ? <span className="text-slate-400">—</span> : mapName.get(l.map_id) ?? `#${l.map_id}`}</Td>
                 <Td>{l.map_x_m ?? <span className="text-amber-600">좌표 없음</span>}</Td>
                 <Td>{l.map_y_m ?? ''}</Td>

@@ -4,6 +4,7 @@
 # 작성일 : 2026-10-14
 # 구성   :
 #   - DeliveryService  create/list_for_nurse/get/update/cancel (간호사 쪽), restore_stock (취소·실패 공용)
+#                      create_many — 여러 병동 신청, 병동마다 1건·모두 되거나 모두 안 됨 (2026-10-30)
 #                      예약·변경·취소는 배송 기록(delivery_events)에도 남긴다 (2026-10-21)
 #                      confirm_receipt — 간호사 "받았습니다" 버튼 수령 (2026-10-22, NURSE_RECEIPT_METHOD=button)
 #                      require_arrived·mark_received — 수령 공용 (간호사·환자 버튼, 로봇 마커, 로봇 전용 장소 이동 — 2026-10-23)
@@ -24,7 +25,7 @@ from app.repositories.fms_order import FmsOrderRepository
 from app.repositories.location import LocationRepository
 from app.repositories.supply import SupplyRepository
 from app.schemas.delivery import (
-    DeliveryCreate, DeliveryItemIn, DeliveryUpdate,
+    DeliveryCreate, DeliveryItemIn, DeliveryMultiCreate, DeliveryUpdate,
 )
 from app.services.delivery_events import DeliveryEventRecorder, DeliverySnapshot
 from app.services.delivery_notifier import DeliveryNotifier
@@ -59,14 +60,30 @@ class DeliveryService:
         self._validate_items_for(destination, data.items)
         self._validate_items(data.items)
         self._adjust_stock(self._quantities(data.items))
-        delivery = self.repo.add(Delivery(
-            nurse_id=nurse_id, destination_location_id=data.destination_location_id, scheduled_at=data.scheduled_at,
-            items=self._to_items(data.items),
-        ))
-        self.events.record_by_nurse(
-            delivery, DeliveryEventType.RESERVED, nurse_id, datetime.now(UTC), self.events.reserved_details(delivery),
-        )
-        return delivery
+        return self._add_reserved(nurse_id, data.destination_location_id, data.scheduled_at, data.items)
+
+    def create_many(self, data: DeliveryMultiCreate, nurse_id: int) -> list[Delivery]:
+        """여러 병동 신청 — 병동마다 신청 1건 (2026-10-30, 사용자 "한번에 여러 병동을 배송").
+        모두 확인하고 재고를 한 번에 뺀 뒤 만든다 — 하나라도 틀리면 아무것도 생기지 않는다.
+        FMS에는 지금처럼 물품 1개당 주문으로 가고, 한 로봇에 여러 병실을 묶는 것은 FMS가 정한다.
+        [입력] data / nurse_id
+        [출력] list[Delivery]: 보낸 병동 순서, 모두 status=reserved
+        """
+        self._validate_scheduled_at(data.scheduled_at)
+        destination_ids = [ward.destination_location_id for ward in data.destinations]
+        if len(destination_ids) != len(set(destination_ids)):
+            raise BadRequest("duplicate destination_location_id in destinations", code="delivery_destination_duplicate")
+        total_by_supply_id: dict[int, int] = {}
+        for ward in data.destinations:
+            self._validate_items_for(self._validate_destination(ward.destination_location_id), ward.items)
+            self._validate_items(ward.items)
+            for supply_id, quantity in self._quantities(ward.items).items():
+                total_by_supply_id[supply_id] = total_by_supply_id.get(supply_id, 0) + quantity
+        self._adjust_stock(total_by_supply_id)
+        return [
+            self._add_reserved(nurse_id, ward.destination_location_id, data.scheduled_at, ward.items)
+            for ward in data.destinations
+        ]
 
     def list_for_nurse(
         self, nurse_id: int, status: DeliveryStatus | None = None, limit: int = 100, offset: int = 0,
@@ -180,6 +197,22 @@ class DeliveryService:
         self._adjust_stock({item.supply_id: -item.quantity for item in delivery.items})
 
     # ---- 내부 ----------------------------------------------------------------
+
+    def _add_reserved(
+        self, nurse_id: int, destination_location_id: int, scheduled_at: datetime, items: list[DeliveryItemIn],
+    ) -> Delivery:
+        """새 신청 한 건을 넣고 배송 기록(reserved)을 남긴다 — 확인과 재고 빼기는 부르는 쪽이 먼저 했다.
+        [입력] nurse_id / destination_location_id / scheduled_at / items
+        [출력] Delivery: status=reserved
+        """
+        delivery = self.repo.add(Delivery(
+            nurse_id=nurse_id, destination_location_id=destination_location_id, scheduled_at=scheduled_at,
+            items=self._to_items(items),
+        ))
+        self.events.record_by_nurse(
+            delivery, DeliveryEventType.RESERVED, nurse_id, datetime.now(UTC), self.events.reserved_details(delivery),
+        )
+        return delivery
 
     def _get_reserved(self, delivery_id: int, nurse_id: int) -> Delivery:
         """본인 예약이고 reserved 상태인지 확인하고 반환.

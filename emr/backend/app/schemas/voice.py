@@ -33,13 +33,13 @@ class VoiceDraft(BaseModel):
 class VoiceTextIn(BaseModel):
     """문장으로 초안 만들기 — 마이크를 못 쓰는 화면(http로 접속한 다른 PC)·시험용."""
 
-    text: str = Field(min_length=1, max_length=500, examples=["4인실 왼쪽에 A 약품 두 개"])
+    text: str = Field(min_length=1, max_length=500, examples=["101호에 A 약품 두 개"])
 
 
 class VoiceSpeakIn(BaseModel):
     """안내 음성으로 읽을 문장. 환자 정보는 넣지 않는다(Google 클라우드로 나간다)."""
 
-    text: str = Field(min_length=1, max_length=300, examples=["4인실 왼쪽에 배송 로봇이 도착했습니다."])
+    text: str = Field(min_length=1, max_length=300, examples=["101호에 배송 로봇이 도착했습니다."])
     voice: str | None = Field(default=None, pattern=r"^[A-Za-z]{2,32}$",
                               description="\"female\"(여성, 기본 Kore)·\"male\"(남성, 기본 Algenib) 또는 Gemini 목소리 이름(예: Charon). "
                                           "없으면 서버 기본(VOICE_TTS_VOICE)", examples=["male"])

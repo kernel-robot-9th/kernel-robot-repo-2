@@ -3,7 +3,8 @@
 # 역할   : 배송 일정 예약 엔드포인트 (/deliveries) — 전부 로그인 필요
 # 작성일 : 2026-10-14
 # 구성   :
-#   - create/list/get/update/cancel  
+#   - create/list/get/update/cancel
+#   - multi   여러 병동 신청 — 병동마다 1건, 모두 되거나 모두 안 됨 (2026-10-30)
 #   - events  배송 한 건의 기록 — 예약 간호사 본인·관리자 (2026-10-21, 로드맵 4단계)
 #   - receipt "받았습니다" 버튼 수령 — 도착한 본인 배송 (2026-10-22, 마커 대신)
 # =============================================================================
@@ -14,7 +15,7 @@ from fastapi import APIRouter, Query, status
 from app.core.deps import DB, CurrentNurse
 from app.models.enums import DeliveryStatus
 from app.schemas.delivery import (
-    DeliveryCreate, DeliveryOut, DeliveryUpdate,
+    DeliveryCreate, DeliveryMultiCreate, DeliveryOut, DeliveryUpdate,
 )
 from app.schemas.delivery_event import DeliveryEventOut
 from app.services.delivery import DeliveryService
@@ -39,6 +40,23 @@ def create_delivery(db: DB, nurse: CurrentNurse, data: DeliveryCreate) -> Delive
     [출력] DeliveryOut
     """
     return DeliveryOut.model_validate(DeliveryService(db).create(data, nurse.id))
+
+
+@router.post(
+    "/multi", response_model=list[DeliveryOut], status_code=status.HTTP_201_CREATED,
+    summary="여러 병동 물품 신청",
+    description=(
+        "한 번에 여러 병동으로 보낸다(2026-10-30). 병동마다 신청이 1건씩 생기고 도착·수령·알림은 병동별로 따로 간다. "
+        "하나라도 틀리면(재고 부족 409 포함) 아무것도 생기지 않는다. 같은 병동 두 번은 400 `delivery_destination_duplicate`."
+    ),
+    responses={**UNAUTHORIZED_RESPONSE, **BAD_REQUEST_RESPONSE, 409: {"description": "재고 부족 stock_insufficient"}},
+)
+def create_deliveries_for_wards(db: DB, nurse: CurrentNurse, data: DeliveryMultiCreate) -> list[DeliveryOut]:
+    """
+    [입력] data / nurse: 토큰에서 복원
+    [출력] list[DeliveryOut]: 보낸 병동 순서
+    """
+    return [DeliveryOut.model_validate(delivery) for delivery in DeliveryService(db).create_many(data, nurse.id)]
 
 
 @router.get(
