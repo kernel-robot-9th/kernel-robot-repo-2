@@ -1,0 +1,4 @@
+{"event_id": "e-7", "seq": 7, "time": "2026-10-30T15:14:06+09:00", "type": "order_created", "order_id": "o-1", "request_id": "emr-d132-s1-1", "room": "101호", "item": "A 약품"}
+{"event_id": "e-8", "seq": 8, "time": "2026-10-30T15:14:06+09:00", "type": "order_created", "order_id": "o-2", "request_id": "emr-d133-s2-1", "room": "103호", "item": "B 약품"}
+{"event_id": "e-9", "seq": 9, "time": "2026-10-30T15:14:06+09:00", "type": "order_created", "order_id": "o-3", "request_id": "emr-d134-s3-1", "room": "104호", "item": "C 약품"}
+{"event_id": "e-10", "seq": 10, "time": "2026-10-30T15:14:06+09:00", "type": "batch_assigned", "batch_id": "b-1", "robot": 2, "name": "pinky_ee3a", "orders": [{"order_id": "o-1", "room": "101호", "item": "A 약품"}, {"order_id": "o-3", "room": "104호", "item": "C 약품"}, {"order_id": "o-2", "room": "103호", "item": "B 약품"}], "count": 3, "rooms": ["101호", "104호", "103호"]}

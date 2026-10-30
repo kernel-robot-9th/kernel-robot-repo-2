@@ -1,0 +1,9 @@
+{"event_id": "e-155", "seq": 155, "time": "2026-10-30T14:59:05+09:00", "type": "order_created", "order_id": "o-54", "request_id": "emr-d129-s1-1", "room": "101호", "item": "A 약품"}
+{"event_id": "e-156", "seq": 156, "time": "2026-10-30T14:59:05+09:00", "type": "order_created", "order_id": "o-55", "request_id": "emr-d129-s1-2", "room": "101호", "item": "A 약품"}
+{"event_id": "e-157", "seq": 157, "time": "2026-10-30T14:59:05+09:00", "type": "order_created", "order_id": "o-56", "request_id": "emr-d130-s2-1", "room": "102호", "item": "B 약품"}
+{"event_id": "e-158", "seq": 158, "time": "2026-10-30T14:59:05+09:00", "type": "order_created", "order_id": "o-57", "request_id": "emr-d131-s3-1", "room": "103호", "item": "C 약품"}
+{"event_id": "e-159", "seq": 159, "time": "2026-10-30T14:59:05+09:00", "type": "batch_assigned", "batch_id": "b-9", "robot": 2, "name": "pinky_ee3a", "orders": [{"order_id": "o-54", "room": "101호", "item": "A 약품"}, {"order_id": "o-55", "room": "101호", "item": "A 약품"}, {"order_id": "o-57", "room": "103호", "item": "C 약품"}], "count": 3, "rooms": ["101호", "103호"]}
+{"event_id": "e-160", "seq": 160, "time": "2026-10-30T14:59:05+09:00", "type": "batch_assigned", "batch_id": "b-10", "robot": 3, "name": "pinky_62f4", "orders": [{"order_id": "o-56", "room": "102호", "item": "B 약품"}], "count": 1, "rooms": ["102호"]}
+{"event_id": "e-161", "seq": 161, "time": "2026-10-30T14:59:20+09:00", "type": "robot_called", "batch_id": "b-9", "robot": 2, "eta_s": 50}
+{"event_id": "e-162", "seq": 162, "time": "2026-10-30T14:59:20+09:00", "type": "robot_departed", "robot": 2, "task": "delivery", "from": "T1_20", "to": {"node": "PHARMACY", "room": "약제실"}}
+{"event_id": "e-163", "seq": 163, "time": "2026-10-30T14:59:20+09:00", "type": "robot_called", "batch_id": "b-10", "robot": 3, "eta_s": 80}
