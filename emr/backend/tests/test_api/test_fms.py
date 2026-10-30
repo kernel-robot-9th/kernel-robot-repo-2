@@ -74,6 +74,21 @@ def test_sends_one_order_per_item_once_and_blocks_change(client, auth_headers, d
 
 
 @requires_db
+def test_fully_sent_reservations_do_not_crowd_out_new_ones(client, auth_headers, db, fms, reserve_overdue):
+    """10-30 부하 시험: 다 보낸 예약(FMS 준비 전이라 reserved)이 한 회차 창(limit)을 채워도 새 신청을 보낸다."""
+    from app.repositories.delivery import DeliveryRepository
+
+    first = reserve_overdue(quantity=1, minutes_ago=3)
+    second = reserve_overdue(quantity=1, minutes_ago=2)
+    assert _send(db) == 2
+    late = reserve_overdue(quantity=1, minutes_ago=1)
+    due = DeliveryRepository(db).lock_due_for_fms(datetime.now(UTC), limit=1)
+    assert [delivery.id for delivery in due] == [late["id"]]   # 예전엔 가장 이른 first(다 보냄)가 창을 차지
+    assert _send(db) == 1 and [order["request_id"] for order in fms["sent"]][-1].startswith(f"emr-d{late['id']}-")
+    assert {first["id"], second["id"]}.isdisjoint(delivery.id for delivery in DeliveryRepository(db).lock_due_for_fms(datetime.now(UTC)))
+
+
+@requires_db
 def test_sends_nothing_when_off_or_not_due(client, auth_headers, db, seed, fms, monkeypatch):
     response = client.post(DELIVERIES, headers=auth_headers, json={
         "destination_location_id": seed["room_301"].id,

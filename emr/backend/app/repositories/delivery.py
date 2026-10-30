@@ -12,11 +12,12 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
 from app.models.delivery import Delivery, DeliveryItem
 from app.models.enums import DeliveryStatus
+from app.models.fms_order import FmsOrder
 from app.models.location import Location
 from app.repositories.base import BaseRepository
 
@@ -138,10 +139,16 @@ class DeliveryRepository(BaseRepository[Delivery]):
     def lock_due_for_fms(self, now: datetime, limit: int = 50) -> list[Delivery]:
         """FMS로 보낼 배송을 잠가서 가져온다 (2026-10-27): reserved이고 신청 시각이 지났고 목적지에 robot_dest(FMS 방 번호)가 있는 것,
         이른 순. 보내는 동안 간호사 변경·취소가 끼어들지 않게 잠근다 — 끝나면 변경·취소는 delivery_sent_to_fms로 막힌다.
-        이미 다 보낸 배송도 FMS robot_called(준비) 전까지 reserved라 함께 나온다(서비스가 물품별로 건너뛴다).
+        **아직 안 보낸 물품이 있는 것만**(물품 수 > 보낸 주문 수, 2026-10-30): 다 보낸 배송도 FMS robot_called(준비) 전까지 reserved라,
+        빼지 않으면 다 보낸 예약이 limit을 채워 새 신청을 영영 못 보낸다(10-30 부하 시험, 다 보낸 예약 50건에서 멈춤).
         [입력] now: 지금 시각 / limit: 한 회차에 볼 배송 수
         [출력] list[Delivery]: 품목·목적지 로드됨
         """
+        unit_count = (
+            select(func.coalesce(func.sum(DeliveryItem.quantity), 0))
+            .where(DeliveryItem.delivery_id == Delivery.id).correlate(Delivery).scalar_subquery()
+        )
+        sent_count = select(func.count(FmsOrder.id)).where(FmsOrder.delivery_id == Delivery.id).correlate(Delivery).scalar_subquery()
         statement = (
             select(Delivery)
             .join(Location, Delivery.destination_location_id == Location.id)
@@ -150,6 +157,7 @@ class DeliveryRepository(BaseRepository[Delivery]):
                 Delivery.status == DeliveryStatus.RESERVED,
                 Delivery.scheduled_at <= now,
                 Location.robot_dest.is_not(None),
+                unit_count > sent_count,
             )
             .order_by(Delivery.scheduled_at, Delivery.id)
             .limit(limit)
