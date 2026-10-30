@@ -5,7 +5,7 @@
 
 - Graph      : driving/graph/graph.yaml 을 차선까지 그대로 읽는다 (보류 노드·엣지 제외)
 - Robot      : 가상 핑키. FMS 가 내준 구간(노드 목록)만 일정 속도로 달린다
-- FMS        : 주문 → 배송 묶음·배차 → 경로 → 구간 예약 → 상태(오염도·배터리·적재) 관리
+- FMS        : 주문 → 배송 묶음·배차 → 경로 → 구간 예약 → 상태(오염도·피로도·적재) 관리
 """
 import heapq
 import math
@@ -116,13 +116,13 @@ class Params:
         self.load_s = 10.0         # 관제 PC/OMX 적재 (가상: 주차 끝 알림 뒤 이 시간 지나면 적재 완료)
         self.spin_s = 8.0          # 병실 제자리 360° 회전 = 배송 완료
         self.dwell_s = 5.0         # POCKET 5초 = 오염도 0
-        self.charge_s = 10.0       # CHARGER 도착 10초 뒤 배터리 100
+        self.charge_s = 10.0       # CHARGER 도착 10초 뒤 피로도 100
         self.cap = 3               # 적재 용량 (실는 개수 = 맡은 주문 수. 여분은 싣지 않음 — 2026-10-27 사용자)
         self.pause_s = (1.0, 5.0)  # 병실 회전 뒤 다음 일까지 쉬는 시간 (무작위, 초) — 2026-10-27 사용자
         self.prep_s = 15.0         # 가상 OMX 물품 준비 (배차 → ready). 실제로는 관제 PC 가 POST .../ready
         self.auto_omx = True       # 가상 관제 PC/OMX: ready·loaded 를 시간 지나면 스스로 보냄. 외부 관제 PC 를 붙이면 끔
-        self.battery_per_room = 10
-        self.pharmacy_min_battery = 20   # 이 값 이하면 약제실 방문 금지
+        self.fatigue_per_room = 10     # 피로도: 가상 값 (실제 핑키 배터리 아님). 병실 하나 배송마다 −10, CHARGER 에서 100
+        self.pharmacy_min_fatigue = 20   # 이 값 이하면 약제실 방문 금지
         self.contam_max = 100
         self.wrong_lane = 1.5      # 우측통행 반대 차선 비용 배수
         self.replan_s = 2.0        # 예약 못 하고 기다릴 때 경로 다시 짜는 간격
@@ -318,7 +318,7 @@ class Robot:
     def __init__(self, rid, node, g, color):
         self.id, self.node, self.g, self.color = rid, node, g, color
         self.pos = g.xy(node)
-        self.battery, self.contam, self.load = 100, 0, 0
+        self.fatigue, self.contam, self.load = 100, 0, 0
         self.assigned = []          # 맡은 주문 (아직 배송 안 함)
         self.task = None            # None / delivery / decon / charge / park / yield
         self.step = None            # 지금 단계 dict
@@ -344,6 +344,8 @@ class Robot:
         self.fault = None           # 실패해 멈춤: dict(code, why, t, node, edge) — 사람이 풀 때까지 그 자리
         self.at_dock = False        # 정밀 주차 자리(PHARMACY_DOCK)에 있음 → 다음 /drive 앞에 물러나기 엣지
         self.link_lost = False
+        self.boot = None            # 로봇 boot_id (바뀌면 재부팅 → 위치를 믿을 수 없음)
+        self.reattach_t = 0.0
 
     @property
     def loaded(self):
@@ -351,7 +353,7 @@ class Robot:
 
     @property
     def idle(self):
-        return self.step is None and not self.queue
+        return self.step is None and not self.queue and not self.fault   # 실패로 멈춘 실제 로봇에는 일을 안 줌
 
     def holds(self):
         """지금 붙잡은 (노드, 엣지, zone)"""
@@ -438,7 +440,7 @@ class FMS:
                     pose=dict(x=round(r.pos[0], 1), y=round(r.pos[1], 1), heading=round(r.heading, 1)),
                     node=r.node, next_node=path[1] if len(path) > 1 else None, place=place_of(r.node),
                     destination=None if dest is None else dict(node=dest, room=room_or_none(dest)),
-                    path=path, battery=r.battery, contamination=r.contam, load=r.load, capacity=self.p.cap,
+                    path=path, fatigue=r.fatigue, contamination=r.contam, load=r.load, capacity=self.p.cap,
                     batch_id=r.batch.bid if r.batch else None, orders=[o.oid for o in r.assigned])
 
     def order_api(self, o):
@@ -519,8 +521,11 @@ class FMS:
         self.emit('batch_departed', batch_id=b.bid, robot=b.robot.num, rooms=[room_code(x) for x in b.rooms])
 
     # ---- 단계 만들기 ----
-    def visit_steps(self, start, rooms, c0):
-        """병실 방문 단계: 가까운 병실부터. 수술실은 오염도 0 에서만 → 맨 앞(오염도 0 일 때) 또는 POCKET 들렀다가"""
+    def visit_steps(self, start, rooms, c0, pocket=False):
+        """병실 방문 단계: 가까운 병실부터. 수술실은 오염도 0 에서만.
+        pocket=False (배송, 10-29 사용자: 오염도가 0 이 아니어도 배송을 주되 POCKET 을 들르지 않고 끝낼 수 있어야 함):
+        수술실이 있으면 오염도 0 일 때 맨 앞으로만, 아니면 None (이 로봇은 못 함).
+        pocket=True: 예전 방식 — 중간에 POCKET 들렀다가 수술실"""
         def nn(frm, rs):
             out, here, rs = [], frm, list(rs)
             while rs:
@@ -551,6 +556,8 @@ class FMS:
         if SURGERY not in rooms:
             return steps(nn(start, rooms))
         rest = [r for r in rooms if r != SURGERY]
+        if not pocket:
+            return steps([SURGERY] + nn(SURGERY, rest)) if c0 == 0 else None
         cands = []
         if c0 == 0:
             cands.append([SURGERY] + nn(SURGERY, rest))
@@ -561,12 +568,12 @@ class FMS:
         return steps(min(cands, key=length))
 
     def feasible(self, r, steps, include_current=True):
-        """오염도 ≤ 100, 수술실은 0 에서만, 배터리 ≥ 0, 약제실은 배터리 > 20"""
-        c, b = r.contam, r.battery
+        """오염도 ≤ 100, 수술실은 0 에서만, 피로도 ≥ 0, 약제실은 피로도 > 20"""
+        c, b = r.contam, r.fatigue
         seq = ([r.step] if include_current and r.step else []) + steps
         for s in seq:
             if s['kind'] == 'move':
-                if s['to'] == PHARMACY and b <= self.p.pharmacy_min_battery:
+                if s['to'] == PHARMACY and b <= self.p.pharmacy_min_fatigue:
                     return False
                 if s['to'] in ROOM_CONTAM and not s.get('arrived'):
                     if s['to'] == SURGERY and c > 0:
@@ -575,7 +582,7 @@ class FMS:
                     if c > self.p.contam_max:
                         return False
             elif s['kind'] == 'spin':
-                b -= self.p.battery_per_room
+                b -= self.p.fatigue_per_room
                 if b < 0:
                     return False
             elif s['kind'] == 'dwell':
@@ -694,24 +701,25 @@ class FMS:
         for r in self.robots:                               # 노는 로봇: 충전·오염 제거 먼저
             if not r.idle:
                 continue
-            if r.battery <= p.pharmacy_min_battery:
+            if r.fatigue <= p.pharmacy_min_fatigue:
                 st = ([dict(kind='move', to=POCKET, also={'charger'}), dict(kind='dwell')] if r.contam > 0 else []) + \
                      [dict(kind='move', to=CHARGER), dict(kind='charge')]
-                self.start_task(r, 'charge', st, f'배터리 {r.battery} → 충전')
-            elif r.contam > 0:
-                self.start_task(r, 'decon', [dict(kind='move', to=POCKET), dict(kind='dwell')], f'오염도 {r.contam} → POCKET')
+                self.start_task(r, 'charge', st, f'피로도 {r.fatigue} → 충전')
 
         # 배차 때 묶음이 정해지면 그 목록은 바꾸지 않는다 (배송 중인 로봇에 끼워 넣기 없음 — 2026-10-27 사용자).
         # 새 주문은 노는 로봇이 생길 때까지 기다린다.
         waiting = sorted([o for o in self.orders if o.state == 'waiting'], key=lambda o: o.created)
-        while waiting:                                      # 1) 노는 로봇에 새 묶음
+        while waiting:                                      # 1) 노는 로봇에 새 묶음 (오염도가 있어도 POCKET 없이 끝낼 수 있으면)
             if not self.new_bundle(waiting):
                 break
             waiting = [o for o in waiting if o.state == 'waiting']
+        for r in self.robots:                               # 2) 배송을 못 받은 노는 로봇은 오염도가 있으면 POCKET 으로
+            if r.idle and r.contam > 0:
+                self.start_task(r, 'decon', [dict(kind='move', to=POCKET), dict(kind='dwell')], f'오염도 {r.contam} → POCKET')
 
         taken = {r.step['to'] for r in self.robots if r.step and r.step['kind'] == 'move'} | \
                 {s['to'] for r in self.robots for s in r.queue if s['kind'] == 'move'}
-        for r in self.robots:                               # 2) 남는 로봇은 주차 자리로
+        for r in self.robots:                               # 3) 남는 로봇은 주차 자리로
             if r.idle and r.node not in PARKING:
                 spot = self.free_parking(r, taken)
                 if spot:
@@ -743,27 +751,35 @@ class FMS:
         return min(spots, key=lambda s: self.g.dist(r.node, s)) if spots else None
 
     def new_bundle(self, waiting):
+        """먼저 들어온 주문부터 씨앗으로: 그 주문을 POCKET 없이 끝낼 수 있는 노는 로봇이 있으면 묶음을 만든다.
+        못 받는 주문(예: 오염된 로봇만 남았는데 수술실)은 건너뛰고 다음 주문을 본다"""
+        for seed in waiting:
+            if self.bundle_from(seed, [o for o in waiting if o is not seed]):
+                return True
+        return False
+
+    def bundle_from(self, seed, others):
         p = self.p
-        seed = waiting[0]
         cands = []
         for r in self.robots:
-            if not r.idle or (r.contam > 0) or r.battery < p.battery_per_room:
+            if not r.idle or r.fatigue < p.fatigue_per_room:
                 continue
-            if r.battery <= p.pharmacy_min_battery:
+            if r.fatigue <= p.pharmacy_min_fatigue:
                 continue
             cands.append((self.g.dist(r.node, PHARMACY), r))
         for _, r in sorted(cands, key=lambda c: c[0]):
             cap, start = p.cap, PHARMACY
             prefix = [dict(kind='wait_ready'), dict(kind='move', to=PHARMACY), dict(kind='dock'), dict(kind='load')]
             bundle, here = [seed], seed.room
-            if not self.feasible(r, prefix + self.visit_steps(start, [seed.room], r.contam), include_current=False):
+            first = self.visit_steps(start, [seed.room], r.contam)
+            if first is None or not self.feasible(r, prefix + first, include_current=False):
                 continue
-            rest = [o for o in waiting[1:]]
+            rest = list(others)
             while len(bundle) < cap and rest:
                 rest.sort(key=lambda o: self.g.dist(here, o.room))
                 for o in rest:
                     trial = self.visit_steps(start, [b.room for b in bundle] + [o.room], r.contam)
-                    if self.feasible(r, prefix + trial, include_current=False):
+                    if trial is not None and self.feasible(r, prefix + trial, include_current=False):
                         bundle.append(o)
                         rest.remove(o)
                         here = o.room
@@ -1155,8 +1171,27 @@ class FMS:
             elif r.edge_t == 0.0 and r.res_to <= r.k:
                 self.plan(r, penalize=True)
 
+    REATTACH = ('unreachable', 'not_localized', 'not_at_node', 'rebooted')
+
+    def check_real(self, r):
+        """실제 로봇: 재부팅 알아채기, 붙지 못한(또는 쉬다가 재부팅한) 로봇은 준비되면 자동으로 다시 붙이기"""
+        L = r.link
+        if not L.alive():
+            return
+        boot = (L.st.get('robot') or {}).get('boot_id')
+        if not r.fault and r.boot and boot and boot != r.boot:
+            self.real_fault(r, 'rebooted', '로봇이 재부팅됨 — 위치를 믿을 수 없음. 노드에 놓고 /set_pose')
+            return
+        if (r.fault and r.fault['code'] in self.REATTACH and r.step is None and not r.queue
+                and self.t - r.reattach_t > 2.0):
+            r.reattach_t = self.t
+            if L.st.get('pose_confirmed') is not False:
+                self.attach_real(r, L)
+
     def tick_robot(self, r, dt):
         p, s = self.p, r.step
+        if r.link:
+            self.check_real(r)
         if s is None or r.fault:
             return
         k = s['kind']
@@ -1259,31 +1294,41 @@ class FMS:
         elif k == 'charge':
             r.timer += dt
             if r.timer >= p.charge_s:
-                r.battery = 100
+                r.fatigue = 100
                 self.log(f'{r.id}: 충전 끝 → 100')
                 self.next_step(r)
 
     # ---- 실제 로봇 (robot_link.HttpLink) — 설계: FMS ↔ Pinky 주행 API 설계 문서 (10-29) ----
     def attach_real(self, r, link):
         """실제 로봇 붙이기: 시작 노드·자세 = 로봇 /status 의 drive.node·pose"""
-        r.link = link
+        prev = (r.fault or {}).get('code')       # 같은 이유로 다시 안 되면 로그를 되풀이하지 않음
+        r.link, r.fault = link, None
         if not link.wait_status():
             r.fault = dict(code='unreachable', why=f'{link.url} /status 없음 ({link.err})', t=self.t, node=r.node, edge=None)
-            self.log(f'{r.id} ({r.name}): 로봇 API 안 됨 — {link.err}', 'violation')
+            if prev != r.fault['code']:
+                self.log(f'{r.id} ({r.name}): 로봇 API 안 됨 — {link.err}', 'violation')
             return
         want = next((row.get('serial') for row in ROBOT_TABLE if row.get('name') == r.name), None)
         got = ((link.st or {}).get('robot') or {}).get('serial')
         if want and got and want != got:          # IP 가 바뀌어 다른 로봇에 붙음
             r.fault = dict(code='wrong_robot', why=f'{link.url} 는 시리얼 {got} (표: {want})', t=self.t, node=r.node, edge=None)
-            self.log(f'{r.id} ({r.name}): {link.url} 는 다른 로봇 (시리얼 {got}) — robots.yaml url 확인', 'violation')
+            if prev != r.fault['code']:
+                self.log(f'{r.id} ({r.name}): {link.url} 는 다른 로봇 (시리얼 {got}) — robots.yaml url 확인', 'violation')
             return
+        if link.st.get('pose_confirmed') is False:   # 재부팅·Nav2 재시작 뒤 /set_pose 안 함 → 초기 위치(A)를 믿으면 안 됨 (10-30)
+            r.fault = dict(code='not_localized', why='로봇 위치 확인 안 됨 — 노드에 놓고 로봇 /set_pose', t=self.t, node=r.node, edge=None)
+            if prev != r.fault['code']:
+                self.log(f'{r.id} ({r.name}): 위치 확인 안 됨 — 노드에 놓고 /set_pose 하면 자동으로 붙음', 'warn')
+            return
+        r.boot = (link.st.get('robot') or {}).get('boot_id')
         d, pose = link.drive_status(), link.pose()
         node = d and d.get('node')
         if node == PHARMACY_DOCK:
             node, r.at_dock = PHARMACY, True
         if node not in self.g.nodes:
             r.fault = dict(code='not_at_node', why=f'로봇이 노드 위에 있지 않음 (pose {pose})', t=self.t, node=None, edge=None)
-            self.log(f'{r.id} ({r.name}): 노드 위에 있지 않음 {pose} — 노드에 올리고 다시 시작', 'violation')
+            if prev != r.fault['code']:
+                self.log(f'{r.id} ({r.name}): 노드 위에 있지 않음 {pose} — 노드에 올리고 다시 시작', 'violation')
             return
         r.node, r.pos = node, self.g.xy(node)
         if pose:
@@ -1452,10 +1497,10 @@ class FMS:
         if b and b.status != 'completed' and all(o.state == 'delivered' for o in b.orders):
             b.status, b.status_t = 'completed', self.t
             self.emit('batch_completed', batch_id=b.bid, robot=r.num)
-        r.battery -= p.battery_per_room
-        if r.load < 0 or r.battery < 0:
-            self.log(f'{r.id}: 적재 {r.load} / 배터리 {r.battery} 음수', 'violation')
-        self.log(f'{r.id}: {s["room"]} 배송 완료 {[f"#{o.id}" for o in done]} → 관제 PC (배터리 {r.battery})')
+        r.fatigue -= p.fatigue_per_room
+        if r.load < 0 or r.fatigue < 0:
+            self.log(f'{r.id}: 적재 {r.load} / 피로도 {r.fatigue} 음수', 'violation')
+        self.log(f'{r.id}: {s["room"]} 배송 완료 {[f"#{o.id}" for o in done]} → 관제 PC (피로도 {r.fatigue})')
         r.step = dict(kind='pause', dur=self.rng.uniform(*p.pause_s))   # 한 바퀴 뒤 1~5초 쉬고 다음 일
         r.timer = 0.0
 
@@ -1466,8 +1511,8 @@ class FMS:
         r.dest_zones, r.extra_nodes = set(), set()
         r.wait_s, r.wait_why, r.blocked_by = 0.0, '', set()
         r.depart, r.plan_wait = None, False
-        if to == PHARMACY and r.battery <= self.p.pharmacy_min_battery:
-            self.log(f'{r.id}: 배터리 {r.battery} 로 약제실 도착', 'violation')
+        if to == PHARMACY and r.fatigue <= self.p.pharmacy_min_fatigue:
+            self.log(f'{r.id}: 피로도 {r.fatigue} 로 약제실 도착', 'violation')
         self.emit('robot_arrived', robot=r.num, node=to, room=room_or_none(to))
         if to in ROOM_CONTAM and r.step.get('visit'):
             if to == SURGERY and r.contam > 0:
@@ -1514,6 +1559,17 @@ class FMS:
         for r in self.robots:
             self.tick_robot(r, dt)
         self.check_bodies()
+        self.send_peers()
+
+    PEERS_S = 0.3
+    def send_peers(self):
+        """실제 로봇마다 다른 실제 로봇의 지금 위치(로봇이 보고한 pose)를 보낸다 → 로봇이 AMCL 스캔에서 지움 (10-29)"""
+        if self.t < getattr(self, '_next_peers', 0.0):
+            return
+        self._next_peers = self.t + self.PEERS_S
+        real = [(o, o.link.pose()) for o in self.robots if o.link and o.link.alive()]
+        for r, _ in real:
+            r.link.set_peers([(p['x'], p['y']) for o, p in real if o is not r and p])
 
     # ---- 화면용 ----
     def snapshot(self):
@@ -1521,7 +1577,7 @@ class FMS:
         for r in self.robots:
             n, e, z = r.holds()
             rs.append(dict(id=r.id, color=r.color, x=round(r.pos[0], 2), y=round(r.pos[1], 2), node=r.node,
-                           state=r.state_name(), task=r.task, battery=r.battery, contam=r.contam, load=r.load,
+                           state=r.state_name(), task=r.task, fatigue=r.fatigue, contam=r.contam, load=r.load,
                            orders=[o.id for o in r.assigned],
                            step=None if r.step is None else {k: v for k, v in r.step.items() if k in ('kind', 'to', 'room')},
                            queue=[{k: v for k, v in s.items() if k in ('kind', 'to', 'room')} for s in r.queue],
