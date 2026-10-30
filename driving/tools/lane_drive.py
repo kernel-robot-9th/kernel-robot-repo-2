@@ -87,7 +87,8 @@ class Driver:
         return 'ok' if abs(wrap(tgt - self.pose()[2])) < math.radians(3) else 'rotate_err'
 
     # ---------- 테이프 따라가기 ----------
-    def follow(self, heading_deg, target_cm, ref='axle'):
+    def follow(self, heading_deg, target_cm, ref='axle', through=False):
+        """through: 노드에서 감속·정지 없이 그대로 (다음 엣지도 같은 방향 테이프, 10-30 사용자)"""
         hd = math.radians(heading_deg)
         ux, uy = round(math.cos(hd)), round(math.sin(hd))   # 복도 축 방향만 (0/90/180/270)
         x0, y0, _ = self.pose()
@@ -102,6 +103,8 @@ class Driver:
 
         r0 = remain()
         if r0 <= 0:
+            if not through:
+                self.stop()   # 앞 엣지에서 서지 않고 넘어왔으면 여기서 세움
             return 'already_past'
         last_t, y_prev, dy, lost_since = 0.0, None, 0.0, None
         deadline = time.time() + r0 / SPEED * 2.5 + 5
@@ -136,9 +139,10 @@ class Driver:
                 k = min(1.0, dt / (DY_TAU + dt))
                 dy += k * ((yt - y_prev) / max(dt, 0.02) - dy)
             y_prev = yt
-            v = SPEED if r > 0.05 else max(0.015, SPEED * r / 0.05)
+            v = SPEED if (through or r > 0.05) else max(0.015, SPEED * r / 0.05)
             self.n.cmd(v, max(-WMAX, min(WMAX, KP * yt + KD * dy * (v / SPEED))))
-        self.stop()
+        if not (through and status == 'ok'):
+            self.stop()
         return status
 
     # ---------- 차선 바꾸기 (테이프 없음) ----------
