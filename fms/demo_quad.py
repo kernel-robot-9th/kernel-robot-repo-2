@@ -10,6 +10,7 @@ Ctrl+C 로 서버 4개를 모두 끈다. 다시 찍으려면 다시 실행.
 import argparse
 import json
 import os
+import signal
 import subprocess
 import sys
 import time
@@ -33,6 +34,7 @@ def main():
     ap.add_argument('--speed', type=float, default=8.0, help='배속 (넷 모두 같음). 8 이면 ④ 약 60초, ① 세척실→수술실 약 70~80초')
     ap.add_argument('--no-wait', action='store_true', help='Enter 기다리지 않고 바로 시작')
     a = ap.parse_args()
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))      # kill 로 꺼도 아래 finally 가 서버 4개를 끔
     procs = [subprocess.Popen([sys.executable, '-u', os.path.join(HERE, 'sim_server.py'), '--port', str(port),
                                '--profile', prof, '--robots', str(n)], cwd=HERE,
                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) for port, prof, n in PANELS]

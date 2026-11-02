@@ -1756,6 +1756,7 @@ class FMS:
         for r in self.robots:
             n, e, z = r.holds()
             rs.append(dict(id=r.id, color=r.color, x=round(r.pos[0], 2), y=round(r.pos[1], 2), node=r.node,
+                           heading=round(r.heading or 0.0, 1),
                            state=r.state_name(), task=r.task, fatigue=r.fatigue, contam=r.contam, load=r.load,
                            orders=[o.id for o in r.assigned],
                            step=None if r.step is None else {k: v for k, v in r.step.items() if k in ('kind', 'to', 'room')},

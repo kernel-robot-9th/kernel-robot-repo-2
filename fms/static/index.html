@@ -64,16 +64,44 @@ th { color: var(--quiet); font-weight: 600; border-top: 0; }
 body.bare header, body.bare .side, body.bare .legend { display: none; }
 body.bare main { display: block; padding: 0; }
 body.bare #mapwrap { border: 0; border-radius: 0; padding: 0; background: var(--bg); height: 100vh; display: flex; align-items: center; justify-content: center; }
-body.bare canvas { width: auto; height: 100vh; max-width: 100vw; }
-#ov { position: fixed; left: 12px; top: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px; box-shadow: 0 2px 8px rgba(0,0,0,.12); }
-#ov .tt { font-size: clamp(14px, 2.6vh, 26px); font-weight: 700; }
-#ov .st { font-size: clamp(13px, 2.3vh, 22px); font-variant-numeric: tabular-nums; color: var(--quiet); margin-top: 2px; }
-#ov .st b { color: var(--ink); }
+body.bare canvas { width: auto; height: 100vh; max-width: 64vw; flex: none; }
+/* 발표 화면 (기본, 11-02): 밝은 색 고정 · 지도 + 로봇 상태만. 예전 개발자 화면 = ?dev=1 */
+body.show { --bg: #eef0ec; --panel: #ffffff; --ink: #1b2230; --quiet: #5d6472; --line: #dcdfd8;
+            --wall: #252a33; --accent: #2e6fd8; --warn: #d08a00; --bad: #d23a2c; --good: #23935a; }
+body.show .dev, body:not(.show) .showonly { display: none !important; }
+body.show header h1 { font-size: 18px; }
+body.show main { grid-template-columns: minmax(0, 1fr) 360px; }
+body.show #mapwrap { padding: 8px; }
+body.show:not(.bare) canvas { width: auto; height: auto; max-width: 100%; max-height: calc(100vh - 128px); margin: 0 auto; }
+.rc { padding: 12px 0 14px; border-top: 1px solid var(--line); }
+.rc:first-of-type { border-top: 0; padding-top: 2px; }
+.rc .top { display: flex; align-items: center; gap: 10px; }
+.rc .chip { width: 22px; height: 16px; border-radius: 4px; background: var(--c); flex: none; }
+.rc .top b { font-size: 18px; }
+.rc .top .state { font-size: 14px; margin-left: auto; }
+.rc .top .state.wt { background: var(--c); color: #fff; font-weight: 700; padding: 2px 10px; border-radius: 999px; }
+.rc .dest { margin: 6px 0 8px; font-size: 15px; color: var(--quiet); }
+.rc .dest b { color: var(--c); font-size: 17px; }
+.rc .m { display: grid; grid-template-columns: 52px 1fr 40px; gap: 8px; align-items: center; font-size: 13px; color: var(--quiet); margin-top: 6px; }
+.rc .m .bar { height: 12px; border-radius: 6px; }
+.rc .m b { color: var(--ink); text-align: right; font-size: 15px; font-variant-numeric: tabular-nums; }
+.rc .boxes { display: flex; gap: 5px; }
+.rc .boxes i { width: 22px; height: 16px; border-radius: 3px; border: 2px solid var(--c); }
+.rc .boxes i.on { background: var(--c); }
+body.show .stats b { font-size: 22px; }
+/* 4분할 칸: 지도 왼쪽 빈자리 = 번호·제목, 오른쪽 빈자리 = 경과·완료 (지도를 안 가림) */
+.ovl, .ovr { flex: 1; min-width: 0; align-self: stretch; display: flex; flex-direction: column; justify-content: center; padding: 0 2.5vw; }
+.ovl .no { width: 2em; height: 2em; border-radius: 50%; background: var(--ink); color: var(--panel); display: grid; place-items: center;
+           font-size: clamp(16px, 7vh, 52px); font-weight: 800; }
+.ovl .tt { font-size: clamp(14px, 6vh, 44px); font-weight: 800; line-height: 1.25; margin-top: .5em; word-break: keep-all; }
+.ovr { align-items: flex-end; text-align: right; gap: 3vh; }
+.ovr span { display: block; font-size: clamp(12px, 4vh, 28px); color: var(--quiet); }
+.ovr b { display: block; font-size: clamp(18px, 9vh, 68px); font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.1; }
 </style>
 </head>
 <body>
 <header>
-  <h1>FMS 시뮬레이터</h1>
+  <h1><span class="dev">FMS 시뮬레이터</span><span class="showonly">병원 물품 배송 · 다중 로봇 관제 (FMS)</span></h1>
   <span class="t" id="clock">0:00</span>
   <div class="ctl">
     <button id="pause">일시정지</button>
@@ -81,16 +109,17 @@ body.bare canvas { width: auto; height: 100vh; max-width: 100vw; }
     <label>자동 주문 <select id="auto"><option value="0">끔</option><option value="1">분당 1</option><option value="1.5">분당 1.5</option><option value="2">분당 2</option><option value="3">분당 3</option></select></label>
   </div>
   <div class="ctl" style="margin-left:auto">
-    <label title="켜면 OMX 준비·적재 완료를 시뮬레이터가 스스로 보냄. 끄면 아래 '묶음' 버튼이나 관제 PC 가 /api/v1/batches/…/ready·loaded 를 보내야 함"><input type="checkbox" id="autoomx" checked> 가상 OMX</label>
-    <label>로봇 <select id="nrob"><option>1</option><option>2</option><option selected>3</option></select></label>
-    <label>경로 <select id="planner"><option value="cbs">A* + CBS</option><option value="reserve">최단 경로 + 예약</option></select></label>
+    <label class="dev" title="켜면 OMX 준비·적재 완료를 시뮬레이터가 스스로 보냄. 끄면 아래 '묶음' 버튼이나 관제 PC 가 /api/v1/batches/…/ready·loaded 를 보내야 함"><input type="checkbox" id="autoomx" checked> 가상 OMX</label>
+    <label class="dev">로봇 <select id="nrob"><option>1</option><option>2</option><option selected>3</option></select></label>
+    <label class="dev">경로 <select id="planner"><option value="cbs">A* + CBS</option><option value="reserve">최단 경로 + 예약</option></select></label>
     <button id="reset">다시 시작</button>
+    <a class="showonly" href="?dev=1">개발자 화면</a><a class="dev" href="./">발표 화면</a>
   </div>
 </header>
 <main>
   <section class="card" id="mapwrap">
     <canvas id="map" width="1050" height="1000"></canvas>
-    <div class="legend">
+    <div class="legend dev">
       <span><i style="background:#e0a33a"></i>차선 (교행통로)</span>
       <span><i style="background:#c46bd6"></i>차선 ↔ 문</span>
       <span><i style="background:#e05252"></i>협로 (벽 따라가기)</span>
@@ -99,22 +128,23 @@ body.bare canvas { width: auto; height: 100vh; max-width: 100vw; }
     </div>
   </section>
   <div class="side">
-    <section class="card">
+    <section class="card showonly" id="robots2"></section>
+    <section class="card dev">
       <h2>주문 넣기 (관제 PC → FMS)</h2>
       <div class="rooms" id="rooms"></div>
     </section>
     <section class="card">
       <h2>통계</h2>
       <div class="stats" id="stats"></div>
-      <div class="next" id="plan" style="margin-top:8px"></div>
+      <div class="next dev" id="plan" style="margin-top:8px"></div>
     </section>
-    <section class="card" id="batches"><h2>묶음 (관제 PC 신호)</h2></section>
-    <section class="card" id="robots"><h2>로봇</h2></section>
-    <section class="card">
+    <section class="card dev" id="batches"><h2>묶음 (관제 PC 신호)</h2></section>
+    <section class="card dev" id="robots"><h2>로봇</h2></section>
+    <section class="card dev">
       <h2>주문</h2>
       <table><thead><tr><th>#</th><th>병실</th><th>상태</th><th>로봇</th><th>걸린 시간</th></tr></thead><tbody id="orders"></tbody></table>
     </section>
-    <section class="card">
+    <section class="card dev">
       <h2>기록</h2>
       <div class="log" id="log"></div>
     </section>
@@ -141,26 +171,136 @@ function renderBatches() {
 }
 const MODE_COL = {line:'#e0a33a', transfer:'#c46bd6', wall:'#e05252', nav:'#4caf6a'};
 let MAP = null, S = null;
-const Q = new URLSearchParams(location.search), BARE = Q.has('bare');
+const Q = new URLSearchParams(location.search), BARE = Q.has('bare'), SHOW = !Q.has('dev');
+if (SHOW) document.body.classList.add('show');
 if (BARE) {
   document.body.classList.add('bare');
-  const ov = document.createElement('div');
-  ov.id = 'ov';
-  ov.innerHTML = '<div class="tt"></div><div class="st"></div>';
-  ov.querySelector('.tt').textContent = Q.get('title') || '';
-  document.body.appendChild(ov);
+  const l = document.createElement('div'), r = document.createElement('div');   // ?bare=1&n=1&title=로봇 1대
+  l.className = 'ovl'; r.className = 'ovr';
+  l.innerHTML = (Q.get('n') ? '<div class="no"></div>' : '') + '<div class="tt"></div>';
+  if (Q.get('n')) l.querySelector('.no').textContent = Q.get('n');
+  l.querySelector('.tt').textContent = Q.get('title') || '';
+  r.innerHTML = '<div><span>경과</span><b class="el">0:00</b></div><div><span>완료</span><b class="dn">0/0</b></div>';
+  $('map').before(l); $('map').after(r);
 }
 function overlay() {               // 경과 = 첫 주문부터 (다 끝나면 마지막 완료 시각에서 멈춤), 완료 = 배송 끝난 주문 수
   const os = S.orders || [];
   const t0 = os.length ? Math.min(...os.map(o => o.created)) : S.t;
   const done = os.filter(o => o.state === 'delivered');
   const t1 = os.length && done.length === os.length ? Math.max(...done.map(o => o.done)) : S.t;
-  document.querySelector('#ov .st').innerHTML = `경과 <b>${fmt(Math.max(0, t1 - t0))}</b> · 완료 <b>${done.length}/${os.length}</b>`;
+  document.querySelector('.ovr .el').textContent = fmt(Math.max(0, t1 - t0));
+  document.querySelector('.ovr .dn').textContent = `${done.length}/${os.length}`;
 }
 const cv = $('map'), cx = cv.getContext('2d');
 const PAD = 26, SC = 4.6;                 // cm → px
 const P = (x, y) => [PAD + x * SC, PAD + (200 - y) * SC];
-const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const css = v => getComputedStyle(document.body).getPropertyValue(v).trim();
+// 발표 화면 배경: 병원 배치 그림을 흐리게 (한 번만 그려 둠)
+let BG = null;
+const bgImg = new Image();
+bgImg.onload = () => {
+  const c = document.createElement('canvas'), w = Math.round(210 * SC), h = Math.round(200 * SC);
+  c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  g.filter = 'blur(2.5px)'; g.drawImage(bgImg, 0, 0, w, h);
+  BG = c;
+};
+if (SHOW) bgImg.src = '/hospital.png';
+const WAITING = ['waiting', 'planned', 'reserved'];   // 대기 노드에서 기다리는 상태 (길 막힘·차례·출발 시각·OMX 준비)
+const LABEL = n => ROOM_LABEL[n] || PLACE[n] || '';
+function dest(r) {                  // 지금 가는 곳 (작업 중이면 다음에 갈 곳)
+  if (r.step && r.step.kind === 'move') return r.step.to;
+  const m = r.queue.find(q => q.kind === 'move');
+  return m ? m.to : null;
+}
+const ANG = {};                     // 화면에서 부드럽게 도는 방향
+function turn(r) {
+  const t = r.heading || 0, a = ANG[r.id] ?? t;
+  const d = ((t - a + 540) % 360) - 180;
+  return ANG[r.id] = Math.abs(d) < 1 ? t : a + d * 0.15;
+}
+function halo(text, X, Y, font, col) {
+  cx.font = font; cx.textAlign = 'center'; cx.textBaseline = 'middle';
+  cx.lineWidth = 4; cx.strokeStyle = 'rgba(255,255,255,.9)'; cx.strokeText(text, X, Y);
+  cx.fillStyle = col; cx.fillText(text, X, Y); cx.textBaseline = 'alphabetic';
+}
+function drawShow() {
+  const N = MAP.nodes;
+  cx.fillStyle = css('--panel'); cx.fillRect(0, 0, cv.width, cv.height);
+  if (BG) { cx.globalAlpha = 0.5; cx.drawImage(BG, ...P(0, 200)); cx.globalAlpha = 1; }
+  cx.lineCap = 'round'; cx.lineJoin = 'round';
+  cx.strokeStyle = css('--wall'); cx.lineWidth = 4;
+  for (const pl of MAP.walls_show || MAP.walls) { cx.beginPath(); pl.forEach((p, i) => { const [X, Y] = P(p[0], p[1]); i ? cx.lineTo(X, Y) : cx.moveTo(X, Y); }); cx.stroke(); }
+  for (const [w, col, al] of [[17, '#ffffff', 0.8], [10, '#9aa0a8', 0.9]])     // 주행 그래프: 흰 테두리 + 굵은 회색 (구간 종류는 안 나눔)
+    for (const e of MAP.edges) {
+      const [x0, y0] = P(...N[e.a].xy), [x1, y1] = P(...N[e.b].xy);
+      cx.strokeStyle = col; cx.globalAlpha = al; cx.lineWidth = w;
+      cx.beginPath(); cx.moveTo(x0, y0); cx.lineTo(x1, y1); cx.stroke();
+    }
+  cx.globalAlpha = 1;
+  for (const k of MAP.parking) { const [X, Y] = P(...N[k].xy); cx.strokeStyle = css('--quiet'); cx.lineWidth = 1.5; cx.setLineDash([3, 3]); cx.strokeRect(X - 8, Y - 8, 16, 16); cx.setLineDash([]); }
+  for (const [k, n] of Object.entries(N)) {
+    if (n.type !== 'stop') continue;
+    const [X, Y] = P(...n.xy);
+    cx.fillStyle = css('--ink'); cx.beginPath(); cx.arc(X, Y, 4, 0, 7); cx.fill();
+    if (LABEL(k)) halo(LABEL(k), X, Y + (n.xy[1] > 170 ? -14 : 17), '700 18px system-ui, sans-serif', css('--ink'));
+  }
+  if (!S) return;
+  const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 260);
+  for (const r of S.robots) {           // 갈 길 = 회색 길을 로봇 색으로 칠함 (지금 자리부터) + 목적지 ◎
+    if (r.path.length > 1) {
+      cx.strokeStyle = r.color; cx.lineWidth = 10; cx.globalAlpha = 0.85;
+      cx.beginPath(); cx.moveTo(...P(r.x, r.y));
+      r.path.slice(1).forEach(n => cx.lineTo(...P(...N[n].xy))); cx.stroke();
+      cx.globalAlpha = 1;
+    }
+    const d = dest(r);
+    if (d && N[d]) {
+      const [X, Y] = P(...N[d].xy);
+      cx.fillStyle = r.color; cx.globalAlpha = 0.18 + 0.12 * pulse; cx.beginPath(); cx.arc(X, Y, 20 + 4 * pulse, 0, 7); cx.fill();
+      cx.globalAlpha = 1; cx.strokeStyle = r.color; cx.lineWidth = 3.5;
+      cx.beginPath(); cx.arc(X, Y, 14, 0, 7); cx.stroke();
+      cx.beginPath(); cx.arc(X, Y, 6, 0, 7); cx.fillStyle = r.color; cx.fill();
+    }
+  }
+  for (const r of S.robots) {           // 로봇: 직사각형, 짐 0·1·2·3개마다 크기가 다르고 안에 상자 칸 수만큼, 앞쪽 = 흰 삼각형
+    const [X, Y] = P(r.x, r.y), n = Math.min(3, r.load), big = n > 0;
+    const L = [11, 14, 17, 20][n] * SC, W = [9, 11, 13, 15][n] * SC;
+    const waiting = WAITING.includes(r.state);
+    cx.save(); cx.translate(X, Y); cx.rotate(-turn(r) * Math.PI / 180);
+    cx.shadowColor = 'rgba(0,0,0,.35)'; cx.shadowBlur = 6 + 3 * n; cx.shadowOffsetY = 2;
+    cx.fillStyle = r.color; cx.beginPath(); cx.roundRect(-L / 2, -W / 2, L, W, 5); cx.fill();
+    cx.shadowColor = 'transparent';
+    const F = 16;                       // 앞쪽 삼각형 자리
+    if (big) {                          // 상자 칸: 뒤에서부터 n 개
+      const x0 = -L / 2 + 5, cw = (L - 10 - F) / n;
+      cx.fillStyle = 'rgba(255,255,255,.92)';
+      for (let i = 0; i < n; i++) { cx.beginPath(); cx.roundRect(x0 + i * cw + 1.5, -W / 2 + 5, cw - 3, W - 10, 3); cx.fill(); }
+    }
+    cx.fillStyle = '#fff'; cx.beginPath();
+    cx.moveTo(L / 2 - 2, 0); cx.lineTo(L / 2 - 12, -7); cx.lineTo(L / 2 - 12, 7); cx.closePath(); cx.fill();
+    cx.restore();
+    if (waiting) {                      // 기다림: 도는 점선 고리 + "대기" 표
+      const R = Math.hypot(L, W) / 2 + 9;
+      cx.strokeStyle = r.color; cx.lineWidth = 3.5; cx.setLineDash([8, 6]);
+      cx.lineDashOffset = -performance.now() / 40;
+      cx.beginPath(); cx.arc(X, Y, R, 0, 7); cx.stroke(); cx.setLineDash([]); cx.lineDashOffset = 0;
+    }
+    if (r.state === 'spinning' || r.state === 'docking' || r.state === 'loading' || r.state === 'decon' || r.state === 'charging') {
+      cx.strokeStyle = r.color; cx.lineWidth = 3;
+      const a = (performance.now() / 300) % (2 * Math.PI);
+      cx.beginPath(); cx.arc(X, Y, Math.hypot(L, W) / 2 + 6, a, a + 1.6); cx.stroke();
+    }
+    const ty = Y - Math.max(L, W) / 2 - (waiting ? 22 : 14);
+    halo(r.id + (big ? ' · 짐 ' + r.load : ''), X, ty, '800 17px system-ui, sans-serif', r.color);
+    if (waiting) {
+      const t = '⏸ 대기', w = 70, h = 24, by = ty - 26;
+      cx.fillStyle = r.color; cx.beginPath(); cx.roundRect(X - w / 2, by - h / 2, w, h, 12); cx.fill();
+      cx.font = '800 15px system-ui, sans-serif'; cx.fillStyle = '#fff'; cx.textAlign = 'center'; cx.textBaseline = 'middle';
+      cx.fillText(t, X, by + 1); cx.textBaseline = 'alphabetic';
+    }
+  }
+}
 
 async function post(url, body) { await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)}); }
 
@@ -171,6 +311,7 @@ function draw() {
   if (!MAP) return;
   cv.width = Math.round((210 * SC + PAD * 2)); cv.height = Math.round(200 * SC + PAD * 2);
   cx.clearRect(0, 0, cv.width, cv.height);
+  if (SHOW) return drawShow();
   // 벽
   cx.lineCap = 'round'; cx.lineJoin = 'round';
   cx.strokeStyle = css('--wall'); cx.lineWidth = 2.5;
@@ -255,8 +396,24 @@ function realInfo(r) {
 }
 function bar(v, col) { return `<div class="bar"><i style="width:${Math.max(0, Math.min(100, v))}%;background:${col}"></i></div>`; }
 
+function renderShow() {
+  $('robots2').innerHTML = '<h2>로봇 상태</h2>' + S.robots.map(r => {
+    const d = dest(r), to = d ? (LABEL(d) || ((MAP.pharmacy_queue || []).includes(d) ? '약제실 앞 대기' : MAP.parking.includes(d) ? '주차 자리' : d)) : '';
+    return `<div class="rc" style="--c:${r.color}">
+      <div class="top"><span class="chip"></span><b>${r.id}</b><span class="state${WAITING.includes(r.state) ? ' wt' : ''}">${WAITING.includes(r.state) ? '⏸ ' : ''}${STATE[r.state] || r.state}${r.task ? ' · ' + TASK[r.task] : ''}</span></div>
+      <div class="dest">${to ? `목적지 <b>${esc(to)}</b>` : '목적지 없음'}</div>
+      <div class="m"><span>피로도</span>${bar(r.fatigue, r.fatigue <= 20 ? css('--bad') : css('--good'))}<b>${r.fatigue}</b></div>
+      <div class="m"><span>오염도</span>${bar(r.contam, r.contam >= 100 ? css('--bad') : css('--warn'))}<b>${r.contam}</b></div>
+      <div class="m"><span>적재</span><div class="boxes">${[0, 1, 2].map(i => `<i class="${i < r.load ? 'on' : ''}"></i>`).join('')}</div><b>${r.load}/3</b></div>
+      ${r.wait ? `<div class="wait">기다림 · ${esc(r.wait.replace(/PHARMACY/g, '약제실'))}</div>` : ''}
+      ${realInfo(r)}
+    </div>`;
+  }).join('');
+}
+
 function render() {
   if (!S) return;
+  if (SHOW) renderShow();
   $('clock').textContent = fmt(S.t);
   $('pause').textContent = S.paused ? '계속' : '일시정지';
   $('pause').classList.toggle('on', S.paused);

@@ -19,7 +19,7 @@ from urllib.parse import parse_qs, urlparse
 import yaml
 
 import openapi_v1
-from fms_core import FMS, PHARMACY, PROFILES, ROOM_CONTAM, ROOM_INFO, Conflict, Params, apply_profile, parse_request, room_code
+from fms_core import FMS, PHARMACY, PHARMACY_QUEUE, PROFILES, ROOM_CONTAM, ROOM_INFO, Conflict, Params, apply_profile, parse_request, room_code
 
 KST = datetime.timezone(datetime.timedelta(hours=9))
 
@@ -267,6 +267,8 @@ class H(BaseHTTPRequestHandler):
             return self.send(200, open(os.path.join(HERE, 'static/index.html'), 'rb').read(), 'text/html')
         if u.path == '/quad.html':                    # 발표 영상: 4개 시뮬레이터를 2×2 로 (demo_quad.py)
             return self.send(200, open(os.path.join(HERE, 'static/quad.html'), 'rb').read(), 'text/html')
+        if u.path == '/hospital.png':                 # 발표 화면 배경 (tools/layout_diagram.png 의 아레나 부분)
+            return self.send(200, open(os.path.join(HERE, 'static/hospital.png'), 'rb').read(), 'image/png')
         if self.path == '/api/map':
             return self.send(200, MAP)
         if self.path == '/api/state':
@@ -350,12 +352,13 @@ def main():
     g = SIM.f.g
     segs, ghost = load_walls()
     MAP = dict(walls=segs, invisible=ghost, size=[210, 200],
+               walls_show=segs[:-1] + [[[0, -1], [0, 200]]],     # 발표 화면: 기울어진 왼쪽 외벽(실측) 대신 반듯한 x=0
                nodes={k: dict(xy=n['xy'], type=n['type'], name=n.get('name')) for k, n in g.nodes.items()},
                edges=[dict(a=e['a'], b=e['b'], mode=e['mode'], zone=e['zone'])
                       for (a, b), e in g.edge.items() if (a, b) == (e['a'], e['b'])],
                rooms={k: v for k, v in ROOM_CONTAM.items()}, room_names={k: v['name'] for k, v in ROOM_INFO.items()},
                room_codes={**{k: room_code(k) for k in ROOM_INFO}, PHARMACY: '약제실'},
-               parking=SIM.f.parking)
+               parking=SIM.f.parking, pharmacy_queue=PHARMACY_QUEUE)
     srv = ThreadingHTTPServer((a.host, a.port), H)
     print(f'FMS 시뮬레이터: http://{a.host}:{a.port}  (API v1 Swagger: /docs, 관제 PC 로 보내기: {SIM.push.url or "끔"}, '
           f'가상 OMX {"켬" if SIM.f.p.auto_omx else "끔"}, 실제 로봇 {list(links) or "없음"})')
