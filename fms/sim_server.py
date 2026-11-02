@@ -69,7 +69,7 @@ class Sim:
     def reset(self, n, auto=0.0, planner='cbs', auto_omx=None):
         with self.lock:
             old = self.f
-            self.f = FMS(n_robots=n, params=Params(planner=planner), links=self.links)
+            self.f = FMS(n_robots=n, params=Params(planner=planner, plan_async='thread'), links=self.links)   # 계산 중에도 틱이 돎
             if self.links:
                 self.speed = 1.0                           # 실제 로봇이 있으면 실시간만
             self.f.auto_rate = auto
