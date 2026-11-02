@@ -138,6 +138,7 @@ class Params:
         self.dispatch_s = 0.5
         self.planner = 'cbs'       # cbs = 시공간 A* + CBS 로 시간까지 계획 / reserve = 최단 경로 + 구간 예약만
         self.plan_step = 1.0       # CBS 시간 칸 (초)
+        self.node_stop_s = 0.0     # 비교용: 직선 이어 달리기가 없던 때처럼 지나는 노드마다 서는 시간 s (로봇 코드 시뮬레이션: ≈1.5 s)
         self.plan_async = 'sync'   # sync | thread (서버: 계산 중에도 틱이 돎) | emulate (헤드리스: 계산 시간만큼 늦게 적용)
         for k, v in kw.items():
             setattr(self, k, v)
@@ -347,6 +348,7 @@ class Robot:
         self.num, self.name = None, rid        # 관제 PC 로봇 번호, 이름 (robots.yaml)
         self.heading = 0.0          # deg, 마지막으로 달린 엣지 방향 (경로 계획의 회전 비용 시작 방향)
         self.turn_left = None       # CBS 시각 없이 갈 때: 다음 엣지 방향으로 남은 회전 시간 s
+        self.stop_left = None       # 직선 이어 달리기가 없을 때 지나는 노드에서 서는 남은 시간 s (Params.node_stop_s)
         self.batch = None
         # 실제 로봇 (robot_link.HttpLink). None = 시뮬레이션
         self.link = None
@@ -396,6 +398,32 @@ class Robot:
 
 
 # ----------------------------------------------------------------------------------------------------------
+PROFILES = {
+    'naive': '① FMS 없음 — 로봇 1대, 들어온 순서대로 1건씩, 수술실 전 세척실(POCKET)',
+    'v2': '② 처음 CBS — 주차 없음, 직선 이어 달리기 없음',
+    'v3': '③ 주차 9곳 + 직선 이어 달리기',
+    'v4': '④ CBS 고도화 + 약제실 앞 대기열 (지금)',
+}
+
+
+def apply_profile(f, name):
+    """발표 영상 비교용 (11-02): 같은 코드에서 기능을 꺼서 예전 단계를 흉내. v4 = 지금 그대로"""
+    if name not in PROFILES:
+        raise ValueError(f'profile: {list(PROFILES)}')
+    if name in ('naive', 'v2', 'v3'):          # 예전 CBS: 그 자리에서 계산, 창·주기 재계획·협로 추론·ECBS 없음, 대기열 없음
+        f.PLAN_WINDOW_S, f.REPLAN_EVERY_S = None, float('inf')
+        f.p.plan_async = 'sync'
+        f.planner.corridor, f.planner.w, f.planner.cbs_expand = False, None, 15000
+        f.use_queue = False
+    if name in ('naive', 'v2'):                # 주차 없음, 직선 이어 달리기 없음
+        f.parking = []
+        f.p.node_stop_s = 1.5
+        f.planner.node_stop = 2               # 계획도 그만큼 (1초 칸, 올림)
+    if name == 'naive':                        # 묶음 없이 1건씩, 오염돼 있으면 수술실 전에 POCKET
+        f.naive = True
+        f.p.cap = 1
+
+
 class FMS:
     def __init__(self, n_robots=3, params=None, seed=None, graph=None, links=None):
         self.p = params or Params()
@@ -422,6 +450,9 @@ class FMS:
         self.plan_stats = dict(replans=0, cbs=0, ecbs=0, prioritized=0, failed=0, last=None)
         self.last_plans = {}
         self._plan_job, self._replan_again, self._last_replan = None, None, 0.0
+        self.parking = list(PARKING)            # 주차 자리 (빈 목록 = 주차 안 함, 일 마친 자리에 서 있음)
+        self.use_queue = True                   # 약제실 앞 대기열
+        self.naive = False                      # 비교용: 묶음 1건·수술실 전 POCKET 들르기 (apply_profile 'naive')
         for r in self.robots:                   # 실제 로봇: 시작 노드 = 로봇이 보고한 노드
             if links and r.name in links:
                 self.attach_real(r, links[r.name])
@@ -731,7 +762,7 @@ class FMS:
         taken = {r.step['to'] for r in self.robots if r.step and r.step['kind'] == 'move'} | \
                 {s['to'] for r in self.robots for s in r.queue if s['kind'] == 'move'}
         for r in self.robots:                               # 3) 남는 로봇은 주차 자리로
-            if r.idle and r.node not in PARKING:
+            if r.idle and r.node not in self.parking:
                 spot = self.free_parking(r, taken)
                 if spot:
                     taken.add(spot)
@@ -739,7 +770,7 @@ class FMS:
 
     def parking_partner(self, s):
         x, lane = self.g.xy(s)[0], self.g.nodes[s].get('lane')
-        return next((m for m in PARKING if m != s and self.g.xy(m)[0] == x
+        return next((m for m in self.parking if m != s and self.g.xy(m)[0] == x
                      and self.g.nodes[m].get('lane', ' ')[0] == lane[0]), None)
 
     def free_parking(self, r, taken, avoid=(), spots_from=None, key=None):
@@ -755,7 +786,7 @@ class FMS:
                     if st['kind'] == 'move':
                         going[st['to']] = o
         spots = []
-        for s in (spots_from or PARKING):
+        for s in (self.parking if spots_from is None else spots_from):
             if s in occ or s in taken or s in avoid or s in going or s in onpath:
                 continue
             m = self.parking_partner(s)
@@ -785,14 +816,14 @@ class FMS:
             cap, start = p.cap, PHARMACY
             prefix = [dict(kind='wait_ready'), dict(kind='move', to=PHARMACY), dict(kind='dock'), dict(kind='load')]
             bundle, here = [seed], seed.room
-            first = self.visit_steps(start, [seed.room], r.contam)
+            first = self.visit_steps(start, [seed.room], r.contam, pocket=self.naive)
             if first is None or not self.feasible(r, prefix + first, include_current=False):
                 continue
             rest = list(others)
             while len(bundle) < cap and rest:
                 rest.sort(key=lambda o: self.g.dist(here, o.room))
                 for o in rest:
-                    trial = self.visit_steps(start, [b.room for b in bundle] + [o.room], r.contam)
+                    trial = self.visit_steps(start, [b.room for b in bundle] + [o.room], r.contam, pocket=self.naive)
                     if trial is not None and self.feasible(r, prefix + trial, include_current=False):
                         bundle.append(o)
                         rest.remove(o)
@@ -800,7 +831,7 @@ class FMS:
                         break
                 else:
                     break
-            steps = prefix + self.visit_steps(start, [b.room for b in bundle], r.contam)
+            steps = prefix + self.visit_steps(start, [b.room for b in bundle], r.contam, pocket=self.naive)
             r.loaded_done = False
             rooms = [s['room'] for s in steps if s['kind'] == 'spin']
             b = Batch(r, bundle, rooms, self.t)
@@ -875,7 +906,7 @@ class FMS:
         nodes, _, zones, _ = self.other_holds(r)
 
         def hold(why, blockers):                # 약제실이면 지금 자리 말고 약제실 앞 대기 자리로 가서 기다림
-            if not (to == PHARMACY and self.go_queue(r)):
+            if not (to == PHARMACY and self.use_queue and self.go_queue(r)):
                 self.waiting(r, why, blockers)
             return False
         busy = [z for z in dz if z in zones]
@@ -1342,6 +1373,17 @@ class FMS:
                 if r.res_to <= r.k and not self.try_reserve(r):
                     break
                 a, b = r.path[r.k], r.path[r.k + 1]
+                if p.node_stop_s and r.edge_t == 0 and r.k > 0:   # 이어 달리기 없음: 같은 방향·방식으로 지나는 노드에서도 섬
+                    if r.stop_left is None:
+                        e0, e1 = self.g.edge.get((r.path[r.k - 1], a)), self.g.edge[(a, b)]
+                        straight = (e0 is not None and e0['mode'] == e1['mode'] and e1['mode'] in ('line', 'wall')
+                                    and round(self.g.heading(r.path[r.k - 1], a)) % 360 == round(self.g.heading(a, b)) % 360)
+                        r.stop_left = p.node_stop_s if straight else 0.0
+                    use = min(tt, r.stop_left)
+                    r.stop_left -= use
+                    tt -= use
+                    if r.stop_left > 1e-9:
+                        break
                 if r.edge_t == 0 and r.depart is None:  # CBS 시각이 없으면 엣지 방향으로 도는 시간을 직접
                     if r.turn_left is None:
                         r.turn_left = self.g.rot_s(r.heading, self.g.heading(a, b))
@@ -1360,7 +1402,7 @@ class FMS:
                 if r.edge_t >= L - 1e-9:
                     r.k += 1
                     r.edge_t = 0.0
-                    r.turn_left = None
+                    r.turn_left = r.stop_left = None
                     r.prev_node, r.since = a, 0.0
                     r.node = b
                     if r.k >= r.res_to:

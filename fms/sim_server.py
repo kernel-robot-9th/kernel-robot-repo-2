@@ -19,7 +19,7 @@ from urllib.parse import parse_qs, urlparse
 import yaml
 
 import openapi_v1
-from fms_core import FMS, PARKING, PHARMACY, ROOM_CONTAM, ROOM_INFO, Conflict, Params, parse_request, room_code
+from fms_core import FMS, PHARMACY, PROFILES, ROOM_CONTAM, ROOM_INFO, Conflict, Params, apply_profile, parse_request, room_code
 
 KST = datetime.timezone(datetime.timedelta(hours=9))
 
@@ -56,8 +56,9 @@ def load_walls():
 
 
 class Sim:
-    def __init__(self, control_url=None, links=None, n_robots=3):
+    def __init__(self, control_url=None, links=None, n_robots=3, profile=None):
         self.lock = threading.Lock()
+        self.profile = profile        # 발표 영상 비교용 (fms_core.PROFILES), None = 지금 그대로
         self.speed = 1.0
         self.paused = False
         self.f = None
@@ -72,6 +73,8 @@ class Sim:
             self.f = FMS(n_robots=n, params=Params(planner=planner, plan_async='thread'), links=self.links)   # 계산 중에도 틱이 돎
             if self.links:
                 self.speed = 1.0                           # 실제 로봇이 있으면 실시간만
+            if self.profile:
+                apply_profile(self.f, self.profile)
             self.f.auto_rate = auto
             self.f.clock = now_iso
             if old is not None:
@@ -260,8 +263,10 @@ class H(BaseHTTPRequestHandler):
             return self.send(200, openapi_v1.SPEC)
         if u.path == '/docs':
             return self.send(200, openapi_v1.SWAGGER_HTML.encode(), 'text/html')
-        if self.path in ('/', '/index.html'):
+        if u.path in ('/', '/index.html'):
             return self.send(200, open(os.path.join(HERE, 'static/index.html'), 'rb').read(), 'text/html')
+        if u.path == '/quad.html':                    # 발표 영상: 4개 시뮬레이터를 2×2 로 (demo_quad.py)
+            return self.send(200, open(os.path.join(HERE, 'static/quad.html'), 'rb').read(), 'text/html')
         if self.path == '/api/map':
             return self.send(200, MAP)
         if self.path == '/api/state':
@@ -330,6 +335,7 @@ def main():
                     help='실제 로봇 (robots.yaml 이름). 예: --real pinky_6364=http://192.168.129.68:8080 — 나머지 로봇은 가상')
     ap.add_argument('--real-table', action='store_true', help='robots.yaml 에 url 이 있는 로봇은 모두 실제 로봇으로')
     ap.add_argument('--robots', type=int, default=3, help='로봇 수 (실제 + 가상)')
+    ap.add_argument('--profile', choices=list(PROFILES), default=None, help='발표 영상 비교용: 기능을 꺼서 예전 단계 흉내 (fms_core.PROFILES)')
     a = ap.parse_args()
     from robot_link import HttpLink
     links = {}
@@ -339,7 +345,7 @@ def main():
         reals += [(row['name'], row['url']) for row in ROBOT_TABLE if row.get('url')]
     for name, url in reals:
         links[name] = HttpLink(name, url)
-    SIM = Sim(a.control_url, links, a.robots)
+    SIM = Sim(a.control_url, links, a.robots, a.profile)
     SIM.f.p.auto_omx = not a.no_auto_omx
     g = SIM.f.g
     segs, ghost = load_walls()
@@ -349,7 +355,7 @@ def main():
                       for (a, b), e in g.edge.items() if (a, b) == (e['a'], e['b'])],
                rooms={k: v for k, v in ROOM_CONTAM.items()}, room_names={k: v['name'] for k, v in ROOM_INFO.items()},
                room_codes={**{k: room_code(k) for k in ROOM_INFO}, PHARMACY: '약제실'},
-               parking=PARKING)
+               parking=SIM.f.parking)
     srv = ThreadingHTTPServer((a.host, a.port), H)
     print(f'FMS 시뮬레이터: http://{a.host}:{a.port}  (API v1 Swagger: /docs, 관제 PC 로 보내기: {SIM.push.url or "끔"}, '
           f'가상 OMX {"켬" if SIM.f.p.auto_omx else "끔"}, 실제 로봇 {list(links) or "없음"})')

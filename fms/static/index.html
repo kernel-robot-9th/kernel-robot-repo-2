@@ -60,6 +60,15 @@ th { color: var(--quiet); font-weight: 600; border-top: 0; }
 .log span { color: var(--quiet); font-variant-numeric: tabular-nums; margin-right: 6px; }
 .legend { display: flex; gap: 12px; flex-wrap: wrap; color: var(--quiet); font-size: 11.5px; margin-top: 6px; }
 .legend i { display: inline-block; width: 16px; height: 3px; vertical-align: middle; margin-right: 4px; border-radius: 2px; }
+/* ?bare=1&title=… : 지도만 크게 + 제목·경과 시간·완료 건수 (발표 영상 4분할, 11-02) */
+body.bare header, body.bare .side, body.bare .legend { display: none; }
+body.bare main { display: block; padding: 0; }
+body.bare #mapwrap { border: 0; border-radius: 0; padding: 0; background: var(--bg); height: 100vh; display: flex; align-items: center; justify-content: center; }
+body.bare canvas { width: auto; height: 100vh; max-width: 100vw; }
+#ov { position: fixed; left: 12px; top: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px; box-shadow: 0 2px 8px rgba(0,0,0,.12); }
+#ov .tt { font-size: clamp(14px, 2.6vh, 26px); font-weight: 700; }
+#ov .st { font-size: clamp(13px, 2.3vh, 22px); font-variant-numeric: tabular-nums; color: var(--quiet); margin-top: 2px; }
+#ov .st b { color: var(--ink); }
 </style>
 </head>
 <body>
@@ -132,6 +141,22 @@ function renderBatches() {
 }
 const MODE_COL = {line:'#e0a33a', transfer:'#c46bd6', wall:'#e05252', nav:'#4caf6a'};
 let MAP = null, S = null;
+const Q = new URLSearchParams(location.search), BARE = Q.has('bare');
+if (BARE) {
+  document.body.classList.add('bare');
+  const ov = document.createElement('div');
+  ov.id = 'ov';
+  ov.innerHTML = '<div class="tt"></div><div class="st"></div>';
+  ov.querySelector('.tt').textContent = Q.get('title') || '';
+  document.body.appendChild(ov);
+}
+function overlay() {               // 경과 = 첫 주문부터 (다 끝나면 마지막 완료 시각에서 멈춤), 완료 = 배송 끝난 주문 수
+  const os = S.orders || [];
+  const t0 = os.length ? Math.min(...os.map(o => o.created)) : S.t;
+  const done = os.filter(o => o.state === 'delivered');
+  const t1 = os.length && done.length === os.length ? Math.max(...done.map(o => o.done)) : S.t;
+  document.querySelector('#ov .st').innerHTML = `경과 <b>${fmt(Math.max(0, t1 - t0))}</b> · 완료 <b>${done.length}/${os.length}</b>`;
+}
 const cv = $('map'), cx = cv.getContext('2d');
 const PAD = 26, SC = 4.6;                 // cm → px
 const P = (x, y) => [PAD + x * SC, PAD + (200 - y) * SC];
@@ -268,7 +293,7 @@ function render() {
 }
 
 async function tick() {
-  try { S = await (await fetch('/api/state')).json(); render(); renderBatches(); } catch (e) {}
+  try { S = await (await fetch('/api/state')).json(); render(); renderBatches(); if (BARE) overlay(); } catch (e) {}
 }
 function frame() { draw(); requestAnimationFrame(frame); }
 
@@ -283,7 +308,7 @@ function frame() { draw(); requestAnimationFrame(frame); }
   $('autoomx').onchange = e => post('/api/control', {auto_omx: e.target.checked}).then(tick);
   $('batches').onclick = e => { const b = e.target.closest('button[data-b]'); if (b) post(`/api/v1/batches/${b.dataset.b}/${b.dataset.sig}`, {}).then(tick); };
   $('reset').onclick = () => post('/api/control', {reset: {robots: +$('nrob').value, planner: $('planner').value}}).then(tick);
-  await post('/api/control', {speed: +$('speed').value});
+  if (!BARE) await post('/api/control', {speed: +$('speed').value});   // 영상용 화면은 배속을 건드리지 않음
   setInterval(tick, 200);
   frame();
 })();
