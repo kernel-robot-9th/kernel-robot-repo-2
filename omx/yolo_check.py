@@ -8,6 +8,7 @@ borrowed for a moment):
   python yolo_check.py                 # every detection down to conf 0.10, plus the API's pick
   python yolo_check.py --target green_gauze
   python yolo_check.py --image some.jpg
+  python yolo_check.py --arm right     # right arm's ROI (0.68,0.4,1.0,1.0) and click-pick region
 
 Prints every box (label, conf, grasp point 640x480 / 1920x1080, inside ROI / click-pick region)
 and what the API would pick at --conf (default 0.5). Saves outputs/yolo_check_<time>.jpg:
@@ -27,6 +28,8 @@ from yolo_worker import Area, best_per_label, detect, grab_frames
 
 YOLO_DIR = Path.home() / "main_project" / "yolo"
 CLICK_CONFIG = Path.home() / "main_project/omxtest-main/config/omx_click_pick.json"
+RIGHT_CLICK_CONFIG = Path.home() / "main_project/omxtest-main/config/arms/right/omx_click_pick.json"
+ROI_DEFAULT = {"left": "0,0.5,0.4,1.0", "right": "0.68,0.4,1.0,1.0"}  # same as eval_bi_api_yolo.py
 
 
 def main():
@@ -38,12 +41,14 @@ def main():
     p.add_argument("--show-conf", type=float, default=0.10, help="also list boxes down to this")
     p.add_argument("--frames", type=int, default=5)
     p.add_argument("--exposure", type=int, default=90)
-    p.add_argument("--roi", default="0,0.5,0.4,1.0")
+    p.add_argument("--arm", choices=("left", "right"), default="left")
+    p.add_argument("--roi", default=None, help="default: the arm's ROI (left 0,0.5,0.4,1.0 / right 0.68,0.4,1.0,1.0)")
     p.add_argument("--to-calib", default="2.25,2.25,240,0")
     p.add_argument("--cam-top", default="/dev/cam_top")
     args = p.parse_args()
+    args.roi = args.roi or ROI_DEFAULT[args.arm]
 
-    region = json.loads(CLICK_CONFIG.read_text())["regions_uv"][0]
+    region = json.loads((RIGHT_CLICK_CONFIG if args.arm == "right" else CLICK_CONFIG).read_text())["regions_uv"][0]
     area = Area([float(v) for v in args.roi.split(",")], region, [float(v) for v in args.to_calib.split(",")])
     model = YOLO(args.weights)
     if args.image:
@@ -61,7 +66,7 @@ def main():
                 ("region ok" if d["in_region"] else "outside click-pick region")
         low = "  (below API conf)" if d["conf"] < args.conf else ""
         print(f"  {d['label']:12s} conf {d['conf']:.2f}  grasp 640x480 {d['grasp_uv_cam']} "
-              f"-> 1920x1080 {d['grasp_uv']}  {flags}{low}")
+              f"-> 1920x1080 {d['grasp_uv']}  edge tilt {d['edge_tilt_deg']:+.1f} deg  {flags}{low}")
     if not last:
         print("  (nothing)")
 
@@ -86,7 +91,7 @@ def main():
         cv2.circle(view, g, 3, col, -1)
         cv2.putText(view, f"{d['label'].split('_')[0]} {d['conf']:.2f}", (g[0] + 5, g[1] - 5),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.4, col, 1)
-    out = YOLO_DIR / "outputs" / f"yolo_check_{datetime.now():%Y%m%d_%H%M%S}.jpg"
+    out = YOLO_DIR / "outputs" / f"yolo_check{'_right' if args.arm == 'right' else ''}_{datetime.now():%Y%m%d_%H%M%S}.jpg"
     out.parent.mkdir(parents=True, exist_ok=True)
     cv2.imwrite(str(out), view)
     print(f"\nimage: {out}")

@@ -90,7 +90,8 @@ def load_sequence(path=DEFAULT_SEQUENCE):
     ret = data["return"]
     duration = _time("return", ret.get("time"))
     home = []
-    for pose in ("via", "start"):
+    # "skip_via": true -> straight to start (e.g. when up_gripper / home_prepare already clear the box)
+    for pose in (("start",) if ret.get("skip_via") else ("via", "start")):
         target = {k: v for side in SIDES for k, v in _body(f"return.{pose}", side, ret[side][pose]).items()}
         if f"{pose}_gripper" in ret:  # e.g. close the grippers while moving to start
             target.update(gripper_target(f"return.{pose}", ret[f"{pose}_gripper"]))

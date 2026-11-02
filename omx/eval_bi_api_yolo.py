@@ -15,7 +15,12 @@
 엔드포인트와 콜백은 eval_bi_api.py와 같습니다 (/command, /end-point, /status 등).
 추가: GET /detection -> 마지막 YOLO 결과. pinky 양팔 시퀀스는 기본으로 꺼져 있습니다 (--pinky로 켜기).
 
-POST /command {"command": "pick and place blue gauze", "request_id": "cycle-001"}
+POST /command {"command": {"blue": 1, "green": 2}, "request_id": "cycle-001"}
+  key = 어떤 거즈 (blue / green, blue_gauze / green_gauze 도 됨), value = 몇 번 집을지 (0~20).
+  적힌 순서대로: blue 1번 -> green 2번. 한 번 = YOLO(home) -> click pick -> home(토크 OFF).
+  YOLO가 못 찾은 색은 남은 횟수를 건너뛰고 다음 색으로 갑니다. 모든 횟수를 다 해야 성공(end_point true).
+  문자열 "blue:1, green:2", 예전 문장 "pick and place blue gauze"(= blue 1번)도 받습니다.
+  /status: current_try ("green 2/2"), tries (횟수별 결과 done / not found / skipped).
 v5 순서 (모방학습 자리를 click pick이 대신):
   시작: 왼팔이 home(시작 자세)에 있다고 보고 바로 YOLO를 찍습니다.
      (--home-first: 먼저 현재 위치 -> 복귀 경유(OV) -> home으로 이동, 이미 home이면 그대로)
@@ -45,6 +50,12 @@ YOLO는 vision_project 환경의 python으로 별도 프로세스(yolo_worker.py
 eval_bi_api.py와 같은 잠금 파일을 써서 둘을 동시에 켤 수 없습니다.
 click pick은 left_arm_only.py로 /dev/omx_follower_left 하나만 씁니다 (두 팔이 다 연결돼 있어도 됨).
 --pinky: home 복귀 후 양팔 pinky 시퀀스 (오른팔 /dev/omx_follower 필요). --emr-api일 때 pinky_done은 EMR로 안 보냅니다.
+
+--arm right: 같은 순서·옵션을 오른팔로 돌립니다 (왼팔은 안 움직임).
+  click pick = omxtest-main --arm right (config/arms/right/의 보정·setup, carry_high 등은 click_pick_poses_right.json),
+  YOLO ROI 기본 0.68,0.4,1.0,1.0 (오른쪽 트레이), 작업 영역 = config/arms/right/omx_click_pick.json regions_uv,
+  home = pinky_sequence.json return.right.start + 오른쪽 그리퍼 rest (/dev/omx_follower, lerobot).
+  --home-first / --outbound-ov / --return-ov는 왼팔 경유 자세라 오른팔에서는 쓸 수 없습니다.
 """
 import argparse
 import json
@@ -68,12 +79,22 @@ DEFAULT_PYTHON = Path.home() / "anaconda3/envs/vision_project/bin/python"
 CLICK_CONFIG = OMX / "config/omx_click_pick.json"
 CALIBRATION = OMX / "config/single/omx_xy_calibration.json"
 LEFT_PORT = "/dev/omx_follower_left"
+RIGHT_PORT = "/dev/omx_follower"
+ARM = "left"  # --arm
+ROI_DEFAULT = {"left": "0,0.5,0.4,1.0", "right": "0.68,0.4,1.0,1.0"}  # 640x480 fractions
 COLORS = ("blue", "green")
 SKIP_STAGES = ["LIFT", "DROP_RETREAT"]  # --click-skip: click-pick stages left out
 JOINT_OFFSET = []  # --joint-offset: e.g. ["12:-30"], pulses added to motor IDs in OFFSET_STAGES
 OFFSET_STAGES = ["APPROACH"]  # --offset-stages
+SLIDE = 0  # --slide: after CLOSE turn ID11 this many pulses (green -> right, blue -> left in the picture)
 CLOSE_EXTRA = 0  # --close-extra: CLOSE goes this many pulses past close_pulse
 OPEN_SCALE = 1.0  # --open-scale: OPEN width as a fraction of click pick's open_pulse (1 = full)
+CURRENT_LABEL = "green_gauze"  # label of the detection being picked (sets the --slide direction)
+OBB_ROTATE = False  # --obb-rotate: turn the wrist (ID15) to the detected gauze angle
+CURRENT_EDGE = None  # grasp edge of the detection being picked, 1920x1080 [[u, v], [u, v]]
+WRIST_EXTRA = 0.0  # --wrist-deg: extra table-frame wrist turn (deg)
+MAX_WRIST = 45.0  # --max-wrist-deg
+NO_POSTURE = False  # --no-posture: ignore joint_offset_pulses of omx_click_pick.json
 STEP = False  # --step: wait for SPACE in this terminal before every arm / gripper step
 
 
@@ -90,6 +111,50 @@ def target_label(command):
     if len(found) > 1:
         raise RuntimeError(f"command names more than one colour: {found}")
     return (found[0], f"{found[0]}_gauze") if found else (None, None)
+
+
+TARGET_KEYS = {"blue": "blue", "blue_gauze": "blue", "green": "green", "green_gauze": "green"}
+MAX_COUNT = 20
+
+
+def parse_jobs(command):
+    """{"blue": 1, "green": 2} / {"blue_gauze": 1} / "blue:1, green:2" / old sentence
+    -> [("blue", 1), ("green", 2)] in the command's order (key = which gauze, value = how many times)."""
+    import re
+    text = command if isinstance(command, str) else json.dumps(command)
+    pairs = re.findall(r"""["']?([A-Za-z_]+)["']?\s*:\s*["']?(\d+)""", text)
+    if not pairs:  # old sentence, e.g. "pick and place blue gauze" = one try
+        colour, _ = target_label(text)
+        return [(colour, 1)]
+    jobs = {}
+    for key, count in pairs:
+        colour = TARGET_KEYS.get(key.lower())
+        if colour is None:
+            raise ValueError(f"unknown target {key!r}; use {', '.join(TARGET_KEYS)}")
+        if not 0 <= int(count) <= MAX_COUNT:
+            raise ValueError(f"{key}: count must be 0..{MAX_COUNT}")
+        jobs[colour] = jobs.get(colour, 0) + int(count)
+    jobs = [(c, n) for c, n in jobs.items() if n > 0]
+    if not jobs:
+        raise ValueError("command has no target with a count above 0")
+    return jobs
+
+
+def _multi_command_request():
+    """CommandRequest whose command may be a JSON object {"blue": 1, "green": 2} (kept as 'blue:1, green:2')."""
+    from pydantic import field_validator
+
+    class MultiCommandRequest(base.CommandRequest):
+        @field_validator("command", mode="before")
+        @classmethod
+        def object_to_text(cls, value):
+            if isinstance(value, dict):
+                value = ", ".join(f"{k}:{v}" for k, v in value.items())
+            if isinstance(value, str) and value.strip():
+                parse_jobs(value)  # bad keys / counts -> 422 before anything moves
+            return value
+
+    return MultiCommandRequest
 
 
 def via_for(colour):
@@ -167,6 +232,25 @@ def move_left(segments, disable_torque_at_end, fps=30, skip_if_at_end=False):
             bus.disconnect(disable_torque=enabled and finished and disable_torque_at_end)
 
 
+def right_home_pose():
+    """Right arm home: pinky_sequence.json return.right.start + right gripper rest (lerobot units)."""
+    data = json.loads((HERE / "pinky_sequence.json").read_text())
+    return list(data["return"]["right"]["start"]) + [float(data["gripper"]["right"]["rest"])]
+
+
+def move_right(segments, disable_torque_at_end, fps=30, skip_if_at_end=False):
+    """Right arm (/dev/omx_follower) through [(label, pose6, seconds), ...], like move_left.
+    The move itself is eval_bi_api_yolo_botharm.move_right (same checks as pinky_move)."""
+    if skip_if_at_end:
+        raise RuntimeError("--home-first is left-arm only")
+    import eval_bi_api_yolo_botharm as botharm
+    if not segments:
+        botharm.move_right([], disable_torque_at_end, fps)  # torque off where it stands (as move_left)
+    for i, (label, pose, seconds) in enumerate(segments):
+        step(label)
+        botharm.move_right([(label, pose, seconds)], disable_torque_at_end and i == len(segments) - 1, fps)
+
+
 class YoloWorker:
     """vision_project python running yolo_worker.py; one JSON line per request."""
     def __init__(self, python, weights, cam_top, region, conf, exposure, device,
@@ -227,18 +311,32 @@ class YoloWorker:
 
 # click pick stage -> /status phase (v5: home -> OV -> pick -> drop -> OV -> home)
 STAGE_PHASE = {"HIGH": "pick", "OPEN": "pick", "APPROACH": "pick", "HOVER": "pick", "PICK": "pick",
-               "CLOSE": "pick", "LIFT": "pick", "RETREAT": "pick",
+               "CLOSE": "pick", "SLIDE": "pick", "LIFT": "pick", "RETREAT": "pick",
                "CARRY_HIGH": "drop", "DROP_RELEASE": "drop", "RELEASE": "drop",
                "RETURN_HIGH": "drop", "DROP_RETREAT": "drop"}
+
+
+def wrist_args():
+    """click_pick_yolo.py options for --obb-rotate / --wrist-deg / --no-posture."""
+    args = []
+    if OBB_ROTATE and CURRENT_EDGE:
+        args += ["--edge", *(f"{v:.1f}" for p in CURRENT_EDGE for v in p)]
+    if WRIST_EXTRA:
+        args += ["--wrist-deg", f"{WRIST_EXTRA:.1f}"]
+    if args:
+        args += ["--max-wrist-deg", f"{MAX_WRIST:.1f}"]
+    return args + (["--no-posture"] if NO_POSTURE else [])
 
 
 def run_click_pick(uv, auto, log_path, on_stage=lambda name: None):
     """click_pick_yolo.py in a child process. Its output is echoed to this terminal and
     its MOVE / PICK / DROP prompts (without --auto) are answered in this terminal."""
-    cmd = [sys.executable, "-u", str(HERE / "click_pick_yolo.py"), "--uv", f"{uv[0]:.1f}", f"{uv[1]:.1f}",
+    cmd = [sys.executable, "-u", str(HERE / "click_pick_yolo.py"), "--arm", ARM, "--uv", f"{uv[0]:.1f}", f"{uv[1]:.1f}",
            "--live", "--output", str(log_path)] + (["--auto"] if auto else []) + (["--step"] if STEP else []) \
         + (["--skip", *SKIP_STAGES] if SKIP_STAGES else []) + ["--open-scale", f"{OPEN_SCALE:.4f}", "--close-extra", str(CLOSE_EXTRA)] \
-        + (["--joint-offset", *JOINT_OFFSET, "--offset-stages", *OFFSET_STAGES] if JOINT_OFFSET else [])
+        + (["--slide", str(SLIDE), "--label", CURRENT_LABEL] if SLIDE else []) \
+        + (["--joint-offset", *JOINT_OFFSET, "--offset-stages", *OFFSET_STAGES] if JOINT_OFFSET else []) \
+        + wrist_args()
     logging.info("click pick: %s", " ".join(cmd))
     proc = subprocess.Popen(cmd, cwd=str(HERE), stdout=subprocess.PIPE, text=True, bufsize=1)
     for line in proc.stdout:
@@ -260,14 +358,16 @@ def dry_move_left(segments, disable_torque_at_end, skip_if_at_end=False):
         print(f"[ARM] {label}  [dry-run] {[round(v, 2) for v in pose]} ({seconds:.1f}s)", flush=True)
         time.sleep(min(seconds, 1.0))
     if disable_torque_at_end:
-        print("[TORQUE] left arm off  [dry-run]", flush=True)
+        print(f"[TORQUE] {ARM} arm off  [dry-run]", flush=True)
 
 
 def dry_click_pick(uv, auto, log_path, on_stage=lambda name: None):
     """--dry-run: real click-pick plan for this point (no motor port), then step through its stages."""
-    cmd = [sys.executable, str(HERE / "click_pick_yolo.py"), "--uv", f"{uv[0]:.1f}", f"{uv[1]:.1f}"] \
+    cmd = [sys.executable, str(HERE / "click_pick_yolo.py"), "--arm", ARM, "--uv", f"{uv[0]:.1f}", f"{uv[1]:.1f}"] \
         + (["--skip", *SKIP_STAGES] if SKIP_STAGES else []) + ["--open-scale", f"{OPEN_SCALE:.4f}", "--close-extra", str(CLOSE_EXTRA)] \
-        + (["--joint-offset", *JOINT_OFFSET, "--offset-stages", *OFFSET_STAGES] if JOINT_OFFSET else [])
+        + (["--slide", str(SLIDE), "--label", CURRENT_LABEL] if SLIDE else []) \
+        + (["--joint-offset", *JOINT_OFFSET, "--offset-stages", *OFFSET_STAGES] if JOINT_OFFSET else []) \
+        + wrist_args()
     out = subprocess.run(cmd, cwd=str(HERE), capture_output=True, text=True)
     if out.returncode != 0:
         raise RuntimeError(f"click pick plan failed: {out.stderr.strip() or out.stdout.strip()}")
@@ -318,19 +418,51 @@ class YoloRunner:
         return self.on_update(fields) if self.on_update is not None else None
 
     def __call__(self, command, return_event):
+        """command = {"blue": 1, "green": 2} (as 'blue:1, green:2') or the old sentence.
+        Each try: YOLO at home -> click pick -> home. A colour YOLO cannot find ends that colour's
+        tries; the next colour still runs. The command succeeds only if every try is done."""
         from eval_bi import DEFAULT_RETURN_VIA, DEFAULT_START_POSE
-        colour, target = target_label(command)
-        via, via_time = via_for(colour)  # checked before anything moves
-        request_id = self._update(phase="go_home", click_stage=None) or "latest"
-        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
+        jobs = parse_jobs(command)
+        if ARM == "left":
+            for colour, _ in jobs:
+                via_for(colour)  # checked before anything moves
+        request_id = self._update(phase="go_home", click_stage=None, jobs=dict(jobs), tries=[]) or "latest"
         if self.home_first:
             # --home-first: current -> OV (return via) -> HOME so the arm does not hide the gauze,
             # unless the arm is already at home.
             self.move_left([("OV", DEFAULT_RETURN_VIA, self.return_via_time),
                             ("HOME", DEFAULT_START_POSE, self.return_home_time)], False, skip_if_at_end=True)
-        self._update(phase="detect")
-        save = str(self.save_dir / f"{stamp}_{request_id}.jpg") if self.save_dir else None
+        tries, total = [], sum(n for _, n in jobs)
+        for colour, count in jobs:
+            target = f"{colour}_gauze" if colour else None
+            for k in range(1, count + 1):
+                tag = f"{colour or 'any'} {k}/{count}"
+                print(f"[TRY] {tag}  ({len(tries) + 1}/{total})", flush=True)
+                self._update(current_try=tag)
+                found = self._try(command, colour, target, request_id, tag)
+                tries.append({"target": target, "try": k, "of": count, "result": "done" if found else "not found"})
+                self._update(tries=list(tries))
+                if not found:
+                    for rest in range(k + 1, count + 1):
+                        tries.append({"target": target, "try": rest, "of": count, "result": "skipped"})
+                    self._update(tries=list(tries))
+                    break
+        done = sum(t["result"] == "done" for t in tries)
+        print(f"[TRY] finished: {done}/{total} done", flush=True)
+        if done < total:
+            missed = ", ".join(f"{t['target']} {t['try']}/{t['of']} {t['result']}" for t in tries if t["result"] != "done")
+            raise RuntimeError(f"{done}/{total} tries done; {missed}; arm left at home")
+        self._update(phase="done")
+        self.last_end_reason = "click_pick_done"
+
+    def _try(self, command, colour, target, request_id, tag):
+        """One pick: YOLO at home -> click pick -> home (torque off). False when YOLO finds nothing."""
+        from eval_bi import DEFAULT_RETURN_VIA, DEFAULT_START_POSE
+        home = right_home_pose() if ARM == "right" else DEFAULT_START_POSE
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self._update(phase="detect", click_stage=None)
+        save = str(self.save_dir / f"{stamp}_{request_id}_{tag.replace(' ', '_').replace('/', 'of')}.jpg") \
+            if self.save_dir else None
 
         reply = self.worker.request({"target": target, "frames": self.frames, "save": save})
         det = reply["detection"]
@@ -349,23 +481,30 @@ class YoloRunner:
         if det is None:
             self.move_left([], True)  # stay at home, torque off as after a normal cycle
             dark = " (camera image is dark, lights off?)" if reply["frame_mean"] < 20 else ""
-            raise RuntimeError(f"no {target or 'gauze'} found in the work area{dark}; arm left at home")
+            print(f"[YOLO] no {target or 'gauze'} in the work area{dark}: {tag} not done, arm at home", flush=True)
+            return False
 
         if self.outbound_ov:  # --outbound-ov: home -> OV before click pick (default: straight to HIGH)
             self._update(phase="home_to_ov")
+            via, via_time = via_for(colour)
             self.move_left([("OV", via, self.via_time or via_time)], False)
 
+        global CURRENT_LABEL, CURRENT_EDGE
+        CURRENT_LABEL = det["label"]
+        CURRENT_EDGE = det.get("grasp_edge")
+        if OBB_ROTATE:
+            print(f"[YOLO] grasp edge {CURRENT_EDGE}  picture tilt {det.get('edge_tilt_deg')} deg", flush=True)
         self._update(phase="pick")
         log_dir = YOLO_DIR / "outputs/api"
         log_dir.mkdir(parents=True, exist_ok=True)
-        self.click_pick(det["grasp_uv"], self.auto, log_dir / f"{stamp}_{request_id}_click_pick.jsonl",
+        self.click_pick(det["grasp_uv"], self.auto,
+                        log_dir / f"{stamp}_{request_id}_{tag.replace(' ', '_').replace('/', 'of')}_click_pick.jsonl",
                         lambda name: self._update(phase=STAGE_PHASE.get(name, "pick"), click_stage=name))
 
         self._update(phase="to_home")
         back = [("OV", DEFAULT_RETURN_VIA, self.return_via_time)] if self.return_ov else []
-        self.move_left(back + [("HOME", DEFAULT_START_POSE, self.return_home_time)], True)
-        self._update(phase="done")
-        self.last_end_reason = "click_pick_done"
+        self.move_left(back + [("HOME", home, self.return_home_time)], True)
+        return True
 
 
 def emr_sender(base_url, payload, request_id):
@@ -399,6 +538,8 @@ def parse_server_args(argv=None):
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8000)
+    p.add_argument("--arm", choices=("left", "right"), default="left",
+                   help="which arm picks (right: omxtest-main --arm right, right ROI and home)")
     p.add_argument("--callback-url", default=os.environ.get("END_POINT_CALLBACK_URL") or None)
     p.add_argument("--emr-api", default=None,
                    help="EMR base URL, e.g. http://192.168.129.135:8000/api/v1: on success send "
@@ -414,6 +555,15 @@ def parse_server_args(argv=None):
                    help="add pulses per motor ID in --offset-stages, e.g. --joint-offset 12:-30 (log shows the new height)")
     p.add_argument("--offset-stages", nargs="+", default=["APPROACH"], metavar="STAGE",
                    help="click-pick stages that get --joint-offset (default: APPROACH)")
+    p.add_argument("--slide", type=int, default=0, metavar="PULSES",
+                   help="after CLOSE turn ID11 this many pulses: green_gauze -> right, blue_gauze -> left (e.g. 40)")
+    p.add_argument("--obb-rotate", action="store_true",
+                   help="turn the wrist (ID15) to the gauze angle from the YOLO OBB (default: off)")
+    p.add_argument("--wrist-deg", type=float, default=0.0,
+                   help="extra table-frame wrist turn in deg, added to --obb-rotate (+ = counter-clockwise from above)")
+    p.add_argument("--max-wrist-deg", type=float, default=45.0, help="click pick refuses a larger wrist turn")
+    p.add_argument("--no-posture", action="store_true",
+                   help="ignore joint_offset_pulses in omx_click_pick.json (test without the y correction)")
     p.add_argument("--close-extra", type=int, default=0,
                    help="click-pick CLOSE: go this many pulses past close_pulse (e.g. 80) to squeeze thin bags")
     p.add_argument("--open-scale", type=float, default=1.0,
@@ -428,8 +578,9 @@ def parse_server_args(argv=None):
     p.add_argument("--yolo-python", default=str(DEFAULT_PYTHON), help="python of the env with ultralytics")
     p.add_argument("--cam-top", default="/dev/cam_top")
     p.add_argument("--conf", type=float, default=0.5)
-    p.add_argument("--roi", default="0,0.5,0.4,1.0",
-                   help="YOLO work area, x1,y1,x2,y2 fractions of the 640x480 frame (leaves out the black box)")
+    p.add_argument("--roi", default=None,
+                   help="YOLO work area, x1,y1,x2,y2 fractions of the 640x480 frame (leaves out the black box); "
+                        "default left 0,0.5,0.4,1.0 / right 0.68,0.4,1.0,1.0")
     p.add_argument("--to-calib", default="2.25,2.25,240,0",
                    help="sx,sy,tx,ty: 640x480 pixel -> 1920x1080 calibration pixel (yolo/fov_check.py)")
     p.add_argument("--frames", type=int, default=5, help="frames per command; best detection wins")
@@ -439,7 +590,30 @@ def parse_server_args(argv=None):
     p.add_argument("--return-via-time", type=float, default=4.0)
     p.add_argument("--return-home-time", type=float, default=4.0)
     p.add_argument("--save-dir", default=str(YOLO_DIR / "outputs/api"), help="annotated image per command; '' = off")
-    return p.parse_args(argv)
+    args = p.parse_args(argv)
+    if args.roi is None:
+        args.roi = ROI_DEFAULT[args.arm]
+    if args.arm == "right" and (args.home_first or args.outbound_ov or args.return_ov):
+        p.error("--home-first / --outbound-ov / --return-ov use left-arm waypoints; not with --arm right")
+    return args
+
+
+def use_arm(arm):
+    """Point the module at one arm's click-pick files (--arm)."""
+    global ARM, CLICK_CONFIG, CALIBRATION
+    ARM = arm
+    folder = OMX / "config" / ("arms/right" if arm == "right" else "single")
+    CLICK_CONFIG = (folder if arm == "right" else OMX / "config") / "omx_click_pick.json"
+    CALIBRATION = folder / "omx_xy_calibration.json"
+
+
+def check_right_port():
+    """/dev/omx_follower (home moves, lerobot) must be the OpenRB registered as right in omxtest-main."""
+    port = json.loads((OMX / "config/omx_arm_profiles.json").read_text())["arms"]["right"]["port"]
+    if not Path(RIGHT_PORT).exists():
+        raise RuntimeError(f"{RIGHT_PORT} not found: is the right follower plugged in?")
+    if Path(RIGHT_PORT).resolve() != Path(port).resolve():
+        raise RuntimeError(f"{RIGHT_PORT} -> {Path(RIGHT_PORT).resolve()}, but omxtest-main right is {port}")
 
 
 def work_area():
@@ -479,7 +653,13 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", force=True)
     if not Path(options.weights).exists():
         sys.exit(f"weights not found: {options.weights}")
-    via_for(None)  # fail fast if v5 poses are missing
+    use_arm(options.arm)
+    if options.arm == "right":
+        if not options.dry_run:
+            check_right_port()
+        logging.info("RIGHT arm: %s, ROI %s, home %s", CLICK_CONFIG, options.roi, right_home_pose())
+    else:
+        via_for(None)  # fail fast if v5 poses are missing
     if options.pinky_sequence:
         from pinky_move import load_sequence
         load_sequence(options.pinky_sequence)
@@ -493,11 +673,15 @@ if __name__ == "__main__":
     SKIP_STAGES = list(options.click_skip)
     OPEN_SCALE = options.open_scale
     CLOSE_EXTRA = options.close_extra
+    SLIDE = options.slide
+    OBB_ROTATE, WRIST_EXTRA, MAX_WRIST = options.obb_rotate, options.wrist_deg, options.max_wrist_deg
+    NO_POSTURE = options.no_posture
     JOINT_OFFSET = list(options.joint_offset)
     OFFSET_STAGES = list(options.offset_stages)
     if options.step and options.auto:
         sys.exit("--step and --auto cannot be used together")
-    motions = {"move_left": dry_move_left, "click_pick": dry_click_pick} if options.dry_run else None
+    motions = {"move_left": dry_move_left, "click_pick": dry_click_pick} if options.dry_run \
+        else {"move_left": move_right} if options.arm == "right" else None
     runner = YoloRunner(worker, options.frames, options.save_dir or None, options.auto,
                         options.via_time, options.return_via_time, options.return_home_time, motions,
                         options.home_first, options.outbound_ov, options.return_ov)
@@ -518,6 +702,7 @@ if __name__ == "__main__":
     if options.dry_run:  # pinky sequence too: log only, no motors
         for key in ("pinky_motion", "release_motion", "home_motion"):
             extra[key] = (lambda name: lambda: print(f"[PINKY] {name}  [dry-run]", flush=True))(key)
+    base.CommandRequest = _multi_command_request()  # /command accepts {"blue": 1, "green": 2}
     app = build_app(options, runner, **extra)
     try:
         uvicorn.run(app, host=options.host, port=options.port, workers=1)
