@@ -234,3 +234,14 @@ python3 fms/run_headless.py --minutes 120 --rate 2 --seed 1     # --robots 2, --
 
 실패 처리(`order_failed`·`robot_error`), `ready`·`loaded` 시간 초과, 실제 로봇 연결(`/segments`·하트비트 — 설계 문서 "FMS API"),
 회전·가감속 시간, 넓은 Nav2 구간의 실제 간격.
+
+## 발표 영상: 단계별 4분할 비교 (11-02)
+
+```bash
+python3 demo_quad.py            # 서버 4개(8781~8784) → 브라우저로 http://localhost:8781/quad.html, F11
+                                # → 화면 녹화 시작 → Enter → 같은 주문 9건이 넷에 동시에 (8배속, --speed 로 바꿈)
+```
+칸 = `fms_core.PROFILES` (`sim_server.py --profile`): ① naive 로봇 1대·묶음 없이 1건씩·수술실 전 POCKET,
+② v2 처음 CBS·주차 없음·직선 이어 달리기 없음(지나는 직선 노드마다 실행 1.5 s·계획 2 s 정지), ③ v3 + 주차 9곳·이어 달리기,
+④ v4 지금(+ CBS 고도화·약제실 대기열). 주문: 101~107호, 수술실, 108호. 각 칸 = `/?bare=1&title=…` (지도 + 제목·경과·완료 수).
+헤드리스로 미리 보기(주문 9건): ① 2081 s(세척실→수술실 ≈ 370~660 s) · ② 547 s · ③ 525 s · ④ 478 s.

@@ -108,6 +108,7 @@ class Planner:
         self.corridor = corridor                # 협로 추론 켬
         self._win = None                        # 지금 solve 의 창 (칸)
         self.w = w                              # ECBS 허용 배수 (None = 예전 CBS)
+        self.node_stop = 0                      # 비교용: 직선 이어 달리기가 없을 때 지나는 노드에서 서는 칸 (차선·협로 경유 노드)
         # 엣지 시간 칸: 실측 중앙값 (graph/edge_times.yaml, 방향별), 없으면 길이 ÷ speed
         self.dur = {e: max(1, math.ceil(g.edge_s(*e, speed) / step)) for e in g.edge}
         self._h = {}
@@ -272,6 +273,9 @@ class Planner:
                             nxt.append(((n, t + r, i, he), gc + r, nc0 + sc(it)))
                         continue
                     d = self.dur[(n, m)]                                           # 엣지 지나기
+                    if (self.node_stop and hd is not None and (n, t, i, hd) != start_s
+                            and g.nodes[n]['type'] in ('lane', 'way') and g.edge[(n, m)]['mode'] in ('line', 'wall')):
+                        d += self.node_stop                                        # 이어 달리기 없음: 지나는 노드에서 섬
                     it = Item(g, 'edge', (n, m), t, t + d, loaded, agent)
                     if blocked(it) or blocked(Item(g, 'node', m, t + d, t + d, loaded, agent)):
                         continue
