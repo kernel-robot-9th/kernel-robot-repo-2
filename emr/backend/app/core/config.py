@@ -81,6 +81,8 @@ class Settings(BaseSettings):
     # fixed = 시연(10-30 사용자 "OMX 갯수 부족으로 블루 1개, 그린 1개로 고정해서 보내주면 될거 같아 FMS으로 정상으로") —
     # 개수와 상관없이 늘 {"blue": 1, "green": 1}, FMS 주문·묶음 개수는 그대로
     OMX_COMMAND_FORMAT: Literal["counts", "sentence", "fixed"] = "counts"
+    # fixed일 때 보낼 색깔별 개수 (10-30 저녁 사용자 "진행해" — 녹색 거즈를 못 찾아 .env에서 {"blue": 1}로). JSON
+    OMX_FIXED_COMMAND: dict[str, int] = {"blue": 1, "green": 1}
 
     # 음성 배송 예약 초안 (2026-10-26, app/services/voice_request.py). 사용자 결정: Gemini로 시작, 로컬 모델은 나중에 같은 인터페이스로.
     # gemini면 녹음·문장이 Google 클라우드로 나간다 — 시연·시험 동안만. 키는 .env에만(문서·로그에 넣지 않는다)

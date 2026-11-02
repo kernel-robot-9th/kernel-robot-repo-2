@@ -305,7 +305,7 @@ FMS는 `--control-url http://<EMR>:8000`으로 띄운다.
 
 | 요청 | 본문 | 언제 |
 |---|---|---|
-| `POST /command` | `{"command": {"blue": 2}, "request_id": "emr-b{묶음 행 id}"}` — 약품 → blue, 비품 → green(`services/omx_items.py`), **개수가 0인 색은 뺀다**(10-28 사용자 "갯수가 0이면 생략" — 예전엔 두 키 모두 보냄), 합계 1~3 | FMS `batch_assigned` 뒤, OMX가 움직이거나 들고 있지 않을 때 |
+| `POST /command` | `{"command": {"blue": 2}, "request_id": "emr-b{묶음 행 id}"}`(실패한 묶음을 사람이 `pick`으로 되돌려 다시 보내면 `emr-b{id}-r2`, `-r3` … — 같은 번호면 OMX `/status`가 지난 실패를 보여 줘 바로 다시 실패한다, 2026-11-02) — 약품 → blue, 비품 → green(`services/omx_items.py`), **개수가 0인 색은 뺀다**(10-28 사용자 "갯수가 0이면 생략" — 예전엔 두 키 모두 보냄), 합계 1~3 | FMS `batch_assigned` 뒤, OMX가 움직이거나 들고 있지 않을 때 |
 | `POST /pinky` | `{"pinky_arrive": true, "request_id": 같은 값}` | FMS `robot_at_pharmacy`(**정밀 주차 끝**) 뒤 — 들고 있는 물품을 Pinky 위에 내려놓기 |
 | `GET /status` | — | 끝났는지 판단(1초마다). `state`(running·completed·failed), `pinky`(grabbing → holding → releasing → returning → completed, 실패 grab_failed·release_failed·return_failed) |
 | OMX → EMR `GET /api/v1/robot/{request_id}/end-point` | — | 집기 끝·내려놓고 복귀 끝에 같은 `request_id`로 두 번. **EMR은 로그만, 판단은 `/status`로** — OMX가 EMR에 닿지 못해도 흐름이 선다 |

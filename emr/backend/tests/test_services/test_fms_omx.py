@@ -136,6 +136,26 @@ def test_omx_failure_stops_batch(client, db, arm, reserve_overdue):
 
 
 @requires_db
+def test_retry_after_failure_uses_new_request_id(client, db, arm, reserve_overdue):
+    """실패한 묶음을 사람이 pick으로 되돌리면 새 request_id로 — 지난 실패 /status를 읽지 않는다 (11-02)"""
+    reserve_overdue(quantity=1)
+    batch = _assign(client, db, "b-1", ["o-1"])
+    _round(db)
+    arm["status"] = {"request_id": f"emr-b{batch.id}", "state": "failed", "pinky": None, "error": "green #1 not found"}
+    _round(db)
+    assert batch.step == "failed"
+    for attempt in (2, 3):
+        batch.step, batch.error = "pick", None
+        _round(db)
+        assert arm["calls"][-1][3] == f"emr-b{batch.id}-r{attempt}" and batch.step == "picking"
+        _round(db)
+        assert batch.step == "picking"   # 지난 번호의 failed는 이 시도와 상관없다
+        arm["status"] = {"request_id": f"emr-b{batch.id}-r{attempt}", "state": "failed", "pinky": None, "error": "again"}
+        _round(db)
+        assert batch.step == "failed"
+
+
+@requires_db
 def test_off_by_default_keeps_virtual_omx(client, db, arm, reserve_overdue, monkeypatch):
     monkeypatch.setattr(settings, "FMS_OMX_ENABLED", False)
     reserve_overdue(quantity=1)

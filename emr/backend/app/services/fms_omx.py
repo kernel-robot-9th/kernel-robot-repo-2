@@ -99,7 +99,7 @@ class FmsOmxRunner:
         if status is None or status.get("state") == "running" or status.get("pinky") in OMX_ARM_BUSY:
             return
         counts = {"blue": batch.blue_count, "green": batch.green_count}
-        request_id = f"emr-b{batch.id}"
+        request_id = self._pick_request_id(batch)
         try:
             send_command(settings.OMX_BASE_URL, omx_command(counts), request_id, settings.OMX_TIMEOUT_SECONDS)
         except OmxUnavailable as error:
@@ -233,6 +233,19 @@ class FmsOmxRunner:
             return False
         log.info(f"fms_{step}_sent", batch_id=batch.batch_id, already=bool(response.get("already")), fms_status=response.get("status"))
         return True
+
+    @staticmethod
+    def _pick_request_id(batch: FmsBatch) -> str:
+        """집기 request_id. 처음은 emr-b{id}, 실패한 묶음을 pick으로 되돌려 다시 보내면 emr-b{id}-r2, -r3 …
+        같은 번호를 다시 쓰면 OMX /status가 지난 실패를 그대로 보여 주어 바로 다시 실패한다 (2026-11-02 재시도).
+        [입력] batch [출력] request_id
+        """
+        first = f"emr-b{batch.id}"
+        previous = batch.omx_request_id
+        if not previous:
+            return first
+        _, _, tries = previous.removeprefix(first).partition("-r")
+        return f"{first}-r{int(tries) + 1 if tries.isdigit() else 2}"
 
     @staticmethod
     def _move(batch: FmsBatch, step: FmsBatchStep, now: datetime) -> None:
