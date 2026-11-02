@@ -9,6 +9,7 @@ replace a stage in click_pick_yolo.py / eval_bi_api_yolo.py.
   python record_click_pose.py                 # print the current pose only
   python record_click_pose.py carry_high      # save it as CARRY_HIGH
   python record_click_pose.py --remove carry_high   # go back to the click-pick default
+  python record_click_pose.py --arm right carry_high   # right arm -> click_pick_poses_right.json
 
 Move the arm by hand with torque OFF first (the API server turns torque off at home after a run).
 Stop the API server's motion and anything else using the arm port (one program per port).
@@ -29,25 +30,31 @@ from omx_pick_setup import read_snapshot  # noqa: E402
 import left_arm_only  # noqa: E402,F401  (left follower only, even with both arms plugged in)
 
 OUT = Path(__file__).with_name("click_pick_poses.json")
+OUT_RIGHT = Path(__file__).with_name("click_pick_poses_right.json")  # click_pick_yolo.py --arm right
 STAGES = ("high", "carry_high", "drop_release", "return_high")
 
 
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("name", nargs="?", choices=STAGES)
+    p.add_argument("--arm", choices=("left", "right"), default="left",
+                   help="right = omxtest-main --arm right port, saved to click_pick_poses_right.json")
     p.add_argument("--remove", action="store_true", help="delete the saved pose for NAME")
     args = p.parse_args()
-    data = json.loads(OUT.read_text()) if OUT.exists() else {"note": __doc__.splitlines()[0], "poses": {}}
+    out = OUT_RIGHT if args.arm == "right" else OUT
+    data = json.loads(out.read_text()) if out.exists() else {"note": f"{args.arm} arm click-pick stage poses (record_click_pose.py)", "poses": {}}
 
     if args.remove:
         if not args.name:
             p.error("--remove needs a NAME")
         removed = data["poses"].pop(args.name, None)
-        OUT.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+        out.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
         print(f"removed {args.name}" if removed else f"{args.name} was not saved")
         return
 
-    snap = read_snapshot(profile_for(None))
+    profile = profile_for("right" if args.arm == "right" else None)
+    print(f"[{args.arm.upper()}] port {profile.port}")
+    snap = read_snapshot(profile)
     pose = {"arm_pulses": snap["arm_pulses"], "model_xyz_mm": [round(v, 1) for v in snap["model_xyz_mm"]],
             "gripper_pulse": snap["motors"][-1]["position"], "recorded_at": snap["recorded_at"]}
     print("arm pulses (ID11-15):", pose["arm_pulses"])
@@ -58,8 +65,8 @@ def main():
     if old:
         print("previous:", old["arm_pulses"], old["model_xyz_mm"])
     data["poses"][args.name] = pose
-    OUT.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
-    print(f"saved {args.name.upper()} -> {OUT}")
+    out.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+    print(f"saved {args.name.upper()} -> {out}")
 
 
 if __name__ == "__main__":

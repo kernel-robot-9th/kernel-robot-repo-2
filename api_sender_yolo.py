@@ -7,6 +7,7 @@ Start the API server first, with the callback pointing at this script's receiver
   python eval_bi_api_yolo.py --callback-url http://127.0.0.1:9000/robot/result --dry-run  # no motors
 
 Full flow (v5): command -> YOLO -> home -> OV -> pick -> drop -> OV -> home -> callback end_point true
+  python api_sender_yolo.py flow --command '{"blue": 1, "green": 2}'      # blue once, then green twice
   python api_sender_yolo.py flow --command "pick and place green gauze"   # green_gauze, left edge
   python api_sender_yolo.py flow --command "pick and place blue gauze"    # blue_gauze, right edge
 If the server sends results to EMR (--emr-api), add --no-callback:
@@ -42,6 +43,15 @@ PHASE_TEXT = {
 }
 
 
+def as_command(text):
+    """'{"blue": 1, "green": 2}' -> dict (sent as a JSON object); anything else stays a string."""
+    try:
+        value = json.loads(text)
+    except ValueError:
+        return text
+    return value if isinstance(value, dict) else text
+
+
 def show_detection(result):
     det = result.get("detection")
     for obj in result.get("yolo", result).get("objects", []):
@@ -59,10 +69,11 @@ def wait_flow(client, timeout):
     shown = False
     while time.time() < deadline:
         s = client.get("/status").json()
-        key = (s.get("state"), s.get("phase"), s.get("click_stage"))
+        key = (s.get("state"), s.get("phase"), s.get("click_stage"), s.get("current_try"))
         if key != last:
             stage = f" [{key[2]}]" if key[2] and key[1] in ("pick", "drop") else ""
-            print(f"{stamp()} state={key[0]} phase={PHASE_TEXT.get(key[1], key[1])}{stage}", flush=True)
+            tri = f" try={key[3]}" if key[3] else ""
+            print(f"{stamp()} state={key[0]}{tri} phase={PHASE_TEXT.get(key[1], key[1])}{stage}", flush=True)
             last = key
         if not shown and s.get("yolo"):
             show_detection(s)
@@ -78,7 +89,7 @@ def wait_flow(client, timeout):
 def flow(client, receiver, args):
     rid = args.request_id or f"yolo-{uuid4().hex[:8]}"
     start = len(receiver.bodies) if receiver else 0
-    response = post(client, "/command", {"command": args.command, "request_id": rid})
+    response = post(client, "/command", {"command": as_command(args.command), "request_id": rid})
     if response.status_code >= 400:
         raise SystemExit("command refused")
     status = wait_flow(client, args.timeout)
@@ -140,7 +151,7 @@ def main():
 
     client = httpx.Client(base_url=args.server, timeout=5, trust_env=False)
     if args.action == "command":
-        post(client, "/command", {"command": args.text})
+        post(client, "/command", {"command": as_command(args.text)})
     elif args.action == "pinky":
         post(client, "/pinky", {"pinky_arrive": args.value == "true"})
     elif args.action == "status":

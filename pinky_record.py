@@ -9,6 +9,8 @@ Move the arms by hand with torque OFF, then run one line per pose:
   python pinky_record.py above_target         # right arm only (left keeps approach_high), as before
   python pinky_record.py above_target --arms left right   # record both arms here instead
   python pinky_record.py lift                 # both arms, object lifted
+  python pinky_record.py up_gripper           # after release: both arms straight up (z) out of the box
+  python pinky_record.py home_prepare         # then both arms outwards (x), clear of the box, before return
   python pinky_record.py hold                 # grippers closed on the object -> close = reading - 5
   python pinky_record.py open                 # grippers opened by hand as wide as wanted -> open (release),
                                               #   approach = rest + 2/3 of (open - rest), as before
@@ -28,8 +30,12 @@ from pathlib import Path
 from measure_pose import PORTS, normalize, read_raw
 
 SEQ = Path(__file__).with_name("pinky_sequence.json")
-STEPS = ("approach_high", "above_target", "lift")
-DEFAULT_ARMS = {"approach_high": ["left", "right"], "above_target": ["right"], "lift": ["left", "right"]}
+STEPS = ("approach_high", "above_target", "lift", "up_gripper", "home_prepare")
+DEFAULT_ARMS = {"approach_high": ["left", "right"], "above_target": ["right"], "lift": ["left", "right"],
+                "up_gripper": ["left", "right"], "home_prepare": ["left", "right"]}
+# Steps after release_gripper (run by release(), before return): created here when first recorded.
+AFTER_RELEASE = ("up_gripper", "home_prepare")
+NEW_STEP_TIME = 3.0
 
 
 def read_both():
@@ -98,7 +104,17 @@ def main():
             g["approach"] = round(g["rest"] + (g["open"] - g["rest"]) * 2 / 3, 2)
             print(f"{side} gripper open {old[0]} -> {g['open']}, approach {old[1]} -> {g['approach']}")
     else:
-        step = next(s for s in data["steps"] if s["name"] == args.pose)
+        step = next((s for s in data["steps"] if s["name"] == args.pose), None)
+        if step is None and args.pose in AFTER_RELEASE:
+            # Insert in order: release_gripper -> up_gripper -> home_prepare -> (return)
+            names = [s["name"] for s in data["steps"]]
+            before = ["release_gripper", *AFTER_RELEASE[:AFTER_RELEASE.index(args.pose)]]
+            at = max(names.index(n) for n in before if n in names) + 1
+            step = {"name": args.pose, "time": NEW_STEP_TIME}
+            if args.pose == "home_prepare":
+                step["gripper"] = "rest"  # close the grippers (start-pose value) while moving out
+            data["steps"].insert(at, step)
+            print(f"new step {args.pose} ({NEW_STEP_TIME}s) after {data['steps'][at - 1]['name']}")
         for side in args.arms or DEFAULT_ARMS[args.pose]:
             print(f"{args.pose} {side}: {step.get(side)} -> {pose[side][:5]}")
             step[side] = pose[side][:5]

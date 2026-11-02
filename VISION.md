@@ -16,8 +16,11 @@ POST /command {"command": "pick and place blue gauze", "request_id": "..."}
 
 - `blue` in the command -> only `blue_gauze`; `green` -> only `green_gauze`. No target in the
   work area -> the arm does not move and the command fails.
-- Grasp point: `green_gauze` = middle of the box's left edge (two smallest-x corners),
-  `blue_gauze` = middle of the right edge (two largest-x corners).
+- Grasp point: the two OBB edges closer to vertical in the picture are the side edges (right up to
+  ±45° of rotation); `green_gauze` = middle of the left side edge, `blue_gauze` = middle of the right one.
+- Wrist turn (`--obb-rotate`, off by default): the grasp edge goes through the click-pick calibration
+  to a table angle, and the recorded grasp direction (`grasp_reference_pulses` ID15) is turned by it,
+  so APPROACH..RETREAT grip along the edge. Over `--max-wrist-deg` (45) the pick is refused.
 - Work area: grasp point inside x 0~0.4, y 0.5~1 of the 640x480 frame (leaves out the black box)
   **and**, mapped to 1920x1080, inside the click-pick `regions_uv`.
 - YOLO runs at 640x480 (same as training). 640x480 = centre 1440x1080 of 1920x1080 scaled 2.25x:
@@ -48,6 +51,9 @@ on the server and `api_sender_yolo.py flow` without `--no-callback`.
 | `--callback-url URL` | old way: POST `{"end_point": true}` |
 | `--pinky` | both-arm pinky sequence after home (off by default) |
 | `--joint-offset ID:PULSES` + `--offset-stages` | add pulses to joints in stages (default APPROACH), e.g. `14:-100` |
+| `--obb-rotate` | turn the wrist (ID15) to the gauze angle from the OBB |
+| `--wrist-deg D` | extra table-frame wrist turn (deg, + = counter-clockwise from above); alone = manual test |
+| `--no-posture` | ignore `joint_offset_pulses` of omx_click_pick.json (test without the y correction) |
 | `--close-extra N` | close N pulses past `close_pulse` (thin bags, try 50~100) |
 | `--open-scale F` | OPEN width fraction (default 1) |
 | `--click-skip ...` | click-pick stages left out (default `LIFT DROP_RETREAT`) |

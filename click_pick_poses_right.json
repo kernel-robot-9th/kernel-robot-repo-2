@@ -1,0 +1,53 @@
+{
+  "note": "right arm click-pick stage poses (record_click_pose.py)",
+  "poses": {
+    "carry_high": {
+      "arm_pulses": [
+        2085,
+        1909,
+        1879,
+        3068,
+        2161
+      ],
+      "model_xyz_mm": [
+        204.7,
+        10.7,
+        183.4
+      ],
+      "gripper_pulse": 2031,
+      "recorded_at": "2026-10-28T17:42:40.254446+09:00"
+    },
+    "high": {
+      "arm_pulses": [
+        1947,
+        2031,
+        1936,
+        3041,
+        2161
+      ],
+      "model_xyz_mm": [
+        212.2,
+        -36.5,
+        126.5
+      ],
+      "gripper_pulse": 2031,
+      "recorded_at": "2026-10-28T17:50:06.180322+09:00"
+    },
+    "drop_release": {
+      "arm_pulses": [
+        2466,
+        2113,
+        1864,
+        3012,
+        2162
+      ],
+      "model_xyz_mm": [
+        185.5,
+        144.9,
+        119.2
+      ],
+      "gripper_pulse": 2033,
+      "recorded_at": "2026-10-30T15:08:35.510308+09:00"
+    }
+  }
+}
