@@ -11,6 +11,8 @@ import heapq
 import math
 import os
 import random
+import threading
+import time
 
 import yaml
 
@@ -102,6 +104,11 @@ def parse_request(body):
 # 노는 로봇 주차 자리: 로봇별 고정이 아니라 가장 가까운 빈자리. 차선 위 자리는 다른 로봇 길을 막으면 waiting() 이 비키게 함
 # (10-30 사용자). T2_20 은 콘센트 자리라 그래프에서 뺌 (10-28)
 PARKING = ['B1_20', 'B2_20', 'B1_78', 'B1_130', 'B1_180', 'B1_195', 'T1_20', 'T2_130', 'T1_175']
+# 약제실이 차 있으면 다음 로봇이 여기까지 와서 기다림 (10-30 사용자: 주차 자리에서 기다리면 약제실까지 오는 시간이
+# 로봇마다 줄줄이 더해져 한 대씩만 움직임). 약제실 나가는 길(GT99U·T1_98.9·T2_98.9)은 뺌.
+# 우측통행이라 약제실로 들어오는 쪽 차선만: 서쪽에서 오면 T1(동쪽 방향)_40, 동쪽에서 오면 T2(서쪽 방향)_130.
+# 반대 차선(T2_40·T1_130)은 약제실에서 나가는 로봇이 지나감 (시뮬레이션: T2_40 에서 나오는 로봇과 마주쳐 교착)
+PHARMACY_QUEUE = ['T1_40', 'T2_130']     # [서쪽에서 올 때, 동쪽에서 올 때]
 # B2_195 는 수술실 입구(GB180)에 너무 가까워 뺌.
 # CHARGER 는 막다른 곳이라 뺌. 같은 x 의 두 차선 자리(짝)에 약 실은 로봇 둘을 세우면 그 복도 끝을 아무도 못 지나가므로 짝은 하나만
 EAST_LANE = {'B': 'B1', 'T': 'T1'}                           # 우측통행: 동쪽(+x)으로 갈 때 쓰는 차선 (아래쪽 차선)
@@ -131,6 +138,7 @@ class Params:
         self.dispatch_s = 0.5
         self.planner = 'cbs'       # cbs = 시공간 A* + CBS 로 시간까지 계획 / reserve = 최단 경로 + 구간 예약만
         self.plan_step = 1.0       # CBS 시간 칸 (초)
+        self.plan_async = 'sync'   # sync | thread (서버: 계산 중에도 틱이 돎) | emulate (헤드리스: 계산 시간만큼 늦게 적용)
         for k, v in kw.items():
             setattr(self, k, v)
 
@@ -411,8 +419,9 @@ class FMS:
         self.auto_rate = 0.0         # 분당 자동 주문 수
         self._next_auto = None
         self.planner = Planner(self.g, self.p.speed, step=self.p.plan_step, near_cm=NEAR_CM, wrong_lane=self.p.wrong_lane)   # 실측 시간·회전
-        self.plan_stats = dict(replans=0, cbs=0, prioritized=0, failed=0, last=None)
+        self.plan_stats = dict(replans=0, cbs=0, ecbs=0, prioritized=0, failed=0, last=None)
         self.last_plans = {}
+        self._plan_job, self._replan_again, self._last_replan = None, None, 0.0
         for r in self.robots:                   # 실제 로봇: 시작 노드 = 로봇이 보고한 노드
             if links and r.name in links:
                 self.attach_real(r, links[r.name])
@@ -733,7 +742,7 @@ class FMS:
         return next((m for m in PARKING if m != s and self.g.xy(m)[0] == x
                      and self.g.nodes[m].get('lane', ' ')[0] == lane[0]), None)
 
-    def free_parking(self, r, taken, avoid=()):
+    def free_parking(self, r, taken, avoid=(), spots_from=None, key=None):
         """가장 가까운 빈 주차 자리. 약을 실었으면 짝 자리에 실은 로봇이 있거나 누가 가는 중인 자리는 뺀다.
         다른 로봇이 지금 가는 길 위(와 그 가까이)의 자리도 뺀다"""
         occ = {o.node: o for o in self.robots if o is not r}
@@ -746,14 +755,14 @@ class FMS:
                     if st['kind'] == 'move':
                         going[st['to']] = o
         spots = []
-        for s in PARKING:
+        for s in (spots_from or PARKING):
             if s in occ or s in taken or s in avoid or s in going or s in onpath:
                 continue
             m = self.parking_partner(s)
             if r.loaded and m and ((m in occ and occ[m].loaded) or (m in going and going[m].loaded) or m in taken):
                 continue
             spots.append(s)
-        return min(spots, key=lambda s: self.g.dist(r.node, s)) if spots else None
+        return min(spots, key=key or (lambda s: self.g.dist(r.node, s))) if spots else None
 
     def new_bundle(self, waiting):
         """먼저 들어온 주문부터 씨앗으로: 그 주문을 POCKET 없이 끝낼 수 있는 노는 로봇이 있으면 묶음을 만든다.
@@ -864,27 +873,28 @@ class FMS:
             return True
         dz = self.g.stop_zones(to) | set(r.step.get('also', ()))     # 충전하러 가면 POCKET 들르기 전에 충전기 자리도
         nodes, _, zones, _ = self.other_holds(r)
+
+        def hold(why, blockers):                # 약제실이면 지금 자리 말고 약제실 앞 대기 자리로 가서 기다림
+            if not (to == PHARMACY and self.go_queue(r)):
+                self.waiting(r, why, blockers)
+            return False
         busy = [z for z in dz if z in zones]
         if busy:
-            self.waiting(r, f'{to} 차례 기다림 ({zones[busy[0]].id})', [zones[busy[0]]])
-            return False
+            return hold(f'{to} 차례 기다림 ({zones[busy[0]].id})', [zones[busy[0]]])
         for o in self.robots:                   # 같은 구역을 더 오래 기다린 로봇이 먼저
             if o is r or not (o.step and o.step['kind'] == 'move' and not o.step.get('started')):
                 continue
             if self.dest_zones_of(o) & dz and o.wait_s > r.wait_s + 1e-9:
-                self.waiting(r, f'{to} 차례 기다림 ({o.id} 먼저)', [o])
-                return False
+                return hold(f'{to} 차례 기다림 ({o.id} 먼저)', [o])
         for o in self.robots:                   # 그 구역 안쪽 막다른 곳(예: POCKET 뒤 CHARGER)에 있는 로봇이 먼저 나온다
             if o is not r and self.trapped_behind(o.node, dz):
-                self.waiting(r, f'{to} 차례 기다림 ({o.id} 나오는 중)', [o])
-                return False
+                return hold(f'{to} 차례 기다림 ({o.id} 나오는 중)', [o])
         for o in self.robots:                   # 그 구역을 지나가야 하는 로봇이 이미 출발했으면 먼저 보낸다
             if o is r or not (o.step and o.step['kind'] == 'move' and o.step.get('started') and o.path):
                 continue
             rest = o.path[o.k:]
             if any(self.g.edge[(rest[i], rest[i + 1])]['zone'] in dz for i in range(len(rest) - 1)):
-                self.waiting(r, f'{to} 차례 기다림 ({o.id} 지나가는 중)', [o])
-                return False
+                return hold(f'{to} 차례 기다림 ({o.id} 지나가는 중)', [o])
         if not self.trapped_behind(r.node, self.g.stop_zones(r.node) | {self.g.edge[(r.node, m)]['zone'] for m in self.g.adj[r.node]}):
             self.plan(r)                        # 막다른 곳에 갇힌 게 아니면: 오래(15초+) 기다리는 로봇의 목적지 구역을 지나가는 이동은 보류
             if r.path:
@@ -902,6 +912,24 @@ class FMS:
         if r.path is not None:
             self.replan_all(f'{r.id} 출발')
         return r.path is not None
+
+    def go_queue(self, r):
+        """약제실 차례를 기다릴 로봇을 약제실 앞 대기 자리로 보낸다: 서쪽에서 오면 T1_40, 동쪽에서 오면 T2_130
+        (약제실을 지나쳐 가지 않게 온 쪽 자리만). 비어 있고 지금 자리보다 약제실에 가까울 때만. 보냈으면 True"""
+        if r.node in PHARMACY_QUEUE:
+            return False
+        g = self.g
+        spot = PHARMACY_QUEUE[0] if g.xy(r.node)[0] <= g.xy(PHARMACY)[0] else PHARMACY_QUEUE[1]
+        taken = {o.node for o in self.robots if o is not r} | \
+                {st['to'] for o in self.robots if o is not r for st in ([o.step] if o.step else []) + o.queue if st['kind'] == 'move'}
+        onpath = {n for o in self.robots if o is not r and o.path for n in o.path[o.k:]}   # 지금 지나갈 로봇이 있으면 지나간 뒤에
+        if spot in taken | onpath or g.near[spot] & (taken | onpath) or g.dist(spot, PHARMACY) >= g.dist(r.node, PHARMACY):
+            return False
+        self.log(f'{r.id}: 약제실 차례 → 앞 대기 자리 {spot} 에서 기다림')
+        r.queue.insert(0, dict(r.step, started=False))
+        r.step = dict(kind='move', to=spot, queue_spot=True)
+        self.next_step_init_move(r)
+        return True
 
     def dest_zones_of(self, o):
         return self.g.stop_zones(o.step['to']) | set(o.step.get('also', ()))
@@ -955,12 +983,65 @@ class FMS:
         legs.append([goal, dwell if more else INF, lo])     # 그 뒤 이동이 없으면 계속 거기 있음
         return [(gl, INF if d >= INF else max(1, math.ceil(d / step)), lo_) for gl, d, lo_ in legs]
 
+    PLAN_WINDOW_S = 30.0    # CBS 가 푸는 충돌: 앞으로 이 시간 안. 그 뒤 충돌은 다음 계획에서 (RHCR, 11-02)
+    REPLAN_EVERY_S = 5.0    # 움직이는 로봇이 있으면 이 간격으로 다시 계획 (창을 앞으로 밂)
+
     def replan_all(self, why=''):
         """CBS 로 다시 계획. 움직이는 로봇 = 지금 목적지 + 거기서 머무는 시간 + 다음 목적지.
         작업 중(정밀 주차·적재·회전·POCKET·충전)이고 다음 이동이 정해진 로봇 = 남은 작업 시간 뒤 다음 목적지로 (계획만, 실행은 출발 때 다시).
-        그 밖의 서 있는 로봇 = 끝까지 그 자리"""
+        그 밖의 서 있는 로봇 = 끝까지 그 자리.
+        계산 방식 p.plan_async: 'sync' = 여기서 바로 (헤드리스 기본), 'thread' = 따로 스레드 (서버: 계산하는 동안 틱이 안 멈춤),
+        'emulate' = 여기서 계산하되 걸린 시간만큼 시뮬레이션 시간이 지난 뒤 적용 (헤드리스로 'thread' 흉내).
+        계산 중에 또 부르면 끝난 뒤 한 번 더 한다"""
         if self.p.planner != 'cbs':
             return
+        if self._plan_job is not None:
+            self._replan_again = why or '다시'
+            return
+        self._last_replan = self.t
+        snap = self._plan_inputs()
+        if snap is None:
+            return
+        agents, statics, info = snap
+        win = max(1, math.ceil(self.PLAN_WINDOW_S / self.p.plan_step)) if self.PLAN_WINDOW_S else None
+        job = dict(agents=agents, info=info, why=why, now=self.t, plans=None, stats=None, done=False)
+
+        def run():
+            t0 = time.time()
+            job['plans'] = self.planner.solve(agents, statics, window=win)
+            job['stats'] = dict(self.planner.last)
+            job['wall'] = time.time() - t0
+            job['done'] = True
+        mode = self.p.plan_async
+        if mode == 'thread':
+            self._plan_job = job
+            threading.Thread(target=run, daemon=True).start()
+            return
+        run()
+        if mode == 'emulate':
+            job['ready_t'] = self.t + job['wall']
+            self._plan_job = job
+            return
+        self._apply_plans(job)
+
+    def poll_plan(self):
+        """틱마다: 끝난 계획을 적용하고, 그동안 쌓인 요청·주기 다시 계획"""
+        job = self._plan_job
+        if job is not None:
+            if not job['done'] or self.t < job.get('ready_t', -1.0):
+                return
+            self._plan_job = None
+            self._apply_plans(job)
+        if self._replan_again:
+            why, self._replan_again = self._replan_again, None
+            self.replan_all(why)
+        elif self.p.planner == 'cbs' and self.t - self._last_replan >= self.REPLAN_EVERY_S and any(
+                r.step and r.step['kind'] == 'move' and r.step.get('started') for r in self.robots):
+            self.replan_all('주기')
+
+    def _plan_inputs(self):
+        """계획 입력을 지금 상태에서 복사: (agents, statics, info) 또는 None (움직이는 로봇 없음).
+        info = 로봇마다 계획을 만든 순간의 상태 (적용할 때 그 뒤 움직였는지 보려고)"""
         g, step, now = self.g, self.p.plan_step, self.t
         agents, statics, movers = [], [], {}
         for r in self.robots:
@@ -1002,20 +1083,35 @@ class FMS:
             else:
                 statics.append(Item(g, 'node', r.node, 0, INF, r.loaded, r.id, zones=r.holds()[2]))
         if not movers:
-            return
-        plans = self.planner.solve(agents, statics)
+            return None
+        info = {}
+        for rid, r in movers.items():
+            u = r.path[r.k] if r.path else r.node
+            on_edge = (u, r.path[r.k + 1]) if r.edge_t > 0 and r.path and r.k + 1 < len(r.path) else None
+            info[rid] = dict(r=r, step=r.step, node=r.node, on_edge=on_edge,
+                             drive_j=r.drive['j'] if r.link and r.drive and r.drive['kind'] == 'drive' else None)
+        return agents, statics, info
+
+    def _apply_plans(self, job):
+        plans, info, why, now = job['plans'], job['info'], job['why'], job['now']
+        step = self.p.plan_step
         st = self.plan_stats
         st['replans'] += 1
-        st[self.planner.last['mode']] += 1
-        st['last'] = dict(self.planner.last, why=why, t=round(now, 1))
-        legs_of = {a['id']: a['legs'] for a in agents}
+        st[job['stats']['mode']] = st.get(job['stats']['mode'], 0) + 1
+        st['last'] = dict(job['stats'], why=why, t=round(now, 1), wall_ms=round(job['wall'] * 1000, 1))
+        st.setdefault('wall', []).append(job['wall'])
+        legs_of = {a['id']: a['legs'] for a in job['agents']}
         self.last_plans = {}                    # 화면용 예정표: 목적지마다 도착·떠날 시각
         for rid, p_ in plans.items():
             lg = legs_of[rid]
             self.last_plans[rid] = [dict(node=n, arrive=round(now + ta * step, 1),
                                          leave=None if td >= INF else round(now + td * step, 1))
                                     for n, ta, td, li, _ in p_ if li < len(lg) and n == lg[li][0]]
-        for rid, r in movers.items():
+        stale = False
+        for rid, m in info.items():
+            r = m['r']
+            if r.step is not m['step'] or not r.step or r.step['kind'] != 'move':
+                continue                        # 그사이 이 이동이 끝났거나 바뀜
             plan = plans.get(rid)
             if plan is None:
                 st['failed'] += 1
@@ -1028,12 +1124,27 @@ class FMS:
             nodes = [e[0] for e in plan]
             dep = [now + e[2] * step if e[2] < INF else INF for e in plan]
             dep[-1] = INF
-            if r.link and r.drive and r.drive['kind'] == 'drive':    # 달리는 묶음은 그대로, 그 뒤만 바꿈
-                j = r.drive['j']
-                r.path, r.depart = r.path[:j] + nodes, [now] * j + dep
+            if m['drive_j'] is not None:        # 실제 로봇이 달리는 묶음은 그대로, 그 뒤만 바꿈
+                if r.link and r.drive and r.drive['kind'] == 'drive' and r.drive['j'] == m['drive_j']:
+                    j = r.drive['j']
+                    r.path, r.depart = r.path[:j] + nodes, [now] * j + dep
+                else:
+                    stale = True
                 continue
+            # 계획을 만든 뒤 로봇이 움직였으면 맞는 데서 이어 붙임 (스레드로 계산하면 그사이 틱이 돎)
+            e0 = m['on_edge'] or (m['node'], nodes[1] if len(nodes) > 1 else None)
             if r.edge_t > 0:
-                nodes, dep = [r.path[r.k]] + nodes, [now] + dep
+                cur = tuple(r.path[r.k:r.k + 2])
+                if m['on_edge'] and cur == m['on_edge']:
+                    nodes, dep = [cur[0]] + nodes, [now] + dep              # 만들 때 지나던 엣지를 아직 지나는 중
+                elif not m['on_edge'] and cur == e0:
+                    dep = [now] + dep[1:]                                    # 그사이 계획의 첫 엣지로 들어섬
+                else:
+                    stale = True
+                    continue
+            elif r.node != (m['on_edge'][1] if m['on_edge'] else m['node']):
+                stale = True
+                continue
             elif (r.depart is not None and r.k + 1 < len(r.path) and len(nodes) > 1
                   and nodes[:2] == r.path[r.k:r.k + 2]):
                 # 다음 엣지가 같으면 이미 기다린(회전한) 시간을 버리지 않는다. 10-30: 막힌 로봇이 2초마다 다시 계획 →
@@ -1043,6 +1154,8 @@ class FMS:
             r.k = 0
             r.res_to = 1 if r.edge_t > 0 else 0         # 지나는 중인 엣지만 남기고 예약은 출발 시각에 다시
             r.extra_nodes = set()
+        if stale:
+            self._replan_again = self._replan_again or '계획 중에 움직임'
 
     def plan(self, r, penalize=False):
         to = r.step['to']
@@ -1563,6 +1676,7 @@ class FMS:
                 self._next_auto += self.rng.expovariate(self.auto_rate / 60.0)
         else:
             self._next_auto = None
+        self.poll_plan()
         if self.t >= self._next_dispatch:
             self.dispatch()
             self._next_dispatch = self.t + self.p.dispatch_s

@@ -24,12 +24,23 @@ def main():
     ap.add_argument('--dt', type=float, default=0.1)
     ap.add_argument('--planner', default='cbs', choices=['cbs', 'reserve'], help='cbs = A*+CBS, reserve = 최단 경로+예약')
     ap.add_argument('--legs', type=int, default=None, help='CBS 가 내다보는 목적지 수 (기본 FMS.PLAN_LEGS)')
+    ap.add_argument('--plan-async', default='sync', choices=['sync', 'emulate'],
+                    help='emulate = 계산에 걸린 시간만큼 시뮬레이션 시간이 지난 뒤 적용 (서버의 따로 스레드 계산 흉내)')
+    ap.add_argument('--window', type=float, default=None, help='CBS 가 푸는 충돌 시간 창 s (0 = 끝까지, 기본 FMS.PLAN_WINDOW_S)')
+    ap.add_argument('--no-corridor', action='store_true', help='CBS 협로 추론 끔 (비교용)')
+    ap.add_argument('--every', type=float, default=None, help='움직이는 로봇이 있을 때 다시 계획 간격 s (0 = 안 함)')
     a = ap.parse_args()
 
     f = FMS(n_robots=a.robots, seed=a.seed)
     f.p.planner = a.planner
     if a.legs:
         f.PLAN_LEGS = a.legs
+    f.p.plan_async = a.plan_async
+    f.planner.corridor = not a.no_corridor
+    if a.window is not None:
+        f.PLAN_WINDOW_S = a.window or None
+    if a.every is not None:
+        f.REPLAN_EVERY_S = a.every or float('inf')
     f.auto_rate = a.rate
     steps = int(a.minutes * 60 / a.dt)
     max_wait = collections.defaultdict(float)
@@ -76,7 +87,7 @@ def main():
     ps = f.plan_stats
     ms.sort()
     tail = f", 계산 중앙 {ms[len(ms) // 2]}ms · 95% {ms[int(len(ms) * 0.95)]}ms · 최대 {ms[-1]}ms" if ms else ''
-    print(f"계획: {ps['replans']}번 (CBS {ps['cbs']}, 우선순위 {ps['prioritized']}, 못 풂 {ps['failed']}){tail}")
+    print(f"계획: {ps['replans']}번 (CBS {ps['cbs']}, ECBS {ps.get('ecbs', 0)}, 우선순위 {ps['prioritized']}, 못 풂 {ps['failed']}){tail}")
     for r in f.robots:
         print(f'  {r.id}: {r.state_name():9s} node {r.node:10s} 피로도 {r.fatigue:3d} 오염 {r.contam:3d} 적재 {r.load} 주문 {len(r.assigned)} '
               f'{("기다림 " + r.wait_why) if r.wait_s else ""}')
