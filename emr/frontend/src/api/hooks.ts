@@ -222,16 +222,12 @@ export function useDeliveryMutations() {
     create: useMutation({ mutationFn: (b: DeliveryCreate) => api.post<Delivery>('/deliveries', b), onSuccess: invalidate, meta: { action: '물품 신청' } }),
     // 여러 병동 신청 (2026-10-30) — 병동마다 1건
     createMulti: useMutation({ mutationFn: (b: DeliveryMultiCreate) => api.post<Delivery[]>('/deliveries/multi', b), onSuccess: invalidate, meta: { action: '물품 신청' } }),
-    // 변경·취소는 실패해도(409: 이미 취소됨 등) 목록을 다시 불러와 화면을 서버 상태에 맞춘다
+    // 변경은 실패해도(409: 이미 취소됨 등) 목록을 다시 불러와 화면을 서버 상태에 맞춘다
+    // 취소는 2026-11-02 화면에서 뺐다 (백엔드 POST /deliveries/{id}/cancel은 남김)
     update: useMutation({
       mutationFn: ({ id, body }: { id: number; body: DeliveryUpdate }) => api.patch<Delivery>(`/deliveries/${id}`, body),
       onSettled: invalidate,
       meta: { action: '물품 신청 변경' },
-    }),
-    cancel: useMutation({
-      mutationFn: (id: number) => api.post<Delivery>(`/deliveries/${id}/cancel`),
-      onSettled: invalidate,
-      meta: { action: '물품 신청 취소' },
     }),
     // "받았습니다" — 도착한 본인 배송 수령 (2026-10-22, 마커 대신). 실패(409 이미 끝남)해도 목록을 서버 상태에 맞춘다
     confirmReceipt: useMutation({

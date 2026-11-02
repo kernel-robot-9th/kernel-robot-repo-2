@@ -1,6 +1,7 @@
 // =============================================================================
 // 파일   : src/pages/Deliveries.tsx
-// 역할   : 본인 배송 예약 목록 + 생성 + 변경(reserved만) + 취소(reserved만) + 배송 단계 + 일회용 수령 마커
+// 역할   : 본인 배송 예약 목록 + 생성 + 변경(reserved만) + 배송 단계 + 일회용 수령 마커
+//          (취소 버튼은 2026-11-02 사용자 결정으로 화면에서 뺌 — 백엔드 POST /deliveries/{id}/cancel은 남김)
 // 작성일 : 2026-10-14
 // 구성   :
 //   - Deliveries   목록 테이블. 장소·비품 id를 이름으로 치환. 로봇이 상태를 바꾸므로 다시 불러온다
@@ -22,7 +23,7 @@ export function Deliveries() {
   const deliveries = useDeliveries()
   const locations = useLocations()
   const supplies = useSupplies()
-  const { cancel, confirmReceipt } = useDeliveryMutations()
+  const { confirmReceipt } = useDeliveryMutations()
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<number | null>(null)
   const [historyId, setHistoryId] = useState<number | null>(null)   // '자세히' 창 — 등록한 시각도 여기서 보인다 (2026-10-27)
@@ -33,12 +34,6 @@ export function Deliveries() {
   const rows = [...(deliveries.data ?? [])].sort((a, b) => b.scheduled_at.localeCompare(a.scheduled_at))
   // 다시 불러온 목록에서 예약됨이 아니면(취소·수령됨) 변경 폼을 닫는다
   const editing = rows.find(d => d.id === editId && d.status === 'reserved')
-
-  const cancelDelivery = (deliveryId: number) => {
-    if (!confirm(`NO ${deliveryId} 신청을 취소할까요?`)) return
-    if (deliveryId === editId) setEditId(null)
-    cancel.mutate(deliveryId)
-  }
 
   return (
     <div className="space-y-4">
@@ -72,10 +67,7 @@ export function Deliveries() {
                 <Td className="w-56">
                   <div className="flex justify-end gap-1">
                     {d.status === 'reserved' && (
-                      <>
-                        <Button variant="secondary" onClick={() => { setShowForm(false); setEditId(d.id) }}>변경</Button>
-                        <Button variant="danger" onClick={() => cancelDelivery(d.id)} disabled={cancel.isPending}>취소</Button>
-                      </>
+                      <Button variant="secondary" onClick={() => { setShowForm(false); setEditId(d.id) }}>변경</Button>
                     )}
                     {d.status === 'arrived' && d.receipt_method === 'button' && (
                       <Button onClick={() => confirmReceipt.mutate(d.id)} disabled={confirmReceipt.isPending}>받았습니다</Button>
