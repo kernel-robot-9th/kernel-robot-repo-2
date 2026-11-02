@@ -1,0 +1,8 @@
+delivery_id	request_id	fms_order_id	batch_id	fms_robot	status	sent_kst	delivered_kst
+354	emr-d354-s3-1	o-1	b-1	1	delivered	11:19:01	11:24:02
+355	emr-d355-s3-1	o-2	b-1	1	delivered	11:19:01	11:22:11
+356	emr-d356-s5-1	o-3	b-2	3	delivered	11:22:31	11:30:59
+356	emr-d356-s6-1	o-4	b-2	3	delivered	11:22:31	11:30:59
+357	emr-d357-s2-1	o-5	b-2	3	delivered	11:22:31	11:33:06
+358	emr-d358-s1-1	o-6	b-3	1	delivered	11:32:42	11:41:30
+358	emr-d358-s3-1	o-7	b-3	1	delivered	11:32:42	11:41:30

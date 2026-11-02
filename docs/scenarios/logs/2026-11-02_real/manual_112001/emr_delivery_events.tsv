@@ -1,0 +1,27 @@
+delivery_id	event_type	time_kst	actor	robot	details
+354	reserved	11:19:00	nurse		{"items": [{"name": "C 약품", "quantity": 1, "supply_id": 3}], "destination": {"id": 20, "name": "103호"}, "scheduled_at": "2026-11-02T02:19:00.898000+00:00"}
+355	reserved	11:19:00	nurse		{"items": [{"name": "C 약품", "quantity": 1, "supply_id": 3}], "destination": {"id": 12, "name": "105호"}, "scheduled_at": "2026-11-02T02:19:00.898000+00:00"}
+354	preparing	11:19:41	robot	배송로봇 1호	null
+355	preparing	11:19:41	robot	배송로봇 1호	null
+354	dispatched	11:20:32	robot	배송로봇 1호	null
+355	dispatched	11:20:32	robot	배송로봇 1호	null
+355	arrived	11:22:11	robot	배송로봇 1호	null
+355	received	11:22:13	nurse		null
+356	reserved	11:22:27	nurse		{"items": [{"name": "이불", "quantity": 1, "supply_id": 5}, {"name": "매트리스 패드", "quantity": 1, "supply_id": 6}], "destination": {"id": 12, "name": "105호"}, "scheduled_at": "2026-11-02T02:22:27.833000+00:00"}
+357	reserved	11:22:27	nurse		{"items": [{"name": "B 약품", "quantity": 1, "supply_id": 2}], "destination": {"id": 13, "name": "107호"}, "scheduled_at": "2026-11-02T02:22:27.833000+00:00"}
+356	preparing	11:23:15	robot	배송로봇 3호	null
+357	preparing	11:23:15	robot	배송로봇 3호	null
+354	arrived	11:24:02	robot	배송로봇 1호	null
+354	received	11:26:40	nurse		null
+356	dispatched	11:29:39	robot	배송로봇 3호	null
+357	dispatched	11:29:39	robot	배송로봇 3호	null
+356	arrived	11:30:59	robot	배송로봇 3호	null
+356	received	11:31:08	nurse		null
+358	reserved	11:31:57	nurse		{"items": [{"name": "A 약품", "quantity": 1, "supply_id": 1}, {"name": "C 약품", "quantity": 1, "supply_id": 3}], "destination": {"id": 12, "name": "105호"}, "scheduled_at": "2026-11-02T02:41:00+00:00"}
+358	updated	11:32:42	nurse		{"scheduled_at": {"to": "2026-11-02T02:32:42.113000+00:00", "from": "2026-11-02T02:41:00+00:00"}}
+357	arrived	11:33:06	robot	배송로봇 3호	null
+357	received	11:33:15	nurse		null
+358	preparing	11:39:08	robot	배송로봇 1호	null
+358	dispatched	11:40:12	robot	배송로봇 1호	null
+358	arrived	11:41:30	robot	배송로봇 1호	null
+358	received	11:41:49	nurse		null
