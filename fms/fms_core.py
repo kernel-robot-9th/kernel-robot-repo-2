@@ -1120,7 +1120,8 @@ class FMS:
             u = r.path[r.k] if r.path else r.node
             on_edge = (u, r.path[r.k + 1]) if r.edge_t > 0 and r.path and r.k + 1 < len(r.path) else None
             info[rid] = dict(r=r, step=r.step, node=r.node, on_edge=on_edge,
-                             drive_j=r.drive['j'] if r.link and r.drive and r.drive['kind'] == 'drive' else None)
+                             drive_j=r.drive['j'] if r.link and r.drive and r.drive['kind'] == 'drive' else None,
+                             drive_cid=r.drive['cid'] if r.link and r.drive else None)
         return agents, statics, info
 
     def _apply_plans(self, job):
@@ -1155,6 +1156,11 @@ class FMS:
             nodes = [e[0] for e in plan]
             dep = [now + e[2] * step if e[2] < INF else INF for e in plan]
             dep[-1] = INF
+            if r.link and r.drive and r.drive['cid'] != m['drive_cid']:
+                # 11-02 충돌: 서 있을 때 계획을 시작 → 계산 중에 /drive 가 나감 → 달리는 중에 r.path 를 갈아 끼움 →
+                # 주행이 끝나자 새 경로의 같은 순번(T2_98.9)에 있다고 믿음 (실제는 T1_98.9). 그사이 보낸 /drive 가 있으면 버림
+                stale = True
+                continue
             if m['drive_j'] is not None:        # 실제 로봇이 달리는 묶음은 그대로, 그 뒤만 바꿈
                 if r.link and r.drive and r.drive['kind'] == 'drive' and r.drive['j'] == m['drive_j']:
                     j = r.drive['j']
@@ -1508,6 +1514,13 @@ class FMS:
     def real_fault(self, r, code, why=None):
         """실제 로봇 실패: 그 자리(지나던 엣지 포함)를 계속 차지한 채 멈춤. 관제 PC 에 robot_error, 다른 로봇은 다시 계획"""
         edge = [r.path[r.k], r.path[r.k + 1]] if r.edge_t > 0 and r.path and r.k < len(r.path) - 1 else None
+        node = (r.link.drive_status() or {}).get('node')
+        if not edge and node in self.g.nodes and node != r.node:
+            # 로봇이 보고한 노드를 믿음 (11-02: FMS 는 T2_98.9, 로봇은 T1_98.9 → 빈 줄 안 T1_98.9 로 다른 로봇을 들여보냄)
+            self.log(f'{r.id} ({r.name}): FMS 는 {r.node}, 로봇은 {node} 에 있다고 보고 → {node} 로 고침', 'warn')
+            r.node, r.pos, r.depart = node, self.g.xy(node), None
+            if r.step and r.step['kind'] == 'move':
+                self.plan(r)                    # 고친 노드에서 다시 (아래 replan_all 이 CBS 로 덮어씀)
         r.fault = dict(code=code, why=why, t=round(self.t, 1), node=None if edge else r.node, edge=edge)
         r.drive = None
         self.log(f'{r.id} ({r.name}) 실패: {code} {why or ""} @ {edge or r.node}', 'violation')
