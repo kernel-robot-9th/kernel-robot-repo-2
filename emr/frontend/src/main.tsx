@@ -8,7 +8,7 @@ import { createRoot } from 'react-dom/client'
 import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { Mutation } from '@tanstack/react-query'
 import { RouterProvider } from 'react-router'
-import { ApiRequestError } from './api/client'
+import { ApiRequestError, isBedsideKeyError } from './api/client'
 import { ErrorDialogHost } from './components/ErrorDialog'
 import { showErrorDialog } from './components/errorDialogStore'
 import { router } from './router'
@@ -20,6 +20,7 @@ import './index.css'
  */
 function redirectToLoginOn401(err: unknown): boolean {
   if (!(err instanceof ApiRequestError) || err.status !== 401) return false
+  if (isBedsideKeyError(err)) return false   // 병상 화면은 간호사 로그인과 별개 — 그 화면이 키 입력으로 돌아간다 (2026-10-22)
   queryClient.clear()
   void router.navigate('/login', { state: { expired: true } })
   return true
@@ -30,6 +31,7 @@ function redirectToLoginOn401(err: unknown): boolean {
  */
 function showMutationError(err: unknown, _variables: unknown, _context: unknown, mutation: Mutation<unknown, unknown, unknown>): void {
   if (redirectToLoginOn401(err)) return
+  if (mutation.meta?.inline) return   // 화면이 직접 안내한다 (병상 화면)
   showErrorDialog(`${mutation.meta?.action ?? '요청'}에 실패했습니다`, err)
 }
 

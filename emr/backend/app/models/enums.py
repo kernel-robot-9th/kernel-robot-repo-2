@@ -7,6 +7,9 @@
 #   - SupplyCategory / RequestableBy  비품 분류
 #   - DeliveryStatus                  배송 상태
 #   - DeliveryFailureReason           배송 실패 사유 (2026-10-20)
+#   - DeliveryEventType / DeliveryEventActor  배송 기록 사건 종류·누가 (2026-10-21, 로드맵 4단계 · bedside 2026-10-22)
+#   - DeliveryRequester               배송을 만든 쪽 (간호사 예약·병상 단말 환자 요청, 2026-10-22)
+#   - ReceiptMethod                   수령 방법 (DB에 저장하지 않음 — Delivery.receipt_method가 계산, 2026-10-23 문자열에서 옮김)
 #   - RobotType / RobotStatus         로봇 종류·상태
 #   - NotificationEvent               실시간 알림 종류 (DB에 저장하지 않음, SSE event 이름)
 #   - check_values()                  CHECK 제약용 IN 리스트
@@ -56,6 +59,40 @@ class DeliveryFailureReason(StrEnum):
     NOT_RECEIVED = "not_received"                # 도착 후 수령 대기 시간 안에 수령 없음
     DESTINATION_BLOCKED = "destination_blocked"  # 목적지가 실행기 설정의 금지 장소
     ROBOT_ERROR = "robot_error"                  # 그 밖의 로봇 쪽 오류
+
+
+class DeliveryEventType(StrEnum):
+    """배송 기록(delivery_events)의 사건 종류 (2026-10-21, 로드맵 4단계).
+    간호사: 예약·변경·취소. 로봇: 출발(claim)·도착·수령·실패. 상태가 실제로 바뀐 때만 남긴다(멱등 재보고·거부는 남기지 않음).
+    """
+    RESERVED = "reserved"      # 간호사 예약
+    UPDATED = "updated"        # 간호사 변경 (바뀐 값만 details에)
+    CANCELLED = "cancelled"    # 간호사 취소
+    DISPATCHED = "dispatched"  # 로봇이 맡아 출발
+    ARRIVED = "arrived"        # 로봇 도착 보고 (일회용 마커 번호는 기록하지 않음)
+    RECEIVED = "received"      # 로봇이 일회용 마커로 수령 확인
+    FAILED = "failed"          # 로봇 실패 보고 (사유는 details)
+
+
+class DeliveryEventActor(StrEnum):
+    """배송 기록의 행위자 종류."""
+    NURSE = "nurse"
+    ROBOT = "robot"
+    BEDSIDE = "bedside"   # 병상 단말 (환자 요청·받았습니다 버튼, 2026-10-22)
+
+
+class DeliveryRequester(StrEnum):
+    """배송을 만든 쪽 (2026-10-22). 병상 배송은 간호사 승인 없이 바로 생기고, 수령은 병상 화면 버튼으로."""
+    NURSE = "nurse"       # 간호사 예약 — 수령은 일회용 마커
+    BEDSIDE = "bedside"   # 병상 단말 환자 요청 — 수령은 "받았습니다" 버튼
+
+
+class ReceiptMethod(StrEnum):
+    """수령 방법. 저장하지 않고 배송마다 계산한다(Delivery.receipt_method). 설정 NURSE_RECEIPT_METHOD는 button·marker만."""
+    BUTTON = "button"   # 간호사·환자가 화면에서 "받았습니다"
+    MARKER = "marker"   # 로봇이 일회용 마커를 읽음 (간호사 배송, NURSE_RECEIPT_METHOD=marker)
+    NONE = "none"       # 로봇 전용 장소(충전 등)로의 품목 없는 이동 — 도착 보고가 곧 완료
+
 
 class RobotType(StrEnum):
     """로봇 종류. 등록 후 바꿀 수 없다."""

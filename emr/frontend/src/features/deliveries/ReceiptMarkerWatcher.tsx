@@ -1,6 +1,7 @@
 // =============================================================================
 // 파일   : src/features/deliveries/ReceiptMarkerWatcher.tsx
-// 역할   : 도착한 내 배송의 일회용 수령 마커 창을 화면 어디서든 띄운다 — Layout에 한 번 둔다 (2026-10-20)
+// 역할   : 도착한 내 배송의 수령 창을 화면 어디서든 띄운다 — Layout에 한 번 둔다 (2026-10-20)
+//          창 안은 receipt_method에 따라 "받았습니다" 버튼(2026-10-22 기본) 또는 일회용 마커
 // 작성일 : 2026-10-20
 // 구성   :
 //   - ReceiptMarkerWatcher  내 배송 목록(5초마다 새로 고침, SSE 도착 알림이 오면 즉시)에서 arrived + 마커인 것을 찾아
@@ -19,7 +20,8 @@ export function ReceiptMarkerWatcher() {
   const requested = useReceiptMarkerRequest()
   const [dismissed, setDismissed] = useState<ReadonlySet<number>>(() => new Set())
 
-  const waiting = (deliveries.data ?? []).filter(delivery => delivery.status === 'arrived' && delivery.receipt_marker_id != null)
+  const waiting = (deliveries.data ?? []).filter(delivery => delivery.status === 'arrived'
+    && (delivery.receipt_method === 'button' || delivery.receipt_marker_id != null))
   const shown = waiting.find(delivery => delivery.id === requested)
     ?? waiting.find(delivery => !dismissed.has(delivery.id))
   if (!shown) return null

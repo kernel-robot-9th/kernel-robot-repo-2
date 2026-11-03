@@ -9,10 +9,6 @@ camera_settings: ~/dev_ws/robot/calib/camera_settings.yaml   # fixed exposure / 
 
 align_duration_s: 10.0              # follower moves to the leader pose this slowly before teleop starts
 align_skip_deg: 3.0                 # no alignment if every joint is already this close
-tap_speed_deg_s: 15.0               # teleop tap: joint speed (slowest joint sets the time; min 3 s, touch/lift 6 s)
-gripper:                            # gripper_joint_1 (rad) on the real follower, read on 2026-10-20
-  open: 0.68                        # fingers out of the wrist image
-  close: -0.15                      # fingers touching; on an object the motor stops at its current limit (600)
 safe_z_min_m: -0.04                 # tool height limit agreed on 2026-10-19 (arm base frame)
 folded:                             # "folded" for a safe stop (tool point, arm base frame)
   max_x_m: 0.15

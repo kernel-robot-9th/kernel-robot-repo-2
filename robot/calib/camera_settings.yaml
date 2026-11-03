@@ -1,0 +1,8 @@
+# fixed camera controls (v4l2-ctl names). 2026-10-22: SNAP U2 manual exposure is unusable
+# (exposure_time_absolute 78 = dark, >= 150 = saturated, no steps between), so the top camera keeps
+# auto exposure / auto white balance and only the focus is fixed (focus 0 = sharp at table distance).
+top:
+  focus_automatic_continuous: 0
+  focus_absolute: 0
+  auto_exposure: 3
+  white_balance_automatic: 1

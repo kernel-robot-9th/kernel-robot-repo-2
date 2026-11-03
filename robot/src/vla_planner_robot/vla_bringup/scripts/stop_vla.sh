@@ -1,8 +1,9 @@
 #!/bin/bash
-# Stop every process of a previous VLA simulation run (Gazebo, MoveIt, RViz, our nodes).
+# Stop every process of a previous VLA run: simulation (Gazebo, MoveIt, RViz) or real_vla (follower
+# ros2_control_node, camera nodes), and our nodes. A teleop session's ros2_control_node stops too.
 # A half-dead previous run on the same ROS_DOMAIN_ID makes a new launch misbehave
 # (duplicate nodes, RViz crash, stray arm goals).
-PAT='ros2 launch vla_(bringup|sim) |gz sim .*vla_(table|floor)\.sdf|gz_tools_vendor/bin/gz sim|moveit_ros_move_group/move_group|ros_gz_bridge/parameter_bridge|robot_state_publisher/robot_state_publisher|controller_manager/spawner|lib/vla_(perception|executor|planner|calibration)/|rviz2/rviz2|rqt_image_view'
+PAT='ros2 launch vla_(bringup|sim) |gz sim .*vla_(table|floor)\.sdf|gz_tools_vendor/bin/gz sim|moveit_ros_move_group/move_group|ros_gz_bridge/parameter_bridge|robot_state_publisher/robot_state_publisher|controller_manager/spawner|controller_manager/ros2_control_node|lib/vla_(perception|executor|planner|calibration)/|rviz2/rviz2|rqt_image_view'
 
 ancestors() {          # this script and everything that started it must survive
   local p=$$

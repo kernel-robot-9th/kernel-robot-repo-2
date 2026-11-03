@@ -1,0 +1,48 @@
+# Real right arm (2026-10-22): ROBOTIS omx_f_follower_ai controllers, no MoveIt (motion_backend direct).
+vla_executor:
+  ros__parameters:
+    use_sim_time: false
+    motion_backend: direct
+    trajectory_action: /arm_controller/follow_joint_trajectory
+    direct_speed_deg_s: 15.0
+    direct_min_time: 2.0
+    # board surface as the arm's FK sees it (top_homography.yaml plane_z: tool touching the board)
+    surface_plane: [-0.0354, 0.1254, -0.0132]   # 2026-10-22 touch plane (calib/top_homography.yaml plane_z)
+    safe_z_min: -0.04                 # base frame; the board surface is at about -0.01
+    grasp_z: 0.0113                   # base z ~0.0025 at the blocks (x 0.21), as in the 2026-10-22 successful teleop grasp
+    place_z: 0.018                    # release ~8 mm above the surface
+    stack_clearance: 0.006
+    approach_height: 0.06             # 0.08 put stacking above blocks past 0.22 m out of reach
+    min_approach_height: 0.03         # past ~0.24 m the 6 cm approach is out of reach: go down to 3 cm
+    block_height: 0.025
+    gripper_open: 0.68                # gripper_joint_1 on the real follower (measured 2026-10-20)
+    gripper_closed: -0.15             # current-limited: stops on the block
+    gripper_release: 0.68
+    min_reach: 0.12
+    max_reach: 0.27                   # tool still vertical
+    observe_joints: [0.0, -1.48, 1.52, 1.40, 0.0]   # folded, out of the top camera's work area
+    observe_on_start: true
+    close_at_observe: true            # after a job (or a failed grasp) close the gripper, then fold
+    fold_on_error: true               # an IK failure mid-centring left the arm hovering over the board
+    wrist_check: true
+    wrist_required: true
+    wrist_image_topic: /wrist_camera/image_raw
+    wrist_roi: [0.35, 0.60, 0.65, 0.90]   # held block 71 %, missed 0 % (2026-10-22 videos)
+    wrist_min_fill: 0.4
+    wrist_timeout: 2.0
+    wrist_center: false               # top camera = where, wrist = did it grasp (2026-10-22); servo kept for tests
+    wrist_center_height: 0.02         # 1 cm above a 2.5 cm block top
+    wrist_center_ref: [300.0, 160.0]  # block centre, tool 2 cm above the grasp height (2026-10-22 green pick video, 5 cm hover)
+    wrist_center_probe: 0.005         # +x pushes the block down the image, away from its top edge; 5 mm: reach
+    wrist_center_tol: 20.0
+    wrist_center_iters: 3
+    wrist_center_max_shift: 0.04
+    wrist_center_offset: [0.0, 0.0]  # the -1 cm tried earlier made up for a ref read at the wrong height
+    wrist_center_look_ahead: 0.02     # the top camera reads ~3 cm short around x 0.22 (wrist, 2026-10-22)
+    wrist_center_shift_place: true    # same correction for the place point (the block to stack on)
+    wrist_debug_dir: ~/.cache/vla_executor
+    colors: [green, blue, yellow, red]
+    hsv.green: [35, 60, 120, 85, 255, 255]   # wrist camera: V 150+ split blocks into pieces
+    hsv.blue: [88, 50, 120, 130, 255, 255]   # wrist camera blue block: S ~78, V ~175 (perception keeps V 180)
+    hsv.yellow: [20, 80, 150, 34, 255, 255]
+    hsv.red: [0, 100, 120, 8, 255, 255, 160, 60, 150, 179, 255, 255]

@@ -93,8 +93,8 @@ def test_receipt_rejects_wrong_markers(client, auth_headers, db, seed, robot_wit
 
 
 @requires_db
-def test_receipt_only_by_assigned_robot(client, auth_headers, make_robot, home_location, arrived_delivery):
-    other = make_robot("배송로봇 2호", home_location_id=home_location.id)
+def test_receipt_only_by_assigned_robot(client, auth_headers, make_robot, arrived_delivery):
+    other = make_robot("배송로봇 2호")
     response = client.post(_receipt_url(arrived_delivery["id"]), json={"aruco_marker_id": arrived_delivery["receipt_marker_id"]},
                            headers=other["headers"])
     assert response.status_code == 403 and response.json()["code"] == "delivery_not_assigned_to_robot"

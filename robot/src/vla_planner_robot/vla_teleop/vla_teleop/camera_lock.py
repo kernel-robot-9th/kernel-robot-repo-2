@@ -54,6 +54,16 @@ def search_exposure(measure, low, high, target=TARGET_V, steps=12):
     return best
 
 
+def search_focus(measure, low, high, coarse=16):
+    """Focus value with the highest `measure` (image sharpness): a coarse sweep, then a finer one around the best.
+    [출력] (focus, sharpness)."""
+    step = max(1, (high - low) // coarse)
+    best = max(((f, measure(f)) for f in range(low, high + 1, step)), key=lambda fv: fv[1])
+    fine = max(1, step // 4)
+    lo, hi = max(low, best[0] - step), min(high, best[0] + step)
+    return max([best] + [(f, measure(f)) for f in range(lo, hi + 1, fine) if f != best[0]], key=lambda fv: fv[1])
+
+
 def grab(cap, frames=6):
     frame = None
     for _ in range(frames):          # a few frames for the new setting to reach the image
@@ -80,6 +90,8 @@ def tune(device, width=None, height=None):
         base['gain'] = ctrls['gain']['min']
     if 'backlight_compensation' in ctrls:
         base['backlight_compensation'] = 0
+    if 'focus_automatic_continuous' in ctrls:                     # a moving focus changes the lens model (K)
+        base['focus_automatic_continuous'] = 0
     set_ctrls(device, base)
     cap = cv2.VideoCapture(device, cv2.CAP_V4L2)
     if width:
@@ -102,6 +114,17 @@ def tune(device, width=None, height=None):
     exposure, v = search_exposure(brightness, exp['min'], exp['max'])
     set_ctrls(device, {'exposure_time_absolute': exposure})
     result = dict(base, exposure_time_absolute=exposure)
+    if 'focus_absolute' in ctrls:     # autofocus off: sweep the lens and keep the sharpest setting for the work area
+
+        def sharpness(focus):
+            set_ctrls(device, {'focus_absolute': focus})
+            gray = cv2.cvtColor(work_area(grab(cap, frames=12)), cv2.COLOR_BGR2GRAY)
+            return float(cv2.Laplacian(gray, cv2.CV_64F).var())
+
+        fc = ctrls['focus_absolute']
+        focus, sharp = search_focus(sharpness, fc['min'], fc['max'])
+        set_ctrls(device, {'focus_absolute': focus})
+        result['focus_absolute'] = focus
     if 'white_balance_temperature' in ctrls:
         set_ctrls(device, {'white_balance_automatic': 0})
         wb = ctrls['white_balance_temperature']
@@ -120,7 +143,7 @@ def tune(device, width=None, height=None):
         result.update(white_balance_automatic=0, white_balance_temperature=fine)
     cap.release()
     print(f'   {device}: exposure {exposure} (V p{PERCENTILE} {v:.0f}, target {TARGET_V}), '
-          f'white balance {result.get("white_balance_temperature", "n/a")} K')
+          f'white balance {result.get("white_balance_temperature", "n/a")} K, focus {result.get("focus_absolute", "n/a")}')
     return result
 
 

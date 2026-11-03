@@ -1,22 +1,13 @@
-"""Shared helpers for the calibration tools: ROS image I/O, param files, waiting."""
+"""Shared helpers for the calibration tools: param files, spinning, waiting."""
 import os
 import threading
 import time
 
-import numpy as np
-import rclpy
 import yaml
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.parameter import Parameter
 
 DEFAULT_CALIB_DIR = os.path.expanduser('~/dev_ws/robot/calib')
-
-
-class _NoAliasDumper(yaml.SafeDumper):
-    """ROS 2's YAML param parser does not understand anchors/aliases (&id001 / *id001)."""
-
-    def ignore_aliases(self, data):
-        return True
 
 
 def spin_in_background(node):
@@ -35,27 +26,6 @@ def wait_for(pred, timeout, period=0.05):
             return v
         time.sleep(period)
     return None
-
-
-def update_param_file(path, node_params):
-    """Merge {node_name: {param: value}} into a ROS 2 params YAML (keeps other keys)."""
-    data = {}
-    if os.path.exists(path):
-        with open(path) as f:
-            data = yaml.safe_load(f) or {}
-    for node, params in node_params.items():
-        section = data.setdefault(node, {}).setdefault('ros__parameters', {})
-        for k, v in params.items():
-            # 'hsv.red' -> nested {'hsv': {'red': ...}} like hand-written ROS yaml
-            *parents, leaf = k.split('.')
-            d = section
-            for p in parents:
-                d = d.setdefault(p, {})
-            d[leaf] = v
-    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-    with open(path, 'w') as f:
-        yaml.dump(data, f, Dumper=_NoAliasDumper, sort_keys=False, default_flow_style=None)
-    return path
 
 
 def flatten_params(section, prefix=''):
@@ -106,6 +76,3 @@ def apply_param_files(node, paths, section_name):
                 applied.append(k)
     return applied
 
-
-def to_list(a, nd=4):
-    return [round(float(x), nd) for x in np.asarray(a).ravel()]

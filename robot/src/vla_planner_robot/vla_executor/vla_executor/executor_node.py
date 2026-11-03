@@ -10,6 +10,7 @@ Goals are given in `input_frame` (link0 for one arm, world for two) with heights
 the work surface; each arm converts them to its own base frame through TF.
 """
 import math
+import os
 import threading
 import time
 
@@ -22,15 +23,15 @@ from rclpy.time import Time
 from tf2_ros import Buffer, TransformListener
 
 from builtin_interfaces.msg import Duration as DurationMsg
-from control_msgs.action import GripperCommand
+from control_msgs.action import FollowJointTrajectory, GripperCommand
 from moveit_msgs.action import ExecuteTrajectory, MoveGroup
 from moveit_msgs.msg import Constraints, JointConstraint, MoveItErrorCodes, RobotTrajectory
 from sensor_msgs.msg import Image, JointState
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from vla_interfaces.action import CarryTogether, PickPlace
 
-from vla_executor.grasp_check import draw_check, grasp_fill
-from vla_executor.omx_ik import top_down_ik
+from vla_executor.grasp_check import blob_centre, centering_step, draw_check, grasp_fill
+from vla_executor.omx_ik import fk_tool, top_down_ik
 from vla_perception.table_geometry import DEFAULT_HSV, image_to_numpy
 
 JOINTS = ['joint1', 'joint2', 'joint3', 'joint4', 'joint5']
@@ -67,6 +68,9 @@ class Arm:
         self.base_frame = cfg['base_frame']
         self.joints = [self.prefix + j for j in JOINTS]
         self.gripper = ActionClient(node, GripperCommand, cfg['gripper_action'], callback_group=cb)
+        # direct backend (real follower): arm and gripper joints share one JointTrajectoryController
+        self.trajectory = ActionClient(node, FollowJointTrajectory, cfg['trajectory_action'], callback_group=cb)
+        self.gripper_joint = self.prefix + 'gripper_joint_1'
         self.wrist_msg = None
         self.wrist_stamp = 0.0
         node.create_subscription(Image, cfg['wrist_topic'], self._on_wrist, 1, callback_group=cb)
@@ -128,6 +132,29 @@ class PickPlaceExecutor(Node):
         p('wrist_roi', [0.40, 0.40, 0.65, 0.58])   # x0, y0, x1, y1 (fractions): just below the fingertips
         p('wrist_min_fill', 0.6)      # fraction of the ROI that must show the block color
         p('wrist_timeout', 2.0)
+        # real arm (2026-10-22): no MoveIt; joint goals go straight to the follower's JointTrajectoryController
+        p('motion_backend', 'moveit')      # 'moveit' (sim) | 'direct' (real follower, ROBOTIS omx_f_follower_ai)
+        p('trajectory_action', '/arm_controller/follow_joint_trajectory')
+        p('direct_speed_deg_s', 15.0)      # slowest joint sets the move time
+        p('direct_min_time', 2.0)
+        p('surface_plane', [0.0, 0.0, 0.0])   # tool height at the work surface in the base frame: a + b x + c y
+        p('safe_z_min', -1.0)              # direct: refuse joint paths whose tool dips below this (base frame)
+        # wrist-camera centering before the grasp (real arm: top-view calibration error ~2-3 cm)
+        p('wrist_center', False)
+        p('wrist_center_height', 0.04)     # above the grasp height
+        p('wrist_center_ref', [295.0, 190.0])   # block centre in the wrist image when a grasp there succeeds
+        p('wrist_center_probe', 0.01)      # probe moves [m] that measure the image Jacobian
+        p('wrist_center_tol', 20.0)        # px
+        p('wrist_center_iters', 2)
+        p('wrist_center_max_shift', 0.04)  # m
+        p('close_at_observe', False)       # close the gripper before folding (real arm: comes back closed)
+        p('min_approach_height', -1.0)     # < approach_height: lower the approach (1 cm steps) where it is out of reach
+        p('wrist_center_shift_place', False)   # move the place point by the top-camera error the wrist found
+        p('fold_on_error', False)          # any other failure: fold the arm(s) too (the gripper is not opened)
+        p('wrist_center_offset', [0.0, 0.0])   # m, added to the centred grasp point (hand tuning on the real arm)
+        p('wrist_center_look_ahead', 0.0)  # m, first look this far beyond the block (away from the base): the
+                                           # block then sits mid-image even when the top camera is a few cm off
+        p('wrist_debug_dir', '')           # save every centring view here (one folder per pick); '' = off
         # two-arm carry
         p('tray_handle', 0.025)       # handle size at each tray end
         p('tray_grasp_z', 0.022)      # end_effector_link height above the surface at a tray handle
@@ -156,6 +183,7 @@ class PickPlaceExecutor(Node):
         self._joint_pos = {}
         self.create_subscription(JointState, '/joint_states', self._on_joints, 10, callback_group=cb)
         self._wrist_dbg = self.create_publisher(Image, '/vla/wrist_debug', 1)
+        self._wrist_dir, self._wrist_n = '', 0   # centring views on disk (wrist_debug_dir)
         self._tf = Buffer()
         self._tf_listener = TransformListener(self._tf, self)
         if not serve:
@@ -179,8 +207,10 @@ class PickPlaceExecutor(Node):
         if not name:
             cfg = {k: arm_default('', k) for k in keys}
             cfg['wrist_topic'] = self.prm('wrist_image_topic')
-            return cfg
-        return {k: self.prm(f'arms.{name}.{k}') for k in keys}
+        else:
+            cfg = {k: self.prm(f'arms.{name}.{k}') for k in keys}
+        cfg['trajectory_action'] = self.prm('trajectory_action')
+        return cfg
 
     def _observe_on_start(self):
         for _ in range(10):
@@ -320,8 +350,42 @@ class PickPlaceExecutor(Node):
             return None
         return res_future.result().result
 
+    def direct(self):
+        return self.prm('motion_backend') == 'direct'
+
+    def _send_trajectory(self, a, names, positions, seconds, label):
+        if not a.trajectory.wait_for_server(timeout_sec=10.0):
+            raise RuntimeError(f'{a.label(label)}: {self.prm("trajectory_action")} not available')
+        goal = FollowJointTrajectory.Goal()
+        goal.trajectory.joint_names = list(names)
+        sec = int(seconds)
+        goal.trajectory.points = [JointTrajectoryPoint(
+            positions=[float(v) for v in positions],
+            time_from_start=DurationMsg(sec=sec, nanosec=int((seconds - sec) * 1e9)))]
+        result = self._wait_result(a.trajectory.send_goal_async(goal), seconds + 30.0)
+        if result is None or result.error_code != 0:
+            raise RuntimeError(f'{a.label(label)}: trajectory failed '
+                               f'(error_code={None if result is None else result.error_code})')
+
+    def _move_direct(self, q, label, a):
+        now = [self._joint_pos.get(j) for j in a.joints]
+        if None in now:
+            raise RuntimeError(f'{a.label(label)}: no /joint_states for {a.joints}')
+        steps = 40      # the controller interpolates in joint space: check the whole path, not just the end
+        low = min(fk_tool([c + (t - c) * k / steps for c, t in zip(now, q)])[2] for k in range(steps + 1))
+        if low < self.prm('safe_z_min') - 0.002:
+            raise RuntimeError(f'{a.label(label)}: joint path dips to tool z {low:+.3f} '
+                               f'(safe_z_min {self.prm("safe_z_min"):+.3f})')
+        seconds = max(self.prm('direct_min_time'),
+                      max(abs(math.degrees(t - c)) for c, t in zip(now, q)) / self.prm('direct_speed_deg_s'))
+        self.get_logger().info(f'[{a.label(label)}] -> {[round(v, 3) for v in q]} ({seconds:.1f} s)')
+        self._send_trajectory(a, a.joints, q, seconds, label)
+        self.wait_settled(a.joints)
+
     def move_joints(self, q, label, arm=None):
         a = self.arm(arm) if not isinstance(arm, Arm) else arm
+        if self.direct():
+            return self._move_direct(q, label, a)
         if not self._move.wait_for_server(timeout_sec=10.0):
             raise RuntimeError('move_group action server not available')
         goal = MoveGroup.Goal()
@@ -355,6 +419,11 @@ class PickPlaceExecutor(Node):
 
     def gripper(self, position, label, arm=None):
         a = self.arm(arm) if not isinstance(arm, Arm) else arm
+        if self.direct():   # current-limited position mode: closing on a block stops at the block
+            self.get_logger().info(f'[{a.label(label)}] gripper -> {position}')
+            self._send_trajectory(a, [a.gripper_joint], [position], 2.0, label)
+            time.sleep(0.3)
+            return self._joint_pos.get(a.gripper_joint)
         if not a.gripper.wait_for_server(timeout_sec=10.0):
             raise RuntimeError(f'{a.label("gripper")} action server not available')
         goal = GripperCommand.Goal()
@@ -371,6 +440,8 @@ class PickPlaceExecutor(Node):
         a = self.arm(arm) if not isinstance(arm, Arm) else arm
         self.arm_base(a)
         bx, by, bz, byaw = a.to_base(x, y, z, yaw)
+        sa, sb, sc = self.prm('surface_plane')
+        bz += sa + sb * bx + sc * by        # z is above the work surface; the real surface is a tilted plane
         r = math.hypot(bx, by)
         if not self.prm('min_reach') <= r <= self.prm('max_reach'):
             raise RuntimeError(f'{a.label(label)}: ({x:.3f}, {y:.3f}) out of reach (r={r:.3f} m)')
@@ -380,6 +451,8 @@ class PickPlaceExecutor(Node):
         return q
 
     def go_observe(self, arm=None):
+        if self.prm('close_at_observe'):
+            self.gripper(self.prm('gripper_closed'), 'close', arm)
         self.move_joints(self.prm('observe_joints'), 'observe', arm)
 
     def recover(self, arm=None):
@@ -393,19 +466,30 @@ class PickPlaceExecutor(Node):
     def plan_pick_place(self, g, arm):
         """All joint targets for one arm, or raise if it cannot do the job."""
         pick_z = self.prm('grasp_z') + g.pick_z_offset
-        place_z = self.prm('place_z') + g.place_z_offset
-        if g.place_z_offset > 0.0:
-            # release a few mm above the lower block: pressing block-on-block makes the
-            # contact interpenetrate and kicks the lower block away
-            place_z += self.prm('stack_clearance')
-        up = self.prm('approach_height')
-        q_pre = self.ik_or_fail(g.pick_x, g.pick_y, pick_z + up, g.pick_yaw, 'pre-grasp', arm)
+        place_z = self.place_z(g)
         return {
-            'pre': q_pre,
+            'pre': self.approach_ik(g.pick_x, g.pick_y, pick_z, g.pick_yaw, 'pre-grasp', arm),
             'grasp': self.ik_or_fail(g.pick_x, g.pick_y, pick_z, g.pick_yaw, 'grasp', arm),
-            'pre_place': self.ik_or_fail(g.place_x, g.place_y, place_z + up, g.place_yaw, 'pre-place', arm),
+            'pre_place': self.approach_ik(g.place_x, g.place_y, place_z, g.place_yaw, 'pre-place', arm),
             'place': self.ik_or_fail(g.place_x, g.place_y, place_z, g.place_yaw, 'place', arm),
         }
+
+    def place_z(self, g):
+        # on a block: release a few mm above it; pressing block-on-block makes the
+        # contact interpenetrate and kicks the lower block away
+        z = self.prm('place_z') + g.place_z_offset
+        return z + self.prm('stack_clearance') if g.place_z_offset > 0.0 else z
+
+    def approach_ik(self, x, y, z, yaw, label, arm):
+        """IK approach_height above z; near the edge of reach, down to min_approach_height in 1 cm steps."""
+        up, low = self.prm('approach_height'), self.prm('min_approach_height')
+        while True:
+            try:
+                return self.ik_or_fail(x, y, z + up, yaw, label, arm)
+            except RuntimeError:
+                if up - 0.01 < low - 1e-9:
+                    raise
+                up -= 0.01
 
     def choose_arm(self, g):
         """The requested arm, or the nearest one that reaches both pick and place."""
@@ -435,6 +519,9 @@ class PickPlaceExecutor(Node):
         self.gripper(self.prm('gripper_open'), 'open', arm)
         stage(arm.label('pre-grasp'))
         self.move_joints(q['pre'], 'pre-grasp', arm)
+        if self.prm('wrist_center'):
+            stage(arm.label('center on block (wrist camera)'))
+            q = self.center_on_block(g, arm, q)
         stage(arm.label('grasp'))
         self.move_joints(q['grasp'], 'grasp', arm)
         stage(arm.label('close gripper'))
@@ -453,6 +540,120 @@ class PickPlaceExecutor(Node):
         stage(arm.label('observe'))
         self.go_observe(arm)
         return arm
+
+    def _wrist_block(self, arm, color, near, label=''):
+        bgr = self.latest_wrist_image(after=time.monotonic() + 0.3, timeout=self.prm('wrist_timeout') + 0.3, arm=arm)
+        if bgr is None:
+            return None
+        ranges = self.hsv_ranges().get(color)
+        c = None if ranges is None else blob_centre(bgr, ranges, near)
+        if self._wrist_dir:
+            import cv2
+            img = bgr.copy()
+            cv2.drawMarker(img, tuple(int(v) for v in near), (0, 0, 255), cv2.MARKER_CROSS, 24, 2)
+            if c is not None:
+                cv2.circle(img, tuple(int(v) for v in c), 8, (0, 255, 255), 2)
+            cv2.putText(img, f'{label} {color}: {"none" if c is None else f"({c[0]:.0f}, {c[1]:.0f})"}', (8, 24),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+            self._wrist_n += 1
+            cv2.imwrite(os.path.join(self._wrist_dir, f'{self._wrist_n:02d}_{label.replace(": ", "_").replace(" ", "_")}.jpg'), img)
+        return c
+
+    def center_on_block(self, g, arm, q):
+        """Move above the block until the wrist camera sees it where a grasp succeeds; re-plan the grasp there.
+
+        Two 1 cm probe moves measure the image Jacobian on the spot. Returns the updated joint plan
+        (the input plan when the block is not visible: the grasp then goes by the top camera alone)."""
+        pick_z = self.prm('grasp_z') + g.pick_z_offset
+        hz, ref = pick_z + self.prm('wrist_center_height'), list(self.prm('wrist_center_ref'))
+        probe = self.prm('wrist_center_probe')
+        self._wrist_dir, self._wrist_n = '', 0
+        if self.prm('wrist_debug_dir'):
+            self._wrist_dir = os.path.join(os.path.expanduser(self.prm('wrist_debug_dir')),
+                                           time.strftime('%Y%m%d-%H%M%S'))
+            os.makedirs(self._wrist_dir, exist_ok=True)
+            self.get_logger().info(f'{arm.label("center")}: views -> {self._wrist_dir}')
+
+        def view(x, y, label):
+            self.move_joints(self.ik_or_fail(x, y, hz, g.pick_yaw, label, arm), label, arm)
+            return self._wrist_block(arm, g.pick_color, ref, label)
+
+        x, y = x_top, y_top = g.pick_x, g.pick_y
+        ahead = self.prm('wrist_center_look_ahead')
+        base = self.arm_base(arm)
+        r = math.hypot(x - base[0], y - base[1])
+        if ahead and r > 1e-6:
+            xa, ya = x + ahead * (x - base[0]) / r, y + ahead * (y - base[1]) / r
+            try:                     # out of reach there: look from the top-camera position instead
+                self.ik_or_fail(xa, ya, hz, g.pick_yaw, 'center: look', arm)
+                x, y = xa, ya
+            except RuntimeError:
+                pass
+        c0 = view(x, y, 'center: look')
+        self.last_centred = False
+        if c0 is None:
+            self.get_logger().warn(f'{arm.label("center")}: {g.pick_color} block not in the wrist image, skipped')
+            return q
+        def probe_view(dx, dy, label):
+            """Block pixel after a probe move; where that is out of reach, probe the other way and mirror it."""
+            try:
+                return view(x + dx, y + dy, label)
+            except RuntimeError:
+                c = view(x - dx, y - dy, label + ' (reversed)')
+                return None if c is None else (2 * c0[0] - c[0], 2 * c0[1] - c[1])
+
+        c_dx, c_dy = probe_view(probe, 0.0, 'center: probe x'), probe_view(0.0, probe, 'center: probe y')
+        if c_dx is None or c_dy is None:
+            self.get_logger().warn(f'{arm.label("center")}: block lost during the probe moves, skipped')
+            return q
+        J, c, centred = None, c0, False
+        for k in range(self.prm('wrist_center_iters')):
+            err = math.hypot(c[0] - ref[0], c[1] - ref[1])
+            self.get_logger().info(f'{arm.label("center")}: block at ({c[0]:.0f}, {c[1]:.0f}) px, '
+                                   f'{err:.0f} px from the grasp point')
+            if err <= self.prm('wrist_center_tol'):
+                centred = True
+                break
+            if J is None:
+                d, J = centering_step(c0, c_dx, c_dy, probe, ref, self.prm('wrist_center_max_shift'))
+            else:   # reuse the measured Jacobian
+                d, _ = centering_step(c, c + J[:, 0] * probe, c + J[:, 1] * probe, probe, ref,
+                                      self.prm('wrist_center_max_shift'))
+            if d is None:
+                self.get_logger().warn(f'{arm.label("center")}: probes too small to invert, skipped')
+                break
+            x, y = x + d[0], y + d[1]
+            self.get_logger().info(f'{arm.label("center")}: shift ({d[0] * 1000:+.0f}, {d[1] * 1000:+.0f}) mm')
+            c = view(x, y, 'center: shifted')
+            if c is None:
+                self.get_logger().warn(f'{arm.label("center")}: block lost after the shift')
+                break
+        off = list(self.prm('wrist_center_offset'))
+        if any(off):
+            x, y = x + off[0], y + off[1]
+            self.get_logger().info(f'{arm.label("center")}: offset ({off[0] * 1000:+.0f}, {off[1] * 1000:+.0f}) mm')
+        g.pick_x, g.pick_y = x, y
+        self.last_centred = centred          # the calibration tool keeps only converged points
+        q = dict(q)
+        q['pre'] = self.approach_ik(x, y, pick_z, g.pick_yaw, 'pre-grasp', arm)
+        q['grasp'] = self.ik_or_fail(x, y, pick_z, g.pick_yaw, 'grasp', arm)
+        if centred and self.prm('wrist_center_shift_place'):
+            # the top camera's error here is local: the place point (often the block next to it) shares it
+            dx, dy = x - off[0] - x_top, y - off[1] - y_top
+            n = math.hypot(dx, dy)
+            if n > self.prm('wrist_center_max_shift'):
+                dx, dy = dx * self.prm('wrist_center_max_shift') / n, dy * self.prm('wrist_center_max_shift') / n
+            px, py = g.place_x + dx, g.place_y + dy
+            self.get_logger().info(f'{arm.label("center")}: top camera off by ({dx * 1000:+.0f}, {dy * 1000:+.0f}) mm'
+                                   f' here; place ({g.place_x:.3f}, {g.place_y:.3f}) -> ({px:.3f}, {py:.3f})')
+            try:
+                pz = self.place_z(g)
+                q['pre_place'] = self.approach_ik(px, py, pz, g.place_yaw, 'pre-place', arm)
+                q['place'] = self.ik_or_fail(px, py, pz, g.place_yaw, 'place', arm)
+                g.place_x, g.place_y = px, py
+            except RuntimeError as e:
+                self.get_logger().warn(f'{arm.label("center")}: shifted place out of reach ({e}); keeping the top-camera place')
+        return q
 
     # ------------------------------------------------------------------ two-arm carry
     def tray_handles(self, x, y, yaw, length):
@@ -613,6 +814,12 @@ class PickPlaceExecutor(Node):
             except Exception as e:  # noqa: BLE001 - report every failure to the client
                 self.get_logger().error(str(e))
                 result.message = str(e)
+                if self.prm('fold_on_error'):
+                    try:
+                        for a in self.arms.values():
+                            self.go_observe(a)
+                    except Exception as e2:  # noqa: BLE001
+                        result.message += f' (folding failed: {e2})'
                 gh.abort()
         return result
 

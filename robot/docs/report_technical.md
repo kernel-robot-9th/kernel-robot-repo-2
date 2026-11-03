@@ -421,6 +421,8 @@ URDF의 `end_effector_link` 빨간 표시 박스(1 cm)가 손가락 사이에 �
 
 # 11. 실물 이전 계획
 
+> 2026-10-23: 실물 오른팔은 `real_vla.launch.py`(직접 구동), `vla_calibration top_camera`·`wrist_refine`로 옮겼고, 아래 시뮬용 캘리브레이션 도구(`intrinsics`·`colors`·`table`·`wrist`)와 텔레옵 `tap`·`pick`은 지웠다(git `340a397`). 실물 실행·남은 문제는 robot/README 7·9장과 `docs/real_tests/2026-10-22_command/failures.md`. 아래는 시뮬 단계에서 세운 계획이다.
+
 1. **하드웨어 bringup**: `ros2 launch open_manipulator_bringup omx_f.launch.py port_name:=/dev/ttyUSB*`, 이어서 `omx_f_moveit.launch.py`
 2. **카메라**: `usb_cam`로 `/camera/image_raw`를 발행한다. `vla_calibration intrinsics`로 `camera_info.yaml`을 만들고 `camera_info_url`로 지정한다. 왜곡 보정은 perception에 이미 구현되어 있다.
 3. **마커**: 마커 중심 사이 거리를 자로 재서 `marker_positions` 초기값(대략적인 로봇 기준 위치 + 정확한 상대 배치)을 넣고, `colors` → `table` → `wrist` 순으로 캘리브레이션한다(§10).
@@ -509,13 +511,8 @@ ros2 action send_goal --feedback /execute_command vla_interfaces/action/ExecuteC
 ros2 action send_goal /pick_place vla_interfaces/action/PickPlace "{pick_x: 0.18, pick_y: 0.08, place_x: 0.18, place_y: 0.0}"
 ros2 topic echo /vla/blocks
 
-# 캘리브레이션 (순서대로)
-ros2 run vla_calibration intrinsics --board 9x6 --square 0.03
-ros2 run vla_calibration colors --colors red green blue yellow
-ros2 run vla_calibration table --color red
-ros2 run vla_calibration wrist --color red
-ros2 launch vla_bringup sim_vla.launch.py calib_dir:=~/dev_ws/robot/calib
-ros2 run vla_sim checkerboard_sweep.py --poses 40    # 시뮬에서 체커보드 움직이기
+# 캘리브레이션 결과 적용 (시뮬 도구는 2026-10-23 삭제, 결과 calib_sim/은 그대로)
+ros2 launch vla_bringup sim_vla.launch.py calib_dir:=~/dev_ws/robot/calib_sim
 
 # 테스트 (src/vla_planner_robot/에서)
 (cd vla_planner && python3 -m pytest -q test)

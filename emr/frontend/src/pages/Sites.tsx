@@ -6,19 +6,21 @@
 // 구성   :
 //   - LocationsTab   POST/PATCH/DELETE /locations
 //   - MapsTab        맵 파일(yaml + pgm/png) 업로드·교체·삭제 (관리자, 2026-10-19). 장소 찍기는 맵 화면
-//   - RobotsTab      POST/PATCH/DELETE /robots, 로봇 API 키 발급·폐기 (관리자, 2026-10-19), 복귀 장소 (2026-10-20)
+//   - RobotsTab      POST/PATCH/DELETE /robots, 로봇 API 키 발급·폐기 (관리자, 2026-10-19), 복귀 장소는 2026-10-27 없앰(팀원 FMS가 정함),
+//                    로봇 서버 주소 입력·claim 때 받은 배터리·오염도 보기 (2026-10-23)
+//   - BedsideTab     병상 단말 등록·병실·키 발급·폐기·삭제 (관리자만, 2026-10-22) — 환자가 /bedside 화면에서 비품 요청
 //   - Sites          탭 전환
 // =============================================================================
 import { useState } from 'react'
 import {
+  useBedsideDeviceMutations, useBedsideDevices,
   useIsAdmin, useLocationMutations, useLocations, useMapMutations, useMaps, useMe, useRobotMutations, useRobots,
 } from '../api/hooks'
-import type { Location, Robot, RobotApiKey, RobotStatus, RobotType } from '../api/types'
-import { ROBOT_STATUS_LABEL } from '../api/types'
+import type { BedsideApiKey, BedsideDevice, Location, Robot, RobotApiKey, RobotStatus, RobotType } from '../api/types'
+import { ROBOT_STATUS_LABEL, ROBOT_TYPE_LABEL } from '../api/types'
 import { Badge, Button, Input, Label, LoadError, PageTitle, Select, Table, Td, Th } from '../components/ui'
 import { RobotApiKeyDialog } from '../features/robots/RobotApiKeyDialog'
-
-const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('ko-KR')
+import { formatDate, formatTime } from '../lib/dateFormat'
 
 // ---------- 장소 ----------
 function LocationsTab() {
@@ -26,7 +28,7 @@ function LocationsTab() {
   const maps = useMaps()
   const { create, remove } = useLocationMutations()
   const isAdmin = useIsAdmin()
-  const [form, setForm] = useState<Omit<Location, 'id'>>({ name: '', map_id: null, map_x_m: null, map_y_m: null, map_yaw_rad: 0 })
+  const [form, setForm] = useState<Omit<Location, 'id'>>({ name: '', map_id: null, map_x_m: null, map_y_m: null, map_yaw_rad: 0, robot_dest: null })
 
   // 좌표 세 값은 함께 있거나 함께 없어야 한다 (백엔드 CHECK)
   const hasCoords = form.map_x_m != null && form.map_y_m != null && form.map_yaw_rad != null
@@ -39,7 +41,7 @@ function LocationsTab() {
     <div className="space-y-4">
       {isAdmin && (
         <div className="space-y-3 rounded border border-slate-200 bg-white p-4">
-          <div className="grid grid-cols-5 gap-3">
+          <div className="grid grid-cols-6 gap-3">
             <Label text="이름"><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="301호" /></Label>
             <Label text="맵">
               <Select value={form.map_id ?? ''} onChange={e => setForm(f => ({ ...f, map_id: num(e.target.value) }))}>
@@ -50,6 +52,7 @@ function LocationsTab() {
             <Label text="x (m)"><Input type="number" step="0.01" value={form.map_x_m ?? ''} onChange={e => setForm(f => ({ ...f, map_x_m: num(e.target.value) }))} /></Label>
             <Label text="y (m)"><Input type="number" step="0.01" value={form.map_y_m ?? ''} onChange={e => setForm(f => ({ ...f, map_y_m: num(e.target.value) }))} /></Label>
             <Label text="yaw (rad)"><Input type="number" step="0.01" value={form.map_yaw_rad ?? ''} onChange={e => setForm(f => ({ ...f, map_yaw_rad: num(e.target.value) }))} /></Label>
+            <Label text="로봇 목적지"><Input value={form.robot_dest ?? ''} onChange={e => setForm(f => ({ ...f, robot_dest: e.target.value.trim() || null }))} placeholder="PHARMACY" /></Label>
           </div>
           <div className="flex items-center gap-3">
             <Button disabled={!valid || create.isPending} onClick={() => create.mutate(form, { onSuccess: () => setForm(f => ({ ...f, name: '' })) })}>
@@ -63,7 +66,7 @@ function LocationsTab() {
         <LoadError what="장소 목록" error={locations.error} onRetry={() => void locations.refetch()} />
       ) : (
         <Table>
-          <thead><tr><Th>이름</Th><Th>맵</Th><Th>x (m)</Th><Th>y (m)</Th><Th>yaw (rad)</Th>{isAdmin && <Th>{' '}</Th>}</tr></thead>
+          <thead><tr><Th>이름</Th><Th>맵</Th><Th>x (m)</Th><Th>y (m)</Th><Th>yaw (rad)</Th><Th>로봇 목적지</Th>{isAdmin && <Th>{' '}</Th>}</tr></thead>
           <tbody>
             {(locations.data ?? []).map(l => (
               <tr key={l.id}>
@@ -72,6 +75,7 @@ function LocationsTab() {
                 <Td>{l.map_x_m ?? <span className="text-amber-600">좌표 없음</span>}</Td>
                 <Td>{l.map_y_m ?? ''}</Td>
                 <Td>{l.map_yaw_rad ?? ''}</Td>
+                <Td>{l.robot_dest ? <code className="text-xs">{l.robot_dest}</code> : <span className="text-slate-400">—</span>}</Td>
                 {isAdmin && <Td><Button variant="danger" onClick={() => { if (confirm(`'${l.name}' 장소를 삭제할까요?`)) remove.mutate(l.id) }}>삭제</Button></Td>}
               </tr>
             ))}
@@ -186,7 +190,6 @@ function MapsTab() {
 // ---------- 로봇 ----------
 function RobotsTab() {
   const robots = useRobots()
-  const locations = useLocations()
   const { create, update, remove, issueApiKey, revokeApiKey } = useRobotMutations()
   const isAdmin = useIsAdmin()
   const [name, setName] = useState('')
@@ -205,7 +208,7 @@ function RobotsTab() {
           <Label text="이름"><Input value={name} onChange={e => setName(e.target.value)} placeholder="amr-1" className="w-40" /></Label>
           <Label text="종류 (등록 후 변경 불가)">
             <Select value={type} onChange={e => setType(e.target.value as RobotType)} className="w-40">
-              <option value="amr">AMR</option><option value="manipulator">매니퓰레이터</option>
+              <option value="amr">{ROBOT_TYPE_LABEL.amr}</option><option value="manipulator">{ROBOT_TYPE_LABEL.manipulator}</option>
             </Select>
           </Label>
           <Button disabled={!name || create.isPending} onClick={() => create.mutate({ name, robot_type: type, status: 'idle' }, { onSuccess: () => setName('') })}>
@@ -217,38 +220,44 @@ function RobotsTab() {
         <LoadError what="로봇 목록" error={robots.error} onRetry={() => void robots.refetch()} />
       ) : (
         <Table>
-          <thead><tr><Th>이름</Th><Th>종류</Th><Th>상태</Th><Th>복귀 장소</Th><Th>로봇 API 키</Th>{isAdmin && <><Th>상태 변경</Th><Th>{' '}</Th></>}</tr></thead>
+          <thead><tr><Th>이름</Th><Th>종류</Th><Th>상태</Th><Th>로봇 서버</Th><Th>배터리·오염도 (claim 때 확인)</Th><Th>로봇 API 키</Th>{isAdmin && <><Th>상태 변경</Th><Th>{' '}</Th></>}</tr></thead>
           <tbody>
             {(robots.data ?? []).map(r => (
               <tr key={r.id}>
                 <Td>{r.name}</Td>
-                <Td>{r.robot_type === 'amr' ? 'AMR' : '매니퓰레이터'}</Td>
+                <Td>{ROBOT_TYPE_LABEL[r.robot_type]}</Td>
                 <Td><Badge value={r.status} label={ROBOT_STATUS_LABEL[r.status]} /></Td>
                 <Td>
-                  {/* 배송을 마치거나 실패하면 돌아가는 곳. 좌표가 있어야 로봇이 배송을 맡는다 (2026-10-20) */}
+                  {/* 팀원 Pinky API 주소 — claim 때 EMR이 GET {주소}/status로 배터리·오염도·주행 준비를 묻는다. 빈 칸 = 배송 안 맡음 (2026-10-23) */}
                   {isAdmin && r.robot_type === 'amr' ? (
-                    <Select
-                      value={r.home_location_id ?? ''} className="w-40" aria-label={`${r.name} 복귀 장소`}
-                      onChange={e => update.mutate({ id: r.id, body: { home_location_id: Number(e.target.value) } })}
-                    >
-                      {r.home_location_id == null && <option value="" disabled>선택하세요</option>}
-                      {(locations.data ?? []).map(location => (
-                        <option key={location.id} value={location.id}>
-                          {location.name}{location.map_x_m == null ? ' (좌표 없음)' : ''}
-                        </option>
-                      ))}
-                    </Select>
+                    <Input
+                      key={r.robot_server_url ?? ''} defaultValue={r.robot_server_url ?? ''} placeholder="http://192.168.129.107:8080"
+                      className="w-56" aria-label={`${r.name} 로봇 서버 주소`}
+                      onBlur={e => {
+                        const value = e.target.value.trim()
+                        if (value && value !== r.robot_server_url) update.mutate({ id: r.id, body: { robot_server_url: value } })
+                      }}
+                    />
                   ) : (
-                    <span className={r.home_location_id == null ? 'text-slate-400' : ''}>
-                      {r.home_location_id == null
-                        ? (r.robot_type === 'amr' ? '미지정 — 배송 안 맡음' : '—')
-                        : (locations.data ?? []).find(location => location.id === r.home_location_id)?.name ?? `#${r.home_location_id}`}
+                    <span className={r.robot_server_url ? 'font-mono text-xs' : 'text-slate-400'}>
+                      {r.robot_server_url ?? (r.robot_type === 'amr' ? '없음 — 배송 안 맡음' : '—')}
                     </span>
                   )}
                 </Td>
                 <Td>
+                  {/* claim 때 로봇 서버에서 받은 마지막 값. 기준 밖이면 EMR이 새 배송을 주지 않는다 (2026-10-23) */}
+                  {r.status_report ? (
+                    <span>
+                      배터리 {r.status_report.battery_percent.toFixed(0)}% · 오염도 {r.status_report.contamination_percent.toFixed(0)}
+                      <span className="ml-1 text-xs text-slate-500">{formatTime(r.status_report.reported_at)}</span>
+                    </span>
+                  ) : (
+                    <span className="text-slate-400">{r.robot_type === 'amr' ? '아직 받은 적 없음' : '—'}</span>
+                  )}
+                </Td>
+                <Td>
                   {r.has_api_key && r.api_key_issued_at
-                    ? <span className="text-green-700">발급됨 <span className="text-xs text-slate-500">{fmtDate(r.api_key_issued_at)}</span></span>
+                    ? <span className="text-green-700">발급됨 <span className="text-xs text-slate-500">{formatDate(r.api_key_issued_at)}</span></span>
                     : <span className="text-slate-400">없음</span>}
                   {isAdmin && (
                     <span className="ml-2 inline-flex gap-1">
@@ -280,10 +289,98 @@ function RobotsTab() {
   )
 }
 
+// ---------- 병상 단말 (2026-10-22) ----------
+function BedsideTab() {
+  const isAdmin = useIsAdmin()
+  const devices = useBedsideDevices()
+  const locations = useLocations()
+  const { create, update, remove, issueApiKey, revokeApiKey } = useBedsideDeviceMutations()
+  const [name, setName] = useState('')
+  const [roomId, setRoomId] = useState<number | ''>('')
+  const [issuedKey, setIssuedKey] = useState<{ name: string; issued: BedsideApiKey } | null>(null)
+  const bedsideUrl = `${window.location.origin}/bedside`
+
+  if (!isAdmin) return <p className="text-sm text-slate-500">병상 단말 관리는 관리자만 할 수 있습니다.</p>
+
+  const issueKey = (device: BedsideDevice) => {
+    if (device.has_api_key && !confirm(`${device.name}의 키를 다시 발급할까요? 지금 병상 화면에 넣은 키는 바로 쓸 수 없게 됩니다.`)) return
+    issueApiKey.mutate(device.id, { onSuccess: issued => setIssuedKey({ name: device.name, issued }) })
+  }
+  const roomOptions = (locations.data ?? []).map(room => (
+    <option key={room.id} value={room.id}>{room.name}{room.map_x_m == null ? ' (좌표 없음)' : ''}</option>
+  ))
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-slate-600">
+        환자가 병상 태블릿에서 비품을 요청하면 간호사 승인 없이 바로 로봇이 가져갑니다(병상당 진행 중 1건, 환자용 품목만).
+        병상 화면 주소는 <code className="rounded bg-slate-100 px-1">{bedsideUrl}</code>이고, 처음 열 때 여기서 발급한 키를 넣습니다.
+      </p>
+      <div className="flex flex-wrap items-end gap-3 rounded border border-slate-200 bg-white p-4">
+        <Label text="병상 이름"><Input value={name} onChange={e => setName(e.target.value)} placeholder="301호-1" className="w-40" /></Label>
+        <Label text="병실 (배송 목적지)">
+          <Select value={roomId} onChange={e => setRoomId(e.target.value ? Number(e.target.value) : '')} className="w-48">
+            <option value="">선택하세요</option>
+            {roomOptions}
+          </Select>
+        </Label>
+        <Button disabled={!name || roomId === '' || create.isPending}
+          onClick={() => roomId !== '' && create.mutate({ name, location_id: roomId }, { onSuccess: () => { setName(''); setRoomId('') } })}>
+          병상 등록
+        </Button>
+      </div>
+      {devices.isError ? (
+        <LoadError what="병상 단말 목록" error={devices.error} onRetry={() => void devices.refetch()} />
+      ) : (
+        <Table>
+          <thead><tr><Th>병상</Th><Th>병실</Th><Th>단말 키</Th><Th>{' '}</Th></tr></thead>
+          <tbody>
+            {devices.isPending && <tr><td colSpan={4} className="px-3 py-2 text-slate-500">불러오는 중…</td></tr>}
+            {(devices.data ?? []).map(device => (
+              <tr key={device.id}>
+                <Td>{device.name}</Td>
+                <Td>
+                  <Select value={device.location_id} className="w-48" aria-label={`${device.name} 병실`}
+                    onChange={e => update.mutate({ id: device.id, body: { location_id: Number(e.target.value) } })}>
+                    {roomOptions}
+                  </Select>
+                </Td>
+                <Td>
+                  {device.has_api_key && device.api_key_issued_at
+                    ? <span className="text-green-700">발급됨 <span className="text-xs text-slate-500">{formatDate(device.api_key_issued_at)}</span></span>
+                    : <span className="text-slate-400">없음 (병상 화면을 쓸 수 없음)</span>}
+                  <span className="ml-2 inline-flex gap-1">
+                    <Button variant="secondary" disabled={issueApiKey.isPending} onClick={() => issueKey(device)}>{device.has_api_key ? '재발급' : '발급'}</Button>
+                    {device.has_api_key && (
+                      <Button variant="secondary" disabled={revokeApiKey.isPending}
+                        onClick={() => { if (confirm(`${device.name}의 키를 폐기할까요? 병상 화면에서 요청할 수 없게 됩니다.`)) revokeApiKey.mutate(device.id) }}>
+                        폐기
+                      </Button>
+                    )}
+                  </span>
+                </Td>
+                <Td><Button variant="danger" onClick={() => { if (confirm(`${device.name} 삭제?`)) remove.mutate(device.id) }}>삭제</Button></Td>
+              </tr>
+            ))}
+            {!devices.isPending && (devices.data ?? []).length === 0 && (
+              <tr><td colSpan={4} className="px-3 py-2 text-slate-500">등록된 병상 단말이 없습니다</td></tr>
+            )}
+          </tbody>
+        </Table>
+      )}
+      {issuedKey && (
+        <RobotApiKeyDialog robotName={issuedKey.name} issued={issuedKey.issued} title="병상 단말 키" onClose={() => setIssuedKey(null)}
+          help={<>병상 태블릿에서 <code>{bedsideUrl}</code>를 열고 이 키를 입력합니다. 키는 그 태블릿 브라우저에만 저장됩니다.</>} />
+      )}
+    </div>
+  )
+}
+
 const TABS = [
   { key: 'locations', label: '장소', el: <LocationsTab /> },
   { key: 'maps', label: '맵', el: <MapsTab /> },
   { key: 'robots', label: '로봇', el: <RobotsTab /> },
+  { key: 'bedside', label: '병상 단말', el: <BedsideTab /> },
 ] as const
 type TabKey = (typeof TABS)[number]['key']
 
@@ -293,9 +390,9 @@ export function Sites() {
   const isAdmin = useIsAdmin()
   return (
     <div className="space-y-4">
-      <PageTitle>장소 · 맵 · 로봇</PageTitle>
+      <PageTitle>환경 설정</PageTitle>
       {me.data && !isAdmin && (
-        <p className="text-sm text-slate-500">조회만 할 수 있습니다. 장소·맵·로봇 등록·수정·삭제는 관리자만 할 수 있습니다.</p>
+        <p className="text-sm text-slate-500">조회만 할 수 있습니다. 환경 설정(장소·맵·로봇·병상) 등록·수정·삭제는 관리자만 할 수 있습니다.</p>
       )}
       <div className="flex gap-1 border-b border-slate-200">
         {TABS.map(t => (

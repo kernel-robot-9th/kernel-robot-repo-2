@@ -3,13 +3,18 @@
 # 역할   : 로봇 조회
 # 작성일 : 2026-10-14
 # 구성   :
-#   - RobotRepository  list_filtered, get_by_name, get_by_api_key_hash, lock, delete
+#   - RobotRepository  list_filtered, get_by_name, get_by_api_key_hash, lock, delete,
+#                      save_status_report(배터리·오염도 마지막 보고 덮어쓰기 — 2026-10-23)
 # =============================================================================
 from __future__ import annotations
 
+from datetime import datetime
+
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
 
 from app.models.robot import Robot
+from app.models.robot_status_report import RobotStatusReport
 from app.repositories.base import BaseRepository
 
 
@@ -63,3 +68,22 @@ class RobotRepository(BaseRepository[Robot]):
         """
         self.db.delete(robot)
         self.db.flush()
+
+    def save_status_report(
+        self, robot: Robot, battery_percent: float, contamination_percent: float, reported_at: datetime,
+    ) -> RobotStatusReport:
+        """로봇의 마지막 상태 보고를 덮어쓴다(없으면 만든다). 같은 로봇의 보고가 겹쳐도 INSERT … ON CONFLICT라 오류가 없다.
+        [입력] robot / battery_percent / contamination_percent / reported_at
+        [출력] RobotStatusReport: 저장된 행 (세션의 같은 객체도 새 값으로 바뀜)
+        """
+        values = {"battery_percent": battery_percent, "contamination_percent": contamination_percent, "reported_at": reported_at}
+        statement = (
+            insert(RobotStatusReport)
+            .values(robot_id=robot.id, **values)
+            .on_conflict_do_update(index_elements=[RobotStatusReport.robot_id], set_=values)
+            .returning(RobotStatusReport)
+            .execution_options(populate_existing=True)
+        )
+        report = self.db.scalar(statement)
+        self.db.expire(robot, ["status_report"])   # 이 세션에서 먼저 읽어 둔 '보고 없음'(None)을 버린다
+        return report
