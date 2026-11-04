@@ -55,16 +55,16 @@ class DeliveryRepository(BaseRepository[Delivery]):
         return self.db.scalar(statement)
 
     def list_by_nurse(
-        self, nurse_id: int, status: str | None = None, limit: int = 100, offset: int = 0,
+        self, nurse_id: int, status: str | None = None, limit: int = 50, offset: int = 0,
     ) -> list[Delivery]:
-        """간호사의 예약 목록, 배송 예정 시각이 빠른 순.
+        """간호사의 예약 목록, 보낼 시간이 늦은 순(최신순) — 2026-11-03: 빠른 순이면 신청이 쌓였을 때 새 신청이 목록에 안 들었다.
         [입력] nurse_id / status: 있으면 그 상태만 / limit / offset
         [출력] list[Delivery]
         """
         statement = select(Delivery).options(*_with_details()).where(Delivery.nurse_id == nurse_id)
         if status:
             statement = statement.where(Delivery.status == status)
-        statement = statement.order_by(Delivery.scheduled_at, Delivery.id).limit(limit).offset(offset)
+        statement = statement.order_by(Delivery.scheduled_at.desc(), Delivery.id.desc()).limit(limit).offset(offset)
         return list(self.db.scalars(statement))
 
     def list_waiting(self, due_before: datetime | None, limit: int = 100) -> list[Delivery]:

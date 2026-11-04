@@ -35,7 +35,8 @@ def test_delivery_create_list_get(client, seed, auth_headers):
     assert seed["medication"].stock_qty == 7  # 예약하면 재고에서 뺀다 (10 - 3)
 
     later = client.post(URL, headers=auth_headers, json=_body(seed, scheduled_at=_future(1))).json()
-    assert [r["id"] for r in client.get(URL, headers=auth_headers).json()] == [later["id"], created["id"]]  # 빠른 순
+    assert [r["id"] for r in client.get(URL, headers=auth_headers).json()] == [created["id"], later["id"]]  # 최신순 (2026-11-03)
+    assert [r["id"] for r in client.get(f"{URL}?limit=1", headers=auth_headers).json()] == [created["id"]]  # 개수를 넘으면 오래된 것이 빠진다
     assert client.get(f"{URL}/{created['id']}", headers=auth_headers).json()["destination_location"] == {
         "id": seed["room_301"].id, "name": "301호", "map_x_m": 12.5, "map_y_m": 3.2, "map_yaw_rad": 1.57,
         "map_id": seed["ward_map"].id, "robot_dest": "ROOM_301", "robot_only": False, "admin_note": None, "map": {"id": seed["ward_map"].id, "name": "3병동", "file_name": "ward3.yaml", "resolution_m_per_pixel": 0.05, "origin_x_m": -10.0, "origin_y_m": -10.0, "origin_yaw_rad": 0.0, "has_image": False, "image_width_px": None, "image_height_px": None, "image_file_name": None, "updated_at": ANY}}

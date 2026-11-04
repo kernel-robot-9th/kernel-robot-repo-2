@@ -62,13 +62,13 @@ def create_deliveries_for_wards(db: DB, nurse: CurrentNurse, data: DeliveryMulti
 @router.get(
     "", response_model=list[DeliveryOut],
     summary="내 배송 예약 목록",
-    description="토큰의 간호사가 등록한 예약. 배송 예정 시각이 빠른 순.",
+    description="토큰의 간호사가 등록한 예약. 보낼 시간이 늦은 순(최신순), 기본 50건 (2026-11-03).",
     responses=UNAUTHORIZED_RESPONSE,
 )
 def list_my_deliveries(
     db: DB, nurse: CurrentNurse,
     status_filter: DeliveryStatus | None = Query(default=None, alias="status", description="있으면 그 상태만"),
-    limit: int = Query(100, le=500), offset: int = 0,
+    limit: int = Query(50, le=500), offset: int = 0,
 ) -> list[DeliveryOut]:
     """
     [입력] nurse / status / limit / offset

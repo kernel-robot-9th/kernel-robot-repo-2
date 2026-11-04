@@ -86,11 +86,11 @@ class DeliveryService:
         ]
 
     def list_for_nurse(
-        self, nurse_id: int, status: DeliveryStatus | None = None, limit: int = 100, offset: int = 0,
+        self, nurse_id: int, status: DeliveryStatus | None = None, limit: int = 50, offset: int = 0,
     ) -> list[Delivery]:
         """간호사 본인 예약 목록.
         [입력] nurse_id / status: 있으면 그 상태만 / limit / offset
-        [출력] list[Delivery]: 배송 예정 시각이 빠른 순
+        [출력] list[Delivery]: 보낼 시간이 늦은 순(최신순)
         """
         return self.repo.list_by_nurse(nurse_id, status, limit, offset)
 
