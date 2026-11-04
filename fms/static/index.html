@@ -97,6 +97,17 @@ body.show .stats b { font-size: 22px; }
 .ovr { align-items: flex-end; text-align: right; gap: 3vh; }
 .ovr span { display: block; font-size: clamp(12px, 4vh, 28px); color: var(--quiet); }
 .ovr b { display: block; font-size: clamp(18px, 9vh, 68px); font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.1; }
+/* ?bare=1&top=1 : 세로로 긴 칸 (3분할, 11-03) — 위에 번호·제목 / 경과 · 완료, 아래 지도 */
+body.bare.top #mapwrap { flex-direction: column; justify-content: center; gap: 4vh; }
+body.bare.top canvas { width: 100vw; height: auto; max-width: 100vw; max-height: 72vh; }
+.ovt { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 2.5vh; padding: 0 4vw; }
+body.top .ovl, body.top .ovr { flex: none; align-self: auto; flex-direction: row; justify-content: center; padding: 0; }
+body.top .ovl { align-items: center; gap: 2.5vw; }
+body.top .ovl .no { flex: none; font-size: clamp(16px, 4vw, 40px); }
+body.top .ovl .tt { margin-top: 0; font-size: clamp(16px, 5vw, 46px); text-align: center; }
+body.top .ovr { align-items: flex-end; gap: 9vw; text-align: center; }
+body.top .ovr span { font-size: clamp(12px, 3.6vw, 30px); }
+body.top .ovr b { font-size: clamp(18px, 8.5vw, 76px); }
 </style>
 </head>
 <body>
@@ -181,7 +192,13 @@ if (BARE) {
   if (Q.get('n')) l.querySelector('.no').textContent = Q.get('n');
   l.querySelector('.tt').textContent = Q.get('title') || '';
   r.innerHTML = '<div><span>경과</span><b class="el">0:00</b></div><div><span>완료</span><b class="dn">0/0</b></div>';
-  $('map').before(l); $('map').after(r);
+  if (Q.has('top')) {                 // 세로로 긴 칸 (demo_tri.py 3분할): 위에 번호·제목, 그 아래 경과·완료, 그 아래 지도
+    document.body.classList.add('top');
+    const h = document.createElement('div');
+    h.className = 'ovt'; h.append(l, r); $('map').before(h);
+  } else {
+    $('map').before(l); $('map').after(r);
+  }
 }
 function overlay() {               // 경과 = 첫 주문부터 (다 끝나면 마지막 완료 시각에서 멈춤), 완료 = 배송 끝난 주문 수
   const os = S.orders || [];

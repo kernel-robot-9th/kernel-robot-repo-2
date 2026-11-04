@@ -56,8 +56,9 @@ def load_walls():
 
 
 class Sim:
-    def __init__(self, control_url=None, links=None, n_robots=3, profile=None):
+    def __init__(self, control_url=None, links=None, n_robots=3, profile=None, trace_dir=None):
         self.lock = threading.Lock()
+        self.trace_dir, self.rec = trace_dir, None   # 기록기 (sim_trace.Recorder): 다시 시작할 때마다 새 파일
         self.profile = profile        # 발표 영상 비교용 (fms_core.PROFILES), None = 지금 그대로
         self.speed = 1.0
         self.paused = False
@@ -80,6 +81,13 @@ class Sim:
             if old is not None:
                 self.f._seq = old._seq                     # 이벤트 번호는 다시 시작해도 이어간다
                 self.f.p.auto_omx = old.p.auto_omx if auto_omx is None else auto_omx
+            if self.trace_dir:
+                from sim_trace import Recorder
+                if self.rec:
+                    self.rec.close()
+                path = os.path.join(self.trace_dir, f'trace_{self.profile or "v5"}_{time.strftime("%m%d_%H%M%S")}.jsonl')
+                self.rec = Recorder(self.f, path, meta=dict(profile=self.profile or 'v5', robots_n=n, auto=auto,
+                                                            started=time.strftime('%Y-%m-%d %H:%M:%S')))
 
     def loop(self):
         dt, last = 0.05, time.time()
@@ -95,6 +103,8 @@ class Sim:
                 while sim > 1e-9:
                     h = min(dt, sim)
                     self.f.step_sim(h)
+                    if self.rec:
+                        self.rec.tick()
                     sim -= h
 
 
@@ -265,9 +275,9 @@ class H(BaseHTTPRequestHandler):
             return self.send(200, openapi_v1.SWAGGER_HTML.encode(), 'text/html')
         if u.path in ('/', '/index.html'):
             return self.send(200, open(os.path.join(HERE, 'static/index.html'), 'rb').read(), 'text/html')
-        if u.path == '/quad.html':                    # 발표 영상: 4개 시뮬레이터를 2×2 로 (demo_quad.py)
-            return self.send(200, open(os.path.join(HERE, 'static/quad.html'), 'rb').read(), 'text/html')
-        if u.path == '/hospital.png':                 # 발표 화면 배경 (tools/layout_diagram.png 의 아레나 부분)
+        if u.path in ('/quad.html', '/tri.html'):     # 발표 영상: 시뮬레이터 4개 2×2 (demo_quad.py) · 3개 세로 칸 (demo_tri.py)
+            return self.send(200, open(os.path.join(HERE, 'static' + u.path), 'rb').read(), 'text/html')
+        if u.path == '/hospital.png':                 # 발표 화면 배경 (새 미니맵 그림의 아레나 0~210 × 0~200 cm 부분)
             return self.send(200, open(os.path.join(HERE, 'static/hospital.png'), 'rb').read(), 'image/png')
         if self.path == '/api/map':
             return self.send(200, MAP)
@@ -338,6 +348,8 @@ def main():
     ap.add_argument('--real-table', action='store_true', help='robots.yaml 에 url 이 있는 로봇은 모두 실제 로봇으로')
     ap.add_argument('--robots', type=int, default=3, help='로봇 수 (실제 + 가상)')
     ap.add_argument('--profile', choices=list(PROFILES), default=None, help='발표 영상 비교용: 기능을 꺼서 예전 단계 흉내 (fms_core.PROFILES)')
+    ap.add_argument('--trace', nargs='?', const=os.path.join(HERE, 'logs'), default=None, metavar='폴더',
+                    help='0.5초마다 로봇 상태 기록 (기본 폴더 logs/) → detect.py 로 분석')
     a = ap.parse_args()
     from robot_link import HttpLink
     links = {}
@@ -347,7 +359,7 @@ def main():
         reals += [(row['name'], row['url']) for row in ROBOT_TABLE if row.get('url')]
     for name, url in reals:
         links[name] = HttpLink(name, url)
-    SIM = Sim(a.control_url, links, a.robots, a.profile)
+    SIM = Sim(a.control_url, links, a.robots, a.profile, a.trace)
     SIM.f.p.auto_omx = not a.no_auto_omx
     g = SIM.f.g
     segs, ghost = load_walls()

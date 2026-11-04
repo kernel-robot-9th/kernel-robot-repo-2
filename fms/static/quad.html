@@ -14,16 +14,16 @@ iframe { width: 100%; height: 100%; border: 0; display: block; background: #f6f6
 <body>
 <div class="grid" id="grid"></div>
 <script>
-// 칸: [포트, 제목] — demo_quad.py 의 PANELS 와 같아야 함
+// 칸: [포트, 제목] — demo_quad.py 의 PANELS 와 같아야 함 (11-03: 번호 없이, 3분할과 같은 이름)
 const PANELS = [
-  [8781, '로봇 1대'],                       // FMS 없음 · 순차 처리
-  [8782, '다중 로봇, CBS'],                  // 처음 CBS · 주차·직선 이어 달리기 없음
-  [8783, '대기 노드 확보, 주행 고도화'],      // 주차 9곳 + 직선 이어 달리기
-  [8784, 'FMS 고도화'],                     // CBS 고도화 + 약제실 앞 대기열
+  [8781, '로봇 1대'],                         // FMS 없음 · 순차 처리
+  [8782, 'MAPF Baseline (CBS)'],             // 처음 CBS · 주차·직선 이어 달리기 없음 · 수술실 먼저를 모름
+  [8783, '+ Task Allocation · 주행 연결'],    // 오염도 기반 배정 + 주차 9곳 + 직선 이어 달리기
+  [8784, '+ MAPF 고도화'],                   // CBS 고도화 + 약제실 앞 대기열
 ];
 const host = location.hostname || 'localhost';
-document.getElementById('grid').innerHTML = PANELS.map(([port, title], i) =>
-  `<iframe src="http://${host}:${port}/?bare=1&n=${i + 1}&title=${encodeURIComponent(title)}" title="${title}"></iframe>`).join('');
+document.getElementById('grid').innerHTML = PANELS.map(([port, title]) =>
+  `<iframe src="http://${host}:${port}/?bare=1&title=${encodeURIComponent(title)}" title="${title}"></iframe>`).join('');
 </script>
 </body>
 </html>

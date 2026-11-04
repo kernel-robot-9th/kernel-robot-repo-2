@@ -1,10 +1,12 @@
 """FMS 시뮬레이션을 화면 없이 돌려 규칙 위반·충돌·교착을 센다.
   python3 run_headless.py --minutes 60 --rate 2 --robots 3 --seed 1
+  python3 run_headless.py --demo --rate 0 --minutes 12 --trace logs/trace_demo.jsonl   # 발표 주문 9건 → python3 detect.py logs/trace_demo.jsonl
 """
 import argparse
 import collections
 
-from fms_core import FMS
+from fms_core import FMS, PROFILES, apply_profile
+from sim_trace import Recorder
 
 
 def lane_of(f, r):
@@ -29,6 +31,10 @@ def main():
     ap.add_argument('--window', type=float, default=None, help='CBS 가 푸는 충돌 시간 창 s (0 = 끝까지, 기본 FMS.PLAN_WINDOW_S)')
     ap.add_argument('--no-corridor', action='store_true', help='CBS 협로 추론 끔 (비교용)')
     ap.add_argument('--every', type=float, default=None, help='움직이는 로봇이 있을 때 다시 계획 간격 s (0 = 안 함)')
+    ap.add_argument('--profile', choices=list(PROFILES), default=None, help='예전 단계 흉내 (fms_core.PROFILES)')
+    ap.add_argument('--queue', default=None, choices=['fair', 'path', 'none', 'both'], help='약제실 대기 고침만 따로 켜기 (비교용)')
+    ap.add_argument('--demo', action='store_true', help='발표 영상과 같은 주문 9건을 0초에 넣음 (demo_quad.ROOMS)')
+    ap.add_argument('--trace', default=None, metavar='파일.jsonl', help='0.5초마다 로봇 상태 기록 → detect.py 로 분석')
     a = ap.parse_args()
 
     f = FMS(n_robots=a.robots, seed=a.seed)
@@ -41,7 +47,17 @@ def main():
         f.PLAN_WINDOW_S = a.window or None
     if a.every is not None:
         f.REPLAN_EVERY_S = a.every or float('inf')
+    if a.profile:
+        apply_profile(f, a.profile)
+    if a.queue:
+        f.queue_fair, f.queue_path = a.queue in ('fair', 'both'), a.queue in ('path', 'both')
     f.auto_rate = a.rate
+    if a.demo:
+        from demo_quad import ROOMS
+        for room in ROOMS:
+            f.add_order(room)
+    rec = Recorder(f, a.trace, meta=dict(profile=a.profile or 'v5', queue=a.queue, seed=a.seed, rate=a.rate, demo=a.demo,
+                                         minutes=a.minutes)) if a.trace else None
     steps = int(a.minutes * 60 / a.dt)
     max_wait = collections.defaultdict(float)
     passing = set()
@@ -51,6 +67,8 @@ def main():
     diag, diag_seen = 0, set()               # 계단 통로 대각선 L70–R90 을 지난 횟수
     for _ in range(steps):
         f.step_sim(a.dt)
+        if rec:
+            rec.tick()
         for r in f.robots:
             if r.path and r.k < len(r.path) - 1 and r.edge_t > 0 and {r.path[r.k], r.path[r.k + 1]} == {'L70', 'R90'}:
                 key = (r.id, id(r.step))
@@ -77,6 +95,8 @@ def main():
                     passing.add(key)
                 elif not bad:
                     passing.discard(key)
+    if rec:
+        rec.close()
     ev = [e for e in f.events if e['kind'] in ('violation', 'warn')]
     s = f.snapshot()
     print(f'시간 {a.minutes:.0f}분, 로봇 {a.robots}대, 주문 {len(f.orders)}건 (분당 {a.rate}), 경로 {a.planner}, seed {a.seed}')
