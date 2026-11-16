@@ -161,16 +161,16 @@ FMS_ARGS="--no-auto-omx" CONTROL_URL=http://<EMR 주소>:8000 docker compose up 
 > **주의**: conda(anaconda)가 PATH에 있으면 CMake가 conda의 protobuf를 잡아 `pinky_gz_sim` 빌드가 실패합니다(2026-10-20 확인).
 > conda를 끈 셸에서 빌드하세요. 메모리가 15 GB 정도면 `--parallel-workers 2`를 지켜야 메모리 부족으로 빌드가 죽지 않습니다.
 
-| 하려는 것 | 안내 |
+| 구현 기능 | 참고 문서 |
 |---|---|
-| EMR 실행·계정·다른 PC 접속 | [emr/README.md](emr/README.md) |
-| 로봇 워크스페이스 빌드 | [robot/README.md](robot/README.md) |
-| 서버 한 대 전체 구성(포트·실행 순서·문제 해결) | [docs/server_guide.md](docs/server_guide.md) |
+| EMR 웹 (실행·계정·다른 PC 접속) | [emr/README.md](emr/README.md) |
+| 로봇 워크스페이스 (빌드) | [robot/README.md](robot/README.md) |
+| 서버 전체 구성 (포트·실행 순서·문제 해결) | [docs/server_guide.md](docs/server_guide.md) |
 | EMR ⇄ FMS·OMX 연동 | [연동 작업 정리](emr/docs/emr_fms_omx_integration_2026-10-27.md) · [API 계약 10장](docs/api_contract_delivery_2026-10-20.md) |
-| FMS 실행·규칙·API v1 | [fms/README.md](fms/README.md) · [fms/API.md](fms/API.md) |
-| Pinky 주행·로봇 API | [driving/README.md](driving/README.md) · [driving/api/API.md](driving/api/API.md) |
-| OMX 로봇팔 서버 실행 | [omx/README.md](omx/README.md) |
-| 탑뷰 사람 감지 수신기 | [topview/README.md](topview/README.md) |
+| FMS (실행·규칙·API v1) | [fms/README.md](fms/README.md) · [fms/API.md](fms/API.md) |
+| Pinky 주행 (로봇 API) | [driving/README.md](driving/README.md) · [driving/api/API.md](driving/api/API.md) |
+| OMX 로봇팔 서버 | [omx/README.md](omx/README.md) |
+| 탑뷰 사람 감지 | [topview/README.md](topview/README.md) |
 | 안내 로봇 | [guide_robot/README.md](guide_robot/README.md) |
 
 ## 문서
