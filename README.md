@@ -113,7 +113,7 @@ sequenceDiagram
   N->>E: 받았습니다
   Note over E: 단계 "받음"
 
-  opt 실패 (계약에만 있음, FMS는 아직 보내지 않음)
+  opt 실패
     F-->>E: 이벤트 order_failed
     Note over E: 재고 복구 · 간호사와 관리자에게 알림
   end
