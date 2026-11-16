@@ -4,25 +4,35 @@
 # 작성일 : 2026-10-14
 # 구성   :
 #   - DeliveryService  create/list_for_nurse/get/update/cancel (간호사 쪽), restore_stock (취소·실패 공용)
+#                      create_many — 여러 병동 신청, 병동마다 1건·모두 되거나 모두 안 됨 (2026-10-30)
+#                      예약·변경·취소는 배송 기록(delivery_events)에도 남긴다 (2026-10-21)
+#                      confirm_receipt — 간호사 "받았습니다" 버튼 수령 (2026-10-22, NURSE_RECEIPT_METHOD=button)
+#                      require_arrived·mark_received — 수령 공용 (간호사·환자 버튼, 로봇 마커, 로봇 전용 장소 이동 — 2026-10-23)
 # 로봇 쪽(배송 가져가기·진행 보고·수령 확인)은 app/services/dispatch.py (2026-10-20)
 # =============================================================================
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import BadRequest, Conflict, Forbidden, NotFound
 from app.models.delivery import Delivery, DeliveryItem
-from app.models.enums import DeliveryStatus
+from app.models.enums import DeliveryEventType, DeliveryStatus, ReceiptMethod
 from app.models.location import Location
 from app.repositories.delivery import DeliveryRepository
+from app.repositories.fms_order import FmsOrderRepository
 from app.repositories.location import LocationRepository
 from app.repositories.supply import SupplyRepository
 from app.schemas.delivery import (
-    DeliveryCreate, DeliveryItemIn, DeliveryUpdate,
+    DeliveryCreate, DeliveryItemIn, DeliveryMultiCreate, DeliveryUpdate,
 )
+from app.services.delivery_events import DeliveryEventRecorder, DeliverySnapshot
+from app.services.delivery_notifier import DeliveryNotifier
 from app.services.low_stock import LowStockNotifier, is_low_stock
+
+
+SCHEDULED_AT_GRACE = timedelta(minutes=5)   # "지금"(브라우저·서버 시계 차이 포함)으로 예약하면 바로 로봇이 가져갈 수 있다 (2026-10-22)
 
 
 class DeliveryService:
@@ -33,9 +43,12 @@ class DeliveryService:
 
     def __init__(self, db: Session) -> None:
         self.repo = DeliveryRepository(db)
+        self.fms_orders = FmsOrderRepository(db)
         self.supplies = SupplyRepository(db)
         self.locations = LocationRepository(db)
         self.low_stock_notifier = LowStockNotifier(db)
+        self.events = DeliveryEventRecorder(db)
+        self.notifier = DeliveryNotifier(db)
 
     def create(self, data: DeliveryCreate, nurse_id: int) -> Delivery:
         """예약 등록.
@@ -43,20 +56,41 @@ class DeliveryService:
         [출력] Delivery: status=reserved
         """
         self._validate_scheduled_at(data.scheduled_at)
-        self._validate_destination(data.destination_location_id)
+        destination = self._validate_destination(data.destination_location_id)
+        self._validate_items_for(destination, data.items)
         self._validate_items(data.items)
         self._adjust_stock(self._quantities(data.items))
-        return self.repo.add(Delivery(
-            nurse_id=nurse_id, destination_location_id=data.destination_location_id, scheduled_at=data.scheduled_at,
-            items=self._to_items(data.items),
-        ))
+        return self._add_reserved(nurse_id, data.destination_location_id, data.scheduled_at, data.items)
+
+    def create_many(self, data: DeliveryMultiCreate, nurse_id: int) -> list[Delivery]:
+        """여러 병동 신청 — 병동마다 신청 1건 (2026-10-30, 사용자 "한번에 여러 병동을 배송").
+        모두 확인하고 재고를 한 번에 뺀 뒤 만든다 — 하나라도 틀리면 아무것도 생기지 않는다.
+        FMS에는 지금처럼 물품 1개당 주문으로 가고, 한 로봇에 여러 병실을 묶는 것은 FMS가 정한다.
+        [입력] data / nurse_id
+        [출력] list[Delivery]: 보낸 병동 순서, 모두 status=reserved
+        """
+        self._validate_scheduled_at(data.scheduled_at)
+        destination_ids = [ward.destination_location_id for ward in data.destinations]
+        if len(destination_ids) != len(set(destination_ids)):
+            raise BadRequest("duplicate destination_location_id in destinations", code="delivery_destination_duplicate")
+        total_by_supply_id: dict[int, int] = {}
+        for ward in data.destinations:
+            self._validate_items_for(self._validate_destination(ward.destination_location_id), ward.items)
+            self._validate_items(ward.items)
+            for supply_id, quantity in self._quantities(ward.items).items():
+                total_by_supply_id[supply_id] = total_by_supply_id.get(supply_id, 0) + quantity
+        self._adjust_stock(total_by_supply_id)
+        return [
+            self._add_reserved(nurse_id, ward.destination_location_id, data.scheduled_at, ward.items)
+            for ward in data.destinations
+        ]
 
     def list_for_nurse(
-        self, nurse_id: int, status: DeliveryStatus | None = None, limit: int = 100, offset: int = 0,
+        self, nurse_id: int, status: DeliveryStatus | None = None, limit: int = 50, offset: int = 0,
     ) -> list[Delivery]:
         """간호사 본인 예약 목록.
         [입력] nurse_id / status: 있으면 그 상태만 / limit / offset
-        [출력] list[Delivery]: 배송 예정 시각이 빠른 순
+        [출력] list[Delivery]: 보낼 시간이 늦은 순(최신순)
         """
         return self.repo.list_by_nurse(nurse_id, status, limit, offset)
 
@@ -78,6 +112,7 @@ class DeliveryService:
         [출력] Delivery (reserved 아니면 Conflict)
         """
         delivery = self._get_reserved(delivery_id, nurse_id)
+        before = DeliverySnapshot.of(delivery)
         if data.scheduled_at is not None:
             self._validate_scheduled_at(data.scheduled_at)
             delivery.scheduled_at = data.scheduled_at
@@ -94,7 +129,47 @@ class DeliveryService:
                 for supply_id in previous_quantities.keys() | new_quantities.keys()
             })
             self.repo.replace_items(delivery, self._to_items(data.items))
+        self._validate_items_for(delivery.destination_location, delivery.items)   # 바뀐 목적지·품목 조합 확인
+        changes = self.events.update_changes(before, DeliverySnapshot.of(delivery))
+        if changes:   # 같은 값을 다시 보낸 변경은 기록하지 않는다
+            self.events.record_by_nurse(delivery, DeliveryEventType.UPDATED, nurse_id, datetime.now(UTC), changes)
         return delivery
+
+    def confirm_receipt(self, delivery_id: int, nurse_id: int) -> Delivery:
+        """"받았습니다" 버튼 — 도착한 본인 배송을 수령 처리 (2026-10-22, 마커 대신). 실행기는 /robot/me로 알아차리고 돌아간다.
+        [입력] delivery_id / nurse_id
+        [출력] Delivery: received (남의 예약 403, 도착 전·끝났으면 409 delivery_not_arrived, 마커 방식이면 409 delivery_receipt_by_marker)
+        """
+        delivery = self.get(delivery_id, nurse_id, lock=True)
+        self.require_arrived(delivery)
+        if delivery.receipt_method != ReceiptMethod.BUTTON:
+            raise Conflict(f"delivery {delivery_id} is received by the robot reading the marker", code="delivery_receipt_by_marker")
+        now = datetime.now(UTC)
+        self.mark_received(delivery, now, nurse_id)
+        self.notifier.notify_received(delivery)   # 같은 간호사의 다른 탭·화면도 목록을 새로 고친다
+        self.events.record_by_nurse(delivery, DeliveryEventType.RECEIVED, nurse_id, now)
+        return delivery
+
+    @staticmethod
+    def require_arrived(delivery: Delivery) -> None:
+        """수령할 수 있는 상태(arrived)인지 — 간호사·환자 "받았습니다" 공용.
+        [입력] delivery
+        [출력] 없음 (아니면 Conflict delivery_not_arrived)
+        """
+        if delivery.status != DeliveryStatus.ARRIVED:
+            raise Conflict(f"delivery {delivery.id} is {delivery.status}; only arrived can be received", code="delivery_not_arrived")
+
+    @staticmethod
+    def mark_received(delivery: Delivery, received_at: datetime, nurse_id: int | None) -> None:
+        """received로 바꾸고 수령 기록을 채운다 — 간호사·환자 버튼, 로봇 마커, 로봇 전용 장소 이동 공용 (2026-10-23 묶음).
+        받은 로봇은 언제나 맡은 로봇(가져다준 로봇). 알림·배송 기록은 부르는 쪽이 한다(누가 했는지가 다르다).
+        [입력] delivery / received_at / nurse_id: 받은 간호사 (병상 배송은 None)
+        [출력] 없음
+        """
+        delivery.status = DeliveryStatus.RECEIVED
+        delivery.received_at = received_at
+        delivery.received_by_nurse_id = nurse_id
+        delivery.received_by_robot_id = delivery.assigned_robot_id
 
     def cancel(self, delivery_id: int, nurse_id: int) -> Delivery:
         """예약 취소. 예약했던 수량을 재고로 되돌린다.
@@ -104,7 +179,15 @@ class DeliveryService:
         delivery = self._get_reserved(delivery_id, nurse_id)
         self.restore_stock(delivery)
         delivery.status = DeliveryStatus.CANCELLED
+        self.events.record_by_nurse(delivery, DeliveryEventType.CANCELLED, nurse_id, datetime.now(UTC))
         return delivery
+
+    def reserve_stock(self, quantity_by_supply_id: dict[int, int]) -> None:
+        """새 배송만큼 재고를 뺀다 — 병상 요청(BedsideRequestService)이 같은 규칙(잠금·부족이면 409·부족 알림)을 쓰게 (2026-10-22).
+        [입력] quantity_by_supply_id: {supply_id: 수량}
+        [출력] 없음 (모자라면 Conflict stock_insufficient)
+        """
+        self._adjust_stock(quantity_by_supply_id)
 
     def restore_stock(self, delivery: Delivery) -> None:
         """예약 때 뺀 수량을 재고로 되돌린다 — 취소와 배송 실패(DispatchService)가 함께 쓴다.
@@ -115,33 +198,63 @@ class DeliveryService:
 
     # ---- 내부 ----------------------------------------------------------------
 
+    def _add_reserved(
+        self, nurse_id: int, destination_location_id: int, scheduled_at: datetime, items: list[DeliveryItemIn],
+    ) -> Delivery:
+        """새 신청 한 건을 넣고 배송 기록(reserved)을 남긴다 — 확인과 재고 빼기는 부르는 쪽이 먼저 했다.
+        [입력] nurse_id / destination_location_id / scheduled_at / items
+        [출력] Delivery: status=reserved
+        """
+        delivery = self.repo.add(Delivery(
+            nurse_id=nurse_id, destination_location_id=destination_location_id, scheduled_at=scheduled_at,
+            items=self._to_items(items),
+        ))
+        self.events.record_by_nurse(
+            delivery, DeliveryEventType.RESERVED, nurse_id, datetime.now(UTC), self.events.reserved_details(delivery),
+        )
+        return delivery
+
     def _get_reserved(self, delivery_id: int, nurse_id: int) -> Delivery:
         """본인 예약이고 reserved 상태인지 확인하고 반환.
         [입력] delivery_id / nurse_id
-        [출력] Delivery (reserved 아니면 Conflict — 로봇이 이미 맡았거나 끝난 예약)
+        [출력] Delivery (reserved 아니면 Conflict — 로봇이 이미 맡았거나 끝난 예약.
+        물품을 하나라도 FMS에 보냈으면 Conflict delivery_sent_to_fms — FMS 취소 연동 전까지, 2026-10-27)
         """
         delivery = self.get(delivery_id, nurse_id, lock=True)
         if delivery.status != DeliveryStatus.RESERVED:
             raise Conflict(f"delivery {delivery_id} is {delivery.status}; only reserved can be changed", code="delivery_not_reserved")
+        if self.fms_orders.delivery_has_orders(delivery.id):
+            raise Conflict(f"delivery {delivery_id} is already sent to FMS", code="delivery_sent_to_fms")
         return delivery
 
     def _validate_scheduled_at(self, scheduled_at: datetime) -> None:
-        """배송 예정 시각이 미래인지 확인.
+        """배송 예정 시각 확인 — "지금" 예약도 받는다(SCHEDULED_AT_GRACE 안의 과거까지, 2026-10-22: 바로 claim해 시험하려고).
         [입력] scheduled_at: 시간대 포함
-        [출력] 없음 (과거·현재면 BadRequest)
+        [출력] 없음 (그보다 과거면 BadRequest)
         """
-        if scheduled_at <= datetime.now(UTC):
-            raise BadRequest("scheduled_at must be in the future", code="scheduled_at_not_future")
+        if scheduled_at < datetime.now(UTC) - SCHEDULED_AT_GRACE:
+            raise BadRequest("scheduled_at must not be in the past", code="scheduled_at_not_future")
 
     def _validate_destination(self, destination_location_id: int) -> Location:
-        """배송 위치가 등록된 장소인지 확인. 좌표 미등록 장소도 예약은 가능하다.
+        """배송 위치가 등록된 장소인지 확인. 좌표 미등록 장소도 예약은 가능하다. 로봇 전용 장소의 품목 규칙은 _validate_items_for.
         [입력] destination_location_id
-        [출력] Location (없으면 BadRequest)
+        [출력] Location (없으면 BadRequest location_not_found)
         """
         location = self.locations.get(destination_location_id)
         if location is None:
             raise BadRequest(f"location {destination_location_id} not found", code="location_not_found")
         return location
+
+    @staticmethod
+    def _validate_items_for(destination: Location, items: list) -> None:
+        """목적지와 품목 조합 (2026-10-22): 로봇 전용 장소(충전·출발점·대기 포켓)는 품목 없는 '로봇 이동'만 — 비품 배송 불가.
+        보통 장소는 품목이 하나 이상.
+        [입력] destination / items [출력] 없음 (틀리면 BadRequest location_robot_only · delivery_items_required)
+        """
+        if destination.robot_only and items:
+            raise BadRequest(f"location {destination.id} is robot-only; send no items (robot move)", code="location_robot_only")
+        if not destination.robot_only and not items:
+            raise BadRequest("items are required", code="delivery_items_required")
 
     def _validate_items(self, items: list[DeliveryItemIn]) -> None:
         """품목 중복·존재·삭제 여부 확인.

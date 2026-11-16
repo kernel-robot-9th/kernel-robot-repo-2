@@ -1,0 +1,4 @@
+delivery_id	event_type	time_kst	actor	robot	details
+132	reserved	15:14:02	nurse		{"items": [{"name": "A 약품", "quantity": 1, "supply_id": 1}], "destination": {"id": 8, "name": "101호"}, "scheduled_at": "2026-10-30T06:14:02.723000+00:00"}
+133	reserved	15:14:02	nurse		{"items": [{"name": "B 약품", "quantity": 1, "supply_id": 2}], "destination": {"id": 20, "name": "103호"}, "scheduled_at": "2026-10-30T06:14:02.723000+00:00"}
+134	reserved	15:14:02	nurse		{"items": [{"name": "C 약품", "quantity": 1, "supply_id": 3}], "destination": {"id": 11, "name": "104호"}, "scheduled_at": "2026-10-30T06:14:02.723000+00:00"}

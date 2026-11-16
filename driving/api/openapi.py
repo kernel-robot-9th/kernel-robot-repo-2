@@ -132,7 +132,7 @@ def spec(server_url=None):
                         'description': '등록한 목적지(dests)로 가는 /goto 작업이 성공하면 — dock 을 요청했으면 정밀 주차까지 끝난 뒤 — '
                                        '로봇이 url 로 `POST` (본문 = ArrivedSignal) 를 한 번 보낸다. 실패하면 1초 간격으로 3번까지. '
                                        '연결 실패·5xx 만 다시 보내고 4xx 는 그대로 둔다. 결과는 그 작업의 `notify` {url, status, error, response} 에 남는다. url 을 null 로 주면 끔.',
-                        'requestBody': {'required': True, **_json('NotifyConfig', example={'url': 'http://192.168.129.135:8000/pinky/arrived', 'dests': ['PHARMACY']})},
+                        'requestBody': {'required': True, **_json('NotifyConfig', example={'url': 'http://CONTROL_PC_IP:8000/pinky/arrived', 'dests': ['PHARMACY']})},
                         'responses': {'200': dict(description='저장됨', **_json('NotifyConfig')), '400': _err('url 이나 목적지 이름이 잘못됨')}}},
             '/set_pose': {'post': {'tags': ['위치'], 'summary': 'AMCL 시작 위치 넣기 + 스캔 확인 (tools/set_pose.py, 움직이지 않음)',
                                    'description': 'Nav2 띄운 직후 꼭. `find` 는 스캔만으로 맵 전체에서 찾음 (~1분)',

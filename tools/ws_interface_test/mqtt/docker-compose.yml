@@ -1,0 +1,12 @@
+# tools/ws_interface_test/mqtt/docker-compose.yml — 시험용 MQTT 브로커 (Mosquitto)
+# 실행: docker compose up -d   ·   끄기: docker compose down
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2.0.20
+    container_name: interface-test-mosquitto
+    ports:
+      - "1883:1883"   # MQTT
+      - "9001:9001"   # MQTT over WebSocket
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    restart: "no"

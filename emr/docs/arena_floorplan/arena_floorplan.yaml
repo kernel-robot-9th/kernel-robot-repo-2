@@ -1,0 +1,4 @@
+image: arena_floorplan.png
+resolution: 0.0015
+origin: [0.0, 0.0, 0.0]
+# 그림 cm/100 = m, 왼쪽 아래 원점 — FMS pose(cm)·EMR 장소(Pinky 아레나)와 같은 프레임. 표시용 평면도(벽 판정에 쓰지 않음)

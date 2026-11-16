@@ -22,7 +22,7 @@ NOT_FOUND_RESPONSE = {404: {"description": "맵 없음"}}
 CONFLICT_RESPONSE = {409: {"description": "name 또는 file_name 중복"}}
 FILE_ERROR_RESPONSE = {400: {"description": "map_yaml_invalid · map_image_invalid · map_file_too_large · map_name_invalid · map_file_name_invalid"}}
 MAP_YAML_DESCRIPTION = "map_server yaml (resolution, origin: [x, y, yaw]). 파일 이름이 maps.file_name이 된다"
-MAP_IMAGE_DESCRIPTION = "맵 이미지 PGM·PNG (slam_toolbox map_saver_cli 결과). 흑백 PNG로 바꿔 보관"
+MAP_IMAGE_DESCRIPTION = "맵 이미지 PGM·PNG (slam_toolbox map_saver_cli 결과). PNG로 바꿔 보관(흑백 맵은 흑백, 색 있는 평면도는 색 그대로)"
 
 
 def to_map_file(upload: UploadFile) -> MapFile:
@@ -134,7 +134,7 @@ def replace_map_files(
     summary="맵 이미지 (PNG)",
     description="누구나. 이미지가 없는 맵은 404 `map_image_not_found`. 주소에 `?v=<updated_at>`을 붙이면 교체 후 새로 받는다.",
     response_class=Response,
-    responses={200: {"content": {"image/png": {}}, "description": "흑백 PNG"}, 404: {"description": "맵 없음 · 이미지 없음"}},
+    responses={200: {"content": {"image/png": {}}, "description": "PNG (흑백 맵은 흑백, 평면도는 색)"}, 404: {"description": "맵 없음 · 이미지 없음"}},
 )
 def get_map_image(db: DB, map_id: int) -> Response:
     """

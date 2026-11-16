@@ -1,4 +1,4 @@
-"""배송 배정·진행 — 로봇 claim·progress·/robot/me, 복귀 장소, 삭제 보호 (로드맵 2단계, 2026-10-20). PostgreSQL 필요.
+"""배송 배정·진행 — 로봇 claim·progress·/robot/me, 삭제 보호 (로드맵 2단계, 2026-10-20). 복귀 장소는 2026-10-27 없앰. PostgreSQL 필요.
 계약: docs/api_contract_delivery_2026-10-20.md. 픽스처는 tests/conftest.py.
 FOR UPDATE SKIP LOCKED(여러 로봇 동시 claim)는 테스트가 연결 하나를 공유해 여기서 확인할 수 없다 — 실제 스택에서 확인.
 """
@@ -58,37 +58,36 @@ def test_claim_returns_204_when_nothing_is_due(client, auth_headers, seed, robot
 
 
 @requires_db
-def test_claim_skips_destinations_without_coordinates_or_on_other_maps(client, db, seed, robot_with_key, reserve_overdue):
-    reserve_overdue(destination_id=seed["room_302"].id, minutes_ago=30, quantity=1)  # 302호: 좌표 없음
-    other_map_room = Location(name="다른맵방", map_x_m=1.0, map_y_m=1.0, map_yaw_rad=0.0, map_id=None)
-    db.add(other_map_room); db.flush()
+def test_claim_skips_destinations_without_robot_dest(client, db, seed, robot_with_key, reserve_overdue):
+    """claim은 로봇 목적지 이름(robot_dest)이 있는 장소의 배송만 내준다 — 좌표만 있고 이름이 없으면 FMS가 /goto로 못 간다 (2026-10-27)."""
+    reserve_overdue(destination_id=seed["room_302"].id, minutes_ago=30, quantity=1)  # 302호: 좌표·로봇 목적지 없음
+    no_dest_room = Location(name="이름없는방", map_x_m=1.0, map_y_m=1.0, map_yaw_rad=0.0, map_id=seed["ward_map"].id)
+    db.add(no_dest_room); db.flush()
+    reserve_overdue(destination_id=no_dest_room.id, minutes_ago=20, quantity=1)   # 좌표는 있지만 로봇 목적지 없음
     assert client.post(CLAIM, headers=robot_with_key["headers"]).status_code == 204
     reachable = reserve_overdue(minutes_ago=1, quantity=1)
     assert client.post(CLAIM, headers=robot_with_key["headers"]).json()["id"] == reachable["id"]
 
 
 @requires_db
-def test_claim_requires_amr_and_home(client, auth_headers, make_robot, db, seed, home_location, reserve_overdue):
-    reserve_overdue(quantity=1)
-    arm = make_robot("적재팔", robot_type="manipulator", home_location_id=home_location.id)
+def test_claim_requires_amr_but_not_home(client, auth_headers, make_robot, db, seed, reserve_overdue):
+    reserved = reserve_overdue(quantity=1)
+    arm = make_robot("적재팔", robot_type="manipulator")
     response = client.post(CLAIM, headers=arm["headers"])
     assert response.status_code == 403 and response.json()["code"] == "robot_not_amr"
 
-    homeless = make_robot("배송로봇 9호")
-    response = client.post(CLAIM, headers=homeless["headers"])
-    assert response.status_code == 409 and response.json()["code"] == "robot_home_not_set"
-    # 좌표 없는 장소를 복귀 장소로 골라도 배송은 맡지 않는다
-    client.patch(f"{ROBOTS}/{homeless['id']}", headers=auth_headers, json={"home_location_id": seed["room_302"].id})
-    response = client.post(CLAIM, headers=homeless["headers"])
-    assert response.status_code == 409 and response.json()["code"] == "robot_home_not_set"
+    # 복귀 장소 없이도 맡는다 (2026-10-27: 복귀 장소를 쓰지 않음)
+    robot = make_robot("배송로봇 9호")
+    response = client.post(CLAIM, headers=robot["headers"])
+    assert response.status_code == 200 and response.json()["id"] == reserved["id"]
     assert client.post(CLAIM).status_code == 401
 
 
 @requires_db
-def test_two_robots_take_different_deliveries(client, make_robot, home_location, reserve_overdue):
+def test_two_robots_take_different_deliveries(client, make_robot, reserve_overdue):
     first, second = reserve_overdue(minutes_ago=5, quantity=1), reserve_overdue(minutes_ago=4, quantity=1)
-    robot_a = make_robot("배송로봇 A", home_location_id=home_location.id)
-    robot_b = make_robot("배송로봇 B", home_location_id=home_location.id)
+    robot_a = make_robot("배송로봇 A")
+    robot_b = make_robot("배송로봇 B")
     assert client.post(CLAIM, headers=robot_a["headers"]).json()["id"] == first["id"]
     assert client.post(CLAIM, headers=robot_b["headers"]).json()["id"] == second["id"]
 
@@ -115,7 +114,7 @@ def test_arrived_creates_one_time_marker_for_owner_only(client, auth_headers, ge
 
 
 @requires_db
-def test_markers_differ_between_arrived_deliveries(client, monkeypatch, make_robot, home_location, reserve_overdue, auth_headers):
+def test_markers_differ_between_arrived_deliveries(client, monkeypatch, make_robot, reserve_overdue, auth_headers):
     from app.services import dispatch
 
     class FirstFree:  # 무작위 대신 비어 있는 첫 번호 — 두 번째 배송이 첫 번호를 피하는지 본다
@@ -125,7 +124,7 @@ def test_markers_differ_between_arrived_deliveries(client, monkeypatch, make_rob
     monkeypatch.setattr(dispatch, "_marker_random", FirstFree())
     markers = []
     for name in ("배송로봇 A", "배송로봇 B"):
-        robot = make_robot(name, home_location_id=home_location.id)
+        robot = make_robot(name)
         reserved = reserve_overdue(quantity=1)
         assert client.post(CLAIM, headers=robot["headers"]).json()["id"] == reserved["id"]
         _progress(client, robot, reserved["id"], "arrived")
@@ -169,13 +168,13 @@ def test_failed_after_received_is_409(client, robot_with_key, arrived_delivery):
 
 
 @requires_db
-def test_progress_validation_and_ownership(client, make_robot, home_location, robot_with_key, reserve_overdue):
+def test_progress_validation_and_ownership(client, make_robot, robot_with_key, reserve_overdue):
     reserved = reserve_overdue(quantity=1)
     # 맡기 전(reserved)에는 어느 로봇도 보고할 수 없다
     response = _progress(client, robot_with_key, reserved["id"], "arrived")
     assert response.status_code == 403 and response.json()["code"] == "delivery_not_assigned_to_robot"
     client.post(CLAIM, headers=robot_with_key["headers"])
-    other = make_robot("배송로봇 2호", home_location_id=home_location.id)
+    other = make_robot("배송로봇 2호")
     response = _progress(client, other, reserved["id"], "failed", "robot_error")
     assert response.status_code == 403 and response.json()["code"] == "delivery_not_assigned_to_robot"
     # failed에는 사유가 필요하고, arrived에는 사유를 넣지 않는다, 모르는 단계·사유는 422
@@ -190,10 +189,10 @@ def test_progress_validation_and_ownership(client, make_robot, home_location, ro
 # ---- /robot/me · 복귀 장소 · 삭제 보호 -------------------------------------------
 
 @requires_db
-def test_robot_me_reports_home_and_active_delivery(client, make_robot, home_location, robot_with_key, reserve_overdue):
+def test_robot_me_reports_active_delivery(client, make_robot, robot_with_key, reserve_overdue):
     me = client.get(ME, headers=robot_with_key["headers"]).json()
     assert me["robot"]["name"] == "배송로봇 1호" and me["robot"]["robot_type"] == "amr"
-    assert me["home_location"]["name"] == "간호사스테이션" and me["home_location"]["map_x_m"] == 10.0
+    assert "home_location" not in me   # 2026-10-27 없앰
     assert me["active_delivery"] is None and me["receipt_wait_seconds"] == 300
 
     reserved = reserve_overdue(quantity=1)
@@ -201,23 +200,25 @@ def test_robot_me_reports_home_and_active_delivery(client, make_robot, home_loca
     me = client.get(ME, headers=robot_with_key["headers"]).json()
     assert me["active_delivery"]["id"] == reserved["id"] and me["active_delivery"]["status"] == "dispatched"
 
-    homeless = make_robot("배송로봇 9호")
-    assert client.get(ME, headers=homeless["headers"]).json()["home_location"] is None
     assert client.get(ME).status_code == 401
 
 
 @requires_db
-def test_home_location_update_and_delete_guards(client, auth_headers, general_nurse_headers, seed, home_location,
-                                                robot_with_key, reserve_overdue):
-    robot_id = robot_with_key["id"]
-    assert client.get(f"{ROBOTS}/{robot_id}").json()["home_location_id"] == home_location.id
-    response = client.patch(f"{ROBOTS}/{robot_id}", headers=auth_headers, json={"home_location_id": 999999})
-    assert response.status_code == 400 and response.json()["code"] == "location_not_found"
-    assert client.patch(f"{ROBOTS}/{robot_id}", headers=general_nurse_headers, json={"home_location_id": home_location.id}).status_code == 403
+def test_home_location_is_gone_and_old_home_does_not_block_delete(client, auth_headers, db, seed, robot_with_key, reserve_overdue):
+    """2026-10-27: 복귀 장소를 API에서 없앰. DB에 예전 값이 남아 있어도 그 장소를 지울 수 있다(값을 비우고 지움)."""
+    from app.models import Robot
 
-    # 복귀 장소로 쓰는 장소는 지울 수 없다
-    response = client.delete(f"/api/v1/locations/{home_location.id}", headers=auth_headers)
-    assert response.status_code == 409 and response.json()["code"] == "location_is_robot_home"
+    robot_id = robot_with_key["id"]
+    assert "home_location_id" not in client.get(f"{ROBOTS}/{robot_id}").json()
+    ignored = client.patch(f"{ROBOTS}/{robot_id}", headers=auth_headers, json={"home_location_id": seed["room_302"].id})
+    assert ignored.status_code == 200 and db.get(Robot, robot_id).home_location_id is None   # 보내도 무시
+
+    old_home = Location(name="예전복귀", map_x_m=1.0, map_y_m=1.0, map_yaw_rad=0.0, map_id=seed["ward_map"].id)
+    db.add(old_home); db.flush()
+    db.get(Robot, robot_id).home_location_id = old_home.id; db.flush()
+    assert client.delete(f"/api/v1/locations/{old_home.id}", headers=auth_headers).status_code == 204
+    db.expire_all()
+    assert db.get(Robot, robot_id).home_location_id is None
 
     # 진행 중 배송을 맡은 로봇은 지울 수 없다
     reserve_overdue(quantity=1)
@@ -254,10 +255,55 @@ def test_stage_notifications_go_to_owner_and_failure_to_admins(client, seed, rob
 
 
 @requires_db
-def test_rejected_progress_sends_no_notification(client, make_robot, home_location, robot_with_key, reserve_overdue, published):
+def test_rejected_progress_sends_no_notification(client, make_robot, robot_with_key, reserve_overdue, published):
     reserved = reserve_overdue(quantity=1)
     client.post(CLAIM, headers=robot_with_key["headers"])
     published.clear()
-    other = make_robot("배송로봇 2호", home_location_id=home_location.id)
+    other = make_robot("배송로봇 2호")
     assert _progress(client, other, reserved["id"], "arrived").status_code == 403
     assert _events(published) == []
+
+
+@requires_db
+def test_location_robot_dest_reaches_robot(client, auth_headers, robot_with_key, reserve_overdue, seed):
+    """장소의 로봇 목적지 이름(Pinky /dests, 2026-10-22)이 로봇용 응답 destination에 실린다. 이름은 장소 하나에만."""
+    set_dest = client.patch(f"/api/v1/locations/{seed['room_301'].id}", headers=auth_headers, json={"robot_dest": "ROOM1_CUL"})
+    assert set_dest.status_code == 200 and set_dest.json()["robot_dest"] == "ROOM1_CUL"
+    duplicate = client.patch(f"/api/v1/locations/{seed['room_302'].id}", headers=auth_headers, json={"robot_dest": "ROOM1_CUL"})
+    assert duplicate.status_code == 409 and duplicate.json()["code"] == "location_robot_dest_duplicate"
+    reserve_overdue()
+    claimed = client.post("/api/v1/robot/deliveries/claim", headers=robot_with_key["headers"]).json()
+    assert claimed["destination"]["robot_dest"] == "ROOM1_CUL"
+
+
+@requires_db
+def test_robot_arrived_is_pharmacy_only(client, auth_headers, robot_with_key, reserve_overdue, published):
+    """POST /robot/arrived (2026-10-27 약제실 전용): 배송 id 없이 약제실 도착을 알린다 — 로그만, 상태·알림·기록은 그대로.
+    병실 도착은 progress arrived. 맡은 것이 없으면 409, 병실 도착 뒤에 부르면 409."""
+    nothing = client.post("/api/v1/robot/arrived", headers=robot_with_key["headers"])
+    assert nothing.status_code == 409 and nothing.json()["code"] == "robot_no_active_delivery"
+    assert client.post("/api/v1/robot/arrived").status_code == 401   # 로봇 키 필요
+    reserved = reserve_overdue()
+    assert client.post("/api/v1/robot/deliveries/claim", headers=robot_with_key["headers"]).json()["id"] == reserved["id"]
+    at_pharmacy = client.post("/api/v1/robot/arrived", headers=robot_with_key["headers"])
+    assert at_pharmacy.status_code == 200 and at_pharmacy.json()["id"] == reserved["id"]
+    assert at_pharmacy.json()["status"] == "dispatched" and at_pharmacy.json()["arrived_at"] is None
+    assert client.post("/api/v1/robot/arrived", headers=robot_with_key["headers"]).json()["status"] == "dispatched"   # 여러 번 불러도 같다
+    assert not [m for m in published if m["event"] == "delivery_arrived"]   # 간호사에게 도착 알림이 가지 않는다
+    events = client.get(f"/api/v1/deliveries/{reserved['id']}/events", headers=auth_headers).json()
+    assert [event["event_type"] for event in events] == ["reserved", "dispatched"]   # 배송 기록에도 남지 않는다
+    room = client.post(f"/api/v1/robot/deliveries/{reserved['id']}/progress", headers=robot_with_key["headers"], json={"stage": "arrived"})
+    assert room.status_code == 200 and room.json()["status"] == "arrived"   # 병실 도착은 progress
+    after_room = client.post("/api/v1/robot/arrived", headers=robot_with_key["headers"])
+    assert after_room.status_code == 409 and after_room.json()["code"] == "delivery_invalid_transition"
+
+
+@requires_db
+def test_robot_lists_waiting_deliveries_without_claiming(client, robot_with_key, reserve_overdue):
+    """GET /robot/deliveries (2026-10-22): 맡지 않은 예약을 보기만 — 로봇 배정·상태 변경 없음."""
+    overdue = reserve_overdue()
+    listed = client.get("/api/v1/robot/deliveries", headers=robot_with_key["headers"])
+    assert listed.status_code == 200 and [d["id"] for d in listed.json()] == [overdue["id"]]
+    assert listed.json()[0]["status"] == "reserved" and "receipt_marker_id" not in listed.json()[0]
+    assert client.get("/api/v1/robot/me", headers=robot_with_key["headers"]).json()["active_delivery"] is None   # 맡지 않았다
+    assert client.get("/api/v1/robot/deliveries").status_code == 401   # 로봇 키 필요(켜져 있을 때)

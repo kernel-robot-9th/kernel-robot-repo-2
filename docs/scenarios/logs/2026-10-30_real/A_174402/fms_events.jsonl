@@ -1,0 +1,7 @@
+{"event_id": "e-1", "seq": 1, "time": "2026-10-30T17:44:21+09:00", "type": "order_created", "order_id": "o-1", "request_id": "emr-d342-s1-1", "room": "101호", "item": "A 약품"}
+{"event_id": "e-2", "seq": 2, "time": "2026-10-30T17:44:21+09:00", "type": "order_created", "order_id": "o-2", "request_id": "emr-d343-s2-1", "room": "103호", "item": "B 약품"}
+{"event_id": "e-3", "seq": 3, "time": "2026-10-30T17:44:21+09:00", "type": "order_created", "order_id": "o-3", "request_id": "emr-d344-s3-1", "room": "104호", "item": "C 약품"}
+{"event_id": "e-4", "seq": 4, "time": "2026-10-30T17:44:21+09:00", "type": "batch_assigned", "batch_id": "b-1", "robot": 2, "name": "pinky_ee3a", "orders": [{"order_id": "o-1", "room": "101호", "item": "A 약품"}, {"order_id": "o-3", "room": "104호", "item": "C 약품"}, {"order_id": "o-2", "room": "103호", "item": "B 약품"}], "count": 3, "rooms": ["101호", "104호", "103호"]}
+{"event_id": "e-5", "seq": 5, "time": "2026-10-30T18:01:58+09:00", "type": "robot_called", "batch_id": "b-1", "robot": 2, "eta_s": 50}
+{"event_id": "e-6", "seq": 6, "time": "2026-10-30T18:01:58+09:00", "type": "robot_departed", "robot": 2, "task": "delivery", "from": "T1_20", "to": {"node": "PHARMACY", "room": "약제실"}}
+{"event_id": "e-9", "seq": 9, "time": "2026-10-30T18:04:22+09:00", "type": "robot_error", "robot": 2, "name": "pinky_ee3a", "code": "rebooted", "why": "로봇이 재부팅됨 — 위치를 믿을 수 없음. 노드에 놓고 /set_pose", "node": "T1_20", "edge": null, "task": "delivery", "batch_id": "b-1"}

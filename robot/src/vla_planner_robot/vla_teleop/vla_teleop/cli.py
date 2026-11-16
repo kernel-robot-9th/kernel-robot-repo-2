@@ -6,10 +6,8 @@
   ros2 run vla_teleop teleop stop                      # fold the arm with the leader first
   ros2 run vla_teleop teleop clear-errors --arm right  # reboot motors that report a hardware error (arm stopped)
   ros2 run vla_teleop teleop status
-  ros2 run vla_teleop teleop tap --x 0.19 --y -0.08 --z -0.04 [--dry-run]   # follower only: hover, touch, back, stop
-  ros2 run vla_teleop teleop pick --x .. --y .. --z .. --place-x .. --place-y .. --place-z .. [--record --dry-run]
   ros2 run vla_teleop teleop camera --tune             # find + save fixed exposure / white balance (scene lit as usual)
-  ros2 run vla_teleop teleop camera                    # re-apply the saved values (start/tap/pick also do this)
+  ros2 run vla_teleop teleop camera                    # re-apply the saved values (start also does this)
 
 Safety: the follower starts with init_position:=false (no automatic motion) and is moved to the leader pose
 over align_duration_s before the leader is started, so it never jumps. Stopping turns the follower torque off,
@@ -139,8 +137,8 @@ def read_follower_joints(timeout_s=3.0):
     return [named[f'joint{i}'] for i in range(1, 6)], named.get('gripper_joint_1')
 
 
-def align_follower(target, duration_s, gripper=None):
-    """Move the follower arm joints (and the gripper, when given) to `target` over duration_s."""
+def align_follower(target, duration_s):
+    """Move the follower arm joints to `target` over duration_s."""
     import rclpy
     from builtin_interfaces.msg import Duration
     from control_msgs.action import FollowJointTrajectory
@@ -153,10 +151,10 @@ def align_follower(target, duration_s, gripper=None):
     if not client.wait_for_server(timeout_sec=10.0):
         raise RuntimeError('follower arm_controller action not available')
     goal = FollowJointTrajectory.Goal()
-    goal.trajectory.joint_names = [f'joint{i}' for i in range(1, 6)] + ([] if gripper is None else ['gripper_joint_1'])
+    goal.trajectory.joint_names = [f'joint{i}' for i in range(1, 6)]
     seconds = int(duration_s)
     goal.trajectory.points = [JointTrajectoryPoint(
-        positions=list(target) + ([] if gripper is None else [gripper]), time_from_start=Duration(sec=seconds, nanosec=int((duration_s - seconds) * 1e9)))]
+        positions=list(target), time_from_start=Duration(sec=seconds, nanosec=int((duration_s - seconds) * 1e9)))]
     future = client.send_goal_async(goal)
     rclpy.spin_until_future_complete(node, future)
     if not future.result().accepted:
@@ -180,93 +178,10 @@ def path_min_z(q_from, q_to, steps=40):
     return min(fk_tool([a + (b - a) * k / steps for a, b in zip(q_from, q_to)])[2] for k in range(steps + 1))
 
 
-def plan_tap(home_q, x, y, z, hover_dz, safe_z_min, allow_below_safe=False):
-    """[입력] current joints, touch point (arm base frame, m) [출력] list of (name, joints) or raises ValueError.
-
-    home -> hover (z + hover_dz) -> touch (z) -> hover -> home, tool pointing straight down.
-    """
-    from vla_executor.omx_ik import top_down_ik
-    if z < safe_z_min and not allow_below_safe:
-        raise ValueError(f'touch z {z:+.3f} is below the safe height {safe_z_min:+.3f} (use --allow-below-safe)')
-    hover, touch = top_down_ik(x, y, z + hover_dz), top_down_ik(x, y, z)
-    if hover is None or touch is None:
-        raise ValueError(f'({x:+.3f}, {y:+.3f}) is out of reach at z {z:+.3f} / {z + hover_dz:+.3f}')
-    home = list(home_q)
-    moves = [('hover', home, hover), ('touch', hover, touch), ('lift', touch, hover), ('home', hover, home)]
-    floor = min(z, safe_z_min) if allow_below_safe else safe_z_min
-    for name, q_from, q_to in moves:
-        low = path_min_z(q_from, q_to)
-        if low < floor - 0.002:
-            raise ValueError(f'{name}: the joint-space path dips to z {low:+.3f} (limit {floor:+.3f})')
-    return [(name, q_to) for name, _, q_to in moves]
-
-
-def ik_rect(x, y, z, closing_yaw=None):
-    """Top-down IK with the finger closing direction (rad, base frame) for a rectangular object: the fingers are
-    symmetric, so yaw and yaw + pi are the same grasp (the smaller joint5 is used); no square-block pi/2 folding."""
-    from vla_executor.omx_ik import top_down_ik, wrap
-    q = top_down_ik(x, y, z)
-    if q is None or closing_yaw is None:
-        return q
-    q5 = wrap(q[0] + math.pi / 2 - closing_yaw)
-    q[4] = min(q5, wrap(q5 + math.pi), key=abs)
-    return q
-
-
-def plan_pick(home_q, pick, place, hover_dz, safe_z_min, grip_open, grip_close, allow_below_safe=False,
-              grasp_yaw=None, place_yaw=None):
-    """[입력] current joints, pick / place tool points (arm base frame, m) [출력] [(name, joints, gripper, min s)].
-
-    open -> above pick -> down -> close -> up -> above place -> down -> open -> up -> home (closed); tool points down.
-    grasp_yaw / place_yaw: finger closing direction (rad, arm base frame) at the pick / place (place defaults to the
-    pick yaw, so the object keeps its orientation); None -> joint5 = 0.
-    Raises ValueError when a point is out of reach or a move dips below the allowed height.
-    """
-    lowest = min(pick[2], place[2])
-    place_yaw = grasp_yaw if place_yaw is None else place_yaw
-    if lowest < safe_z_min and not allow_below_safe:
-        raise ValueError(f'z {lowest:+.3f} is below the safe height {safe_z_min:+.3f} (use --allow-below-safe)')
-    q = {}
-    for name, (x, y, z) in (('pick', pick), ('above pick', (pick[0], pick[1], pick[2] + hover_dz)),
-                            ('place', place), ('above place', (place[0], place[1], place[2] + hover_dz))):
-        q[name] = ik_rect(x, y, z, grasp_yaw if 'pick' in name else place_yaw)
-        if q[name] is None:
-            raise ValueError(f'{name} ({x:+.3f}, {y:+.3f}, {z:+.3f}) is out of reach')
-    home = list(home_q)
-    plan = [('open', home, grip_open, 2.0), ('above pick', q['above pick'], grip_open, 3.0),
-            ('down', q['pick'], grip_open, 6.0), ('close', q['pick'], grip_close, 2.0),
-            ('up', q['above pick'], grip_close, 6.0), ('above place', q['above place'], grip_close, 3.0),
-            ('down', q['place'], grip_close, 6.0), ('release', q['place'], grip_open, 2.0),
-            ('up', q['above place'], grip_open, 6.0), ('home', home, grip_close, 3.0)]
-    floor = min(lowest, safe_z_min) if allow_below_safe else safe_z_min
-    previous = home
-    for name, joints, _, _ in plan:
-        low = path_min_z(previous, joints)
-        if low < floor - 0.002:
-            raise ValueError(f'{name}: the joint-space path dips to z {low:+.3f} (limit {floor:+.3f})')
-        previous = joints
-    return plan
-
-
 def camera(spec):
     """Config camera entry (a /dev path or a glob, e.g. the hub-port suffix of a by-path name) -> device path."""
     matches = sorted(glob.glob(spec))
     return matches[0] if matches else spec
-
-
-def snapshot(device, path):
-    import cv2
-    device = camera(device)
-    cap = cv2.VideoCapture(device, cv2.CAP_V4L2)
-    if 'SNAP' in device:
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920); cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
-    ok, frame = False, None
-    for _ in range(10):
-        ok, frame = cap.read()
-    cap.release()
-    if ok:
-        cv2.imwrite(path, frame)
-    print(f'   {"saved" if ok else "could not read"} {path}')
 
 
 def camera_devices(cfg):
@@ -296,10 +211,6 @@ def apply_camera_settings(cfg, quiet=False):
                   f'white balance {saved[name].get("white_balance_temperature")} K'
                   + (f'  NOT APPLIED: {failed}' if failed else ''))
     return applied
-
-
-def move_seconds(q_from, q_to, speed_deg_s, min_s):
-    return max(min_s, max(abs(math.degrees(b - a)) for a, b in zip(q_from, q_to)) / speed_deg_s)
 
 
 # ---------------------------------------------------------------------------- commands
@@ -338,6 +249,12 @@ def cmd_start(cfg, args):
     gap = [math.degrees(a - b) for a, b in zip(leader_q, follower_q)]
     print(f'{time.strftime("%T")} {args.arm} arm: follower {arm["follower_serial"]}, leader {arm["leader_serial"]}')
     print(f'   leader-follower gap (deg): {[round(g, 1) for g in gap]}')
+    _, _, leader_z, _ = tool_pose(leader_q)
+    low = path_min_z(follower_q, leader_q)
+    if min(leader_z, low) < cfg['safe_z_min_m']:   # the follower first moves to the leader pose: never into the floor
+        print(f'refused: the leader pose puts the tool at z {leader_z:+.3f} (alignment path down to {low:+.3f}), below '
+              f'the safe height {cfg["safe_z_min_m"]:+.3f}. Raise / fold the leader first.', file=sys.stderr)
+        return 1
     if args.dry_run:
         print('dry run: nothing started')
         return 0
@@ -457,123 +374,6 @@ def cmd_stop(cfg, args):
     return 0
 
 
-def prepare_follower(cfg, args):
-    """[출력] (arm config, home joints) or None after printing why the follower cannot be used."""
-    if running_state():
-        print('teleop is running (the leader would fight the moves); stop it first', file=sys.stderr)
-        return None
-    arm = cfg['arms'][args.arm]
-    with dxl.Bus(arm['follower_serial']) as bus:
-        motors = [bus.motor(i) for i in dxl.FOLLOWER_IDS]
-        home_q = bus.joints_rad(dxl.FOLLOWER_IDS[:5])
-    errors = {m['id']: dxl.error_names(m['hw_error']) for m in motors if m and m['hw_error']}
-    if None in motors or errors:
-        print(f'follower not ready: errors {errors}. Run: teleop clear-errors --arm {args.arm}', file=sys.stderr)
-        return None
-    hx, _, hz, _ = tool_pose(home_q)
-    folded = cfg['folded']
-    if hx > folded['max_x_m'] or hz > folded['max_z_m']:
-        print(f'start pose is not folded (tool x {hx:.3f}, z {hz:.3f}); the follower is stopped at the end, '
-              f'so it must start folded', file=sys.stderr)
-        return None
-    return arm, home_q
-
-
-def run_plan(cfg, args, arm, home_q, plan, tag):
-    """Execute [(name, joints, gripper or None, min seconds)] on the follower alone, then stop it at home."""
-    speed = float(cfg.get('tap_speed_deg_s', 15.0))
-    previous = home_q
-    for name, q, grip, min_s in plan:
-        x, y, z, tilt = tool_pose(q)
-        seconds = move_seconds(previous, q, speed, min_s)
-        print(f'   {name:12s} tool ({x:+.3f}, {y:+.3f}, {z:+.3f}) tilt {tilt:+.1f}  '
-              + (f'gripper {grip:+.2f}  ' if grip is not None else '') + f'{seconds:.1f} s')
-        previous = q
-    if args.dry_run:
-        print('dry run: nothing started')
-        return 0
-    session = os.path.join(STATE_DIR, time.strftime('%Y%m%d-%H%M%S') + f'-{tag}')
-    os.makedirs(session, exist_ok=True)
-    state = {'arm': args.arm, 'session': session, 'pgids': {}, 'started': time.strftime('%F %T')}
-    apply_camera_settings(cfg, quiet=True)
-    if args.record:
-        state['pgids']['recorder'] = launch(
-            [sys.executable, '-m', 'vla_teleop.recorder', session, f'top={camera(cfg["top_camera"])}',
-             f'wrist={camera(arm["wrist_camera"])}'], os.path.join(session, 'recorder.log'))
-        wait_for(os.path.join(session, 'recorder.log'), 'recording', state['pgids']['recorder'], 10)
-        print(f'{time.strftime("%T")} recording top + wrist video')
-    print(f'{time.strftime("%T")} follower: start (init_position false, holds its pose)')
-    state['pgids']['follower'] = launch(
-        ['ros2', 'launch', 'open_manipulator_bringup', 'omx_f_follower_ai.launch.py',
-         f'port_name:={dxl.port_path(arm["follower_serial"])}', 'init_position:=false', 'start_rviz:=false'],
-        os.path.join(session, 'follower.log'))
-    save_state(state)
-    try:
-        wait_for(os.path.join(session, 'follower.log'), 'Torque ON', state['pgids']['follower'], 40, count=6)
-        wait_for(os.path.join(session, 'follower.log'), 'activated arm_controller', state['pgids']['follower'], 40)
-        previous = home_q
-        for name, q, grip, min_s in plan:
-            code = align_follower(q, move_seconds(previous, q, speed, min_s), gripper=grip)
-            joints = read_follower_joints()
-            if joints:
-                x, y, z, tilt = tool_pose(joints[0])
-                print(f'{time.strftime("%T")} {name:12s} done (error_code {code})  tool ({x:+.3f}, {y:+.3f}, '
-                      f'{z:+.3f}) tilt {tilt:+.1f}' + (f'  gripper {joints[1]:+.3f}' if joints[1] is not None else ''))
-            if name == 'touch' and not args.record:   # cameras are busy while recording
-                time.sleep(1.0)
-                for label, device in (('wrist', arm['wrist_camera']), ('top', cfg['top_camera'])):
-                    snapshot(device, os.path.join(session, f'touch_{label}.jpg'))
-            previous = q
-    except Exception as error:  # noqa: BLE001 - keep torque on, report
-        print(f'{tag} failed: {error}. The follower keeps holding its pose; fold it, then: teleop stop --force',
-              file=sys.stderr)
-        return 1
-    finally:
-        if args.record:
-            time.sleep(1.0)
-            stop_group(state['pgids'].get('recorder'), 'recorder')
-    stop_group(state['pgids']['follower'], 'follower')
-    print(f'{time.strftime("%T")} done. Log: {session}')
-    return 0
-
-
-def cmd_tap(cfg, args):
-    """Follower only (no leader): hover above (x, y), go down to z, come back up, return to the start pose, stop."""
-    ready = prepare_follower(cfg, args)
-    if not ready:
-        return 1
-    arm, home_q = ready
-    try:
-        plan = plan_tap(home_q, args.x, args.y, args.z, args.hover, cfg['safe_z_min_m'], args.allow_below_safe)
-    except ValueError as error:
-        print(f'refused: {error}', file=sys.stderr)
-        return 1
-    print(f'{time.strftime("%T")} {args.arm} tap at x {args.x:+.3f} y {args.y:+.3f} z {args.z:+.3f} '
-          f'(hover {args.z + args.hover:+.3f})')
-    return run_plan(cfg, args, arm, home_q,
-                    [(name, q, None, 6.0 if name in ('touch', 'lift') else 3.0) for name, q in plan], 'tap')
-
-
-def cmd_pick(cfg, args):
-    """Follower only: open, pick at (x, y, z), carry, release at (place x, y, z), return to the start pose, stop."""
-    ready = prepare_follower(cfg, args)
-    if not ready:
-        return 1
-    arm, home_q = ready
-    grip = cfg['gripper']
-    try:
-        plan = plan_pick(home_q, (args.x, args.y, args.z), (args.place_x, args.place_y, args.place_z), args.hover,
-                         cfg['safe_z_min_m'], grip['open'], grip['close'], args.allow_below_safe,
-                         None if args.yaw is None else math.radians(args.yaw),
-                         None if args.place_yaw is None else math.radians(args.place_yaw))
-    except ValueError as error:
-        print(f'refused: {error}', file=sys.stderr)
-        return 1
-    print(f'{time.strftime("%T")} {args.arm} pick at ({args.x:+.3f}, {args.y:+.3f}, {args.z:+.3f}) -> place at '
-          f'({args.place_x:+.3f}, {args.place_y:+.3f}, {args.place_z:+.3f})')
-    return run_plan(cfg, args, arm, home_q, plan, 'pick')
-
-
 def cmd_camera(cfg, args):
     """--tune: measure and save fixed exposure / white balance; otherwise re-apply the saved values."""
     from vla_teleop import camera_lock
@@ -661,25 +461,6 @@ def main(argv=None):
     here.add_argument('--dry', action='store_true', help='print only, do not save')
     stop = sub.add_parser('stop', help='stop leader, follower, viewer (fold the arm first)')
     stop.add_argument('--force', action='store_true')
-    tap = sub.add_parser('tap', help='follower only: hover, touch (x, y, z), lift, return to the start pose, stop')
-    tap.add_argument('--arm', default='right')
-    tap.add_argument('--x', type=float, required=True, help='arm base frame, m')
-    tap.add_argument('--y', type=float, required=True)
-    tap.add_argument('--z', type=float, required=True, help='lowest tool height, m')
-    tap.add_argument('--hover', type=float, default=0.05, help='approach height above z, m')
-    tap.add_argument('--allow-below-safe', action='store_true', help='allow z below safe_z_min_m')
-    tap.add_argument('--record', action='store_true', help='save top.mp4 and wrist.mp4 in the session folder')
-    tap.add_argument('--dry-run', action='store_true', help='print the plan only')
-    pick = sub.add_parser('pick', help='follower only: pick at (x, y, z), place at (place x, y, z), return, stop')
-    pick.add_argument('--arm', default='right')
-    for key in ('x', 'y', 'z', 'place-x', 'place-y', 'place-z'):
-        pick.add_argument(f'--{key}', type=float, required=True, help='arm base frame, m (z: tool height)')
-    pick.add_argument('--hover', type=float, default=0.05, help='approach height above each point, m')
-    pick.add_argument('--yaw', type=float, help='finger closing direction, deg in the arm base frame (default: joint5 0)')
-    pick.add_argument('--place-yaw', type=float, help='closing direction at the place, deg (default: --yaw)')
-    pick.add_argument('--allow-below-safe', action='store_true', help='allow z below safe_z_min_m')
-    pick.add_argument('--record', action='store_true', help='save top.mp4 and wrist.mp4 in the session folder')
-    pick.add_argument('--dry-run', action='store_true', help='print the plan only')
     cam = sub.add_parser('camera', help='fixed exposure / white balance: --tune to measure and save, else apply')
     cam.add_argument('--tune', action='store_true', help='measure with the scene lit as usual, then save')
     cam.add_argument('--only', nargs='+', help='camera names: top, right_wrist, left_wrist')
@@ -690,7 +471,7 @@ def main(argv=None):
     with open(args.config) as handle:
         cfg = yaml.safe_load(handle)
     os.environ['ROS_DOMAIN_ID'] = str(cfg['ros_domain_id'])
-    commands = {'scan': cmd_scan, 'start': cmd_start, 'here': cmd_here, 'stop': cmd_stop, 'tap': cmd_tap, 'pick': cmd_pick, 'camera': cmd_camera,
+    commands = {'scan': cmd_scan, 'start': cmd_start, 'here': cmd_here, 'stop': cmd_stop, 'camera': cmd_camera,
                 'clear-errors': cmd_clear_errors, 'status': cmd_status}
     return commands[args.command](cfg, args)
 

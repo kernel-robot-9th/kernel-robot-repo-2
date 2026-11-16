@@ -43,7 +43,7 @@ function MarkerCell({ nurse, canEdit, canPrint, onPrint }: {
         <Input
           key={saved ?? 'none'}   // 서버 값이 바뀌면(다른 화면·다시 불러옴) 입력칸도 새 값으로
           type="number" min={0} max={ARUCO_MARKER_ID_MAX} placeholder="없음"
-          aria-label={`${nurse.name} 마커 번호`} defaultValue={saved ?? ''}
+          aria-label={`${nurse.name} 인식표 번호`} defaultValue={saved ?? ''}
           onBlur={e => {
             const input = e.currentTarget
             const next = parseMarkerInput(input.value)
@@ -57,7 +57,7 @@ function MarkerCell({ nurse, canEdit, canPrint, onPrint }: {
         <span className="font-mono">{saved ?? <span className="text-slate-400">없음</span>}</span>
       )}
       {saved !== null && canPrint && (
-        <button type="button" onClick={onPrint} title="마커 보기·인쇄" className="rounded border border-slate-200 p-0.5 hover:border-blue-400">
+        <button type="button" onClick={onPrint} title="신분증 인식표 인쇄" className="rounded border border-slate-200 p-0.5 hover:border-blue-400">
           <ArucoMarker arucoMarkerId={saved} className="size-7" />
         </button>
       )}
@@ -107,16 +107,16 @@ export function Nurses() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <PageTitle>간호사</PageTitle>
-        {isAdmin && <Button onClick={() => setShowForm(v => !v)}>{showForm ? '닫기' : '+ 등록'}</Button>}
+        <PageTitle>직원 관리</PageTitle>
+        {isAdmin && <Button onClick={() => setShowForm(v => !v)}>{showForm ? '닫기' : '+ 직원 추가'}</Button>}
       </div>
       {me.data && !isAdmin && (
-        <p className="text-sm text-slate-500">간호사 등록·수정·비활성화와 비밀번호 초기화는 관리자만 할 수 있습니다.</p>
+        <p className="text-sm text-slate-500">간호사 추가, 수정, 사용 중지, 비밀번호 초기화는 관리자만 할 수 있습니다. 권한이 없습니다.</p>
       )}
       {notice && <p className="rounded bg-green-50 px-3 py-2 text-sm text-green-800">{notice}</p>}
       <p className="text-sm text-slate-500">
-        마커는 신분증 대신 쓰는 ArUco 4x4_50 마커입니다(번호 0~{ARUCO_MARKER_ID_MAX}, 간호사마다 다른 번호).
-        {isAdmin ? ' 번호 칸을 비우면 배정이 해제됩니다.' : ''} 마커 그림을 누르면 크게 보고 인쇄할 수 있습니다.
+        신분증 인식표는 간호사마다 다른 번호(0~{ARUCO_MARKER_ID_MAX})를 씁니다.
+        {isAdmin ? ' 비우면 인식표 빼집니다.' : ''} 인식표 그림을 누르면 크게 보고 인쇄할 수 있습니다.
       </p>
 
       {isAdmin && showForm && (
@@ -129,10 +129,10 @@ export function Nurses() {
             </Label>
             <Label text="역할">
               <Select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value as NurseRole }))}>
-                <option value="nurse">일반</option><option value="admin">관리자</option>
+                <option value="nurse">간호사</option><option value="admin">관리자</option>
               </Select>
             </Label>
-            <Label text={`마커 번호 (0~${ARUCO_MARKER_ID_MAX}, 선택)`}>
+            <Label text={`인식표 번호 (0~${ARUCO_MARKER_ID_MAX}, 선택)`}>
               <Input
                 type="number" min={0} max={ARUCO_MARKER_ID_MAX} placeholder="없음"
                 value={form.aruco_marker_id ?? ''}
@@ -158,7 +158,7 @@ export function Nurses() {
         <LoadError what="간호사 목록" error={nurses.error} onRetry={() => void nurses.refetch()} />
       ) : (
         <Table>
-          <thead><tr><Th>사번</Th><Th>이름</Th><Th>역할</Th><Th>마커</Th><Th>상태</Th>{isAdmin && <Th>{' '}</Th>}</tr></thead>
+          <thead><tr><Th>사번</Th><Th>이름</Th><Th>권한</Th><Th>신분증</Th><Th>{' '}</Th>{isAdmin && <Th>{' '}</Th>}</tr></thead>
           <tbody>
             {(nurses.data ?? []).map(n => {
               const isSelf = n.id === me.data?.id
@@ -170,7 +170,7 @@ export function Nurses() {
                     {isAdmin && !isSelf ? (
                       <div className="w-28">
                         <Select value={n.role} onChange={e => update.mutate({ id: n.id, body: { role: e.target.value as NurseRole } })}>
-                          <option value="nurse">일반</option><option value="admin">관리자</option>
+                          <option value="nurse">간호사</option><option value="admin">관리자</option>
                         </Select>
                       </div>
                     ) : (
@@ -183,20 +183,20 @@ export function Nurses() {
                       onPrint={() => { if (n.aruco_marker_id !== null) setPrintTarget({ ...n, aruco_marker_id: n.aruco_marker_id }) }}
                     />
                   </Td>
-                  <Td><Badge value={n.is_active ? 'active' : 'inactive'} label={n.is_active ? '활성' : '비활성'} /></Td>
+                  <Td><Badge value={n.is_active ? 'active' : 'inactive'} label={n.is_active ? '근무중' : '사용 중지'} /></Td>
                   {isAdmin && (
                     <Td>
                       {isSelf ? (
-                        <span className="text-xs text-slate-400">내 비밀번호는 상단 '비밀번호 변경'에서</span>
+                        <span className="text-xs text-slate-400">내 비밀번호는 오른쪽 위 '비밀번호 변경'에서 바꿉니다.</span>
                       ) : resetTargetId === n.id ? (
                         <PasswordResetForm nurse={n} onDone={closeReset} />
                       ) : (
                         <div className="flex gap-1">
                           <Button variant="secondary" onClick={() => { setNotice(''); setResetTargetId(n.id) }}>비밀번호 초기화</Button>
                           {n.is_active ? (
-                            <Button variant="danger" onClick={() => { if (confirm(`${n.name} 비활성화?`)) deactivate.mutate(n.id) }}>비활성화</Button>
+                            <Button variant="danger" onClick={() => { if (confirm(`${n.name} 계정을 사용 중지할까요?`)) deactivate.mutate(n.id) }}>중지</Button>
                           ) : (
-                            <Button variant="secondary" onClick={() => update.mutate({ id: n.id, body: { is_active: true } })}>복구</Button>
+                            <Button variant="secondary" onClick={() => update.mutate({ id: n.id, body: { is_active: true } })}>사용</Button>
                           )}
                         </div>
                       )}

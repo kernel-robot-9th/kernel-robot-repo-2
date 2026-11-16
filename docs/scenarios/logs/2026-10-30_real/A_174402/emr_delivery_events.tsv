@@ -1,0 +1,7 @@
+delivery_id	event_type	time_kst	actor	robot	details
+342	reserved	17:44:18	nurse		{"items": [{"name": "A 약품", "quantity": 1, "supply_id": 1}], "destination": {"id": 8, "name": "101호"}, "scheduled_at": "2026-10-30T08:44:18.308000+00:00"}
+343	reserved	17:44:18	nurse		{"items": [{"name": "B 약품", "quantity": 1, "supply_id": 2}], "destination": {"id": 20, "name": "103호"}, "scheduled_at": "2026-10-30T08:44:18.308000+00:00"}
+344	reserved	17:44:18	nurse		{"items": [{"name": "C 약품", "quantity": 1, "supply_id": 3}], "destination": {"id": 11, "name": "104호"}, "scheduled_at": "2026-10-30T08:44:18.308000+00:00"}
+342	preparing	18:01:58	robot	배송로봇 2호	null
+343	preparing	18:01:58	robot	배송로봇 2호	null
+344	preparing	18:01:58	robot	배송로봇 2호	null

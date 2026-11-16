@@ -1,0 +1,36 @@
+delivery_id	event_type	time_kst	actor	robot	details
+138	reserved	16:27:28	nurse		{"items": [{"name": "주사제", "quantity": 2, "supply_id": 4}], "destination": {"id": 15, "name": "수술실"}, "scheduled_at": "2026-10-30T07:27:28.689000+00:00"}
+139	reserved	16:27:28	nurse		{"items": [{"name": "A 약품", "quantity": 1, "supply_id": 1}], "destination": {"id": 21, "name": "106호"}, "scheduled_at": "2026-10-30T07:27:28.689000+00:00"}
+140	reserved	16:27:28	nurse		{"items": [{"name": "C 약품", "quantity": 1, "supply_id": 3}], "destination": {"id": 13, "name": "107호"}, "scheduled_at": "2026-10-30T07:27:28.689000+00:00"}
+141	reserved	16:27:41	nurse		{"items": [{"name": "C 약품", "quantity": 1, "supply_id": 3}], "destination": {"id": 10, "name": "102호"}, "scheduled_at": "2026-10-30T07:27:41.696000+00:00"}
+138	preparing	16:27:46	robot	배송로봇 2호	null
+140	preparing	16:27:46	robot	배송로봇 2호	null
+139	preparing	16:27:46	robot	배송로봇 3호	null
+142	reserved	16:27:53	nurse		{"items": [{"name": "B 약품", "quantity": 1, "supply_id": 2}], "destination": {"id": 13, "name": "107호"}, "scheduled_at": "2026-10-30T07:27:53.706000+00:00"}
+141	preparing	16:28:01	robot	배송로봇 1호	null
+143	reserved	16:28:04	nurse		{"items": [{"name": "C 약품", "quantity": 2, "supply_id": 3}], "destination": {"id": 20, "name": "103호"}, "scheduled_at": "2026-10-30T07:28:04.719000+00:00"}
+144	reserved	16:28:04	nurse		{"items": [{"name": "B 약품", "quantity": 1, "supply_id": 2}], "destination": {"id": 10, "name": "102호"}, "scheduled_at": "2026-10-30T07:28:04.719000+00:00"}
+145	reserved	16:28:04	nurse		{"items": [{"name": "C 약품", "quantity": 1, "supply_id": 3}], "destination": {"id": 8, "name": "101호"}, "scheduled_at": "2026-10-30T07:28:04.719000+00:00"}
+146	reserved	16:28:17	nurse		{"items": [{"name": "C 약품", "quantity": 1, "supply_id": 3}], "destination": {"id": 15, "name": "수술실"}, "scheduled_at": "2026-10-30T07:28:17.734000+00:00"}
+147	reserved	16:28:17	nurse		{"items": [{"name": "A 약품", "quantity": 1, "supply_id": 1}], "destination": {"id": 13, "name": "107호"}, "scheduled_at": "2026-10-30T07:28:17.734000+00:00"}
+148	reserved	16:28:29	nurse		{"items": [{"name": "주사제", "quantity": 1, "supply_id": 4}], "destination": {"id": 14, "name": "108호"}, "scheduled_at": "2026-10-30T07:28:29.748000+00:00"}
+149	reserved	16:28:29	nurse		{"items": [{"name": "B 약품", "quantity": 1, "supply_id": 2}], "destination": {"id": 21, "name": "106호"}, "scheduled_at": "2026-10-30T07:28:29.748000+00:00"}
+150	reserved	16:28:29	nurse		{"items": [{"name": "B 약품", "quantity": 1, "supply_id": 2}], "destination": {"id": 11, "name": "104호"}, "scheduled_at": "2026-10-30T07:28:29.748000+00:00"}
+151	reserved	16:28:40	nurse		{"items": [{"name": "B 약품", "quantity": 1, "supply_id": 2}], "destination": {"id": 13, "name": "107호"}, "scheduled_at": "2026-10-30T07:28:40.760000+00:00"}
+152	reserved	16:28:53	nurse		{"items": [{"name": "B 약품", "quantity": 2, "supply_id": 2}], "destination": {"id": 8, "name": "101호"}, "scheduled_at": "2026-10-30T07:28:53.774000+00:00"}
+153	reserved	16:28:53	nurse		{"items": [{"name": "C 약품", "quantity": 1, "supply_id": 3}], "destination": {"id": 14, "name": "108호"}, "scheduled_at": "2026-10-30T07:28:53.774000+00:00"}
+154	reserved	16:28:53	nurse		{"items": [{"name": "주사제", "quantity": 1, "supply_id": 4}], "destination": {"id": 15, "name": "수술실"}, "scheduled_at": "2026-10-30T07:28:53.774000+00:00"}
+138	dispatched	16:28:58	robot	배송로봇 2호	null
+140	dispatched	16:28:58	robot	배송로봇 2호	null
+155	reserved	16:29:05	nurse		{"items": [{"name": "주사제", "quantity": 2, "supply_id": 4}], "destination": {"id": 20, "name": "103호"}, "scheduled_at": "2026-10-30T07:29:05.786000+00:00"}
+156	reserved	16:29:05	nurse		{"items": [{"name": "B 약품", "quantity": 1, "supply_id": 2}], "destination": {"id": 10, "name": "102호"}, "scheduled_at": "2026-10-30T07:29:05.786000+00:00"}
+157	reserved	16:29:05	nurse		{"items": [{"name": "A 약품", "quantity": 1, "supply_id": 1}], "destination": {"id": 8, "name": "101호"}, "scheduled_at": "2026-10-30T07:29:05.786000+00:00"}
+158	reserved	16:29:16	nurse		{"items": [{"name": "A 약품", "quantity": 1, "supply_id": 1}], "destination": {"id": 13, "name": "107호"}, "scheduled_at": "2026-10-30T07:29:16.798000+00:00"}
+159	reserved	16:29:16	nurse		{"items": [{"name": "B 약품", "quantity": 1, "supply_id": 2}], "destination": {"id": 14, "name": "108호"}, "scheduled_at": "2026-10-30T07:29:16.798000+00:00"}
+160	reserved	16:29:29	nurse		{"items": [{"name": "C 약품", "quantity": 2, "supply_id": 3}], "destination": {"id": 10, "name": "102호"}, "scheduled_at": "2026-10-30T07:29:29.809000+00:00"}
+161	reserved	16:29:29	nurse		{"items": [{"name": "A 약품", "quantity": 1, "supply_id": 1}], "destination": {"id": 15, "name": "수술실"}, "scheduled_at": "2026-10-30T07:29:29.809000+00:00"}
+162	reserved	16:29:29	nurse		{"items": [{"name": "A 약품", "quantity": 1, "supply_id": 1}], "destination": {"id": 11, "name": "104호"}, "scheduled_at": "2026-10-30T07:29:29.809000+00:00"}
+163	reserved	16:29:40	nurse		{"items": [{"name": "C 약품", "quantity": 2, "supply_id": 3}], "destination": {"id": 13, "name": "107호"}, "scheduled_at": "2026-10-30T07:29:40.815000+00:00"}
+164	reserved	16:29:40	nurse		{"items": [{"name": "A 약품", "quantity": 1, "supply_id": 1}], "destination": {"id": 12, "name": "105호"}, "scheduled_at": "2026-10-30T07:29:40.815000+00:00"}
+165	reserved	16:29:40	nurse		{"items": [{"name": "C 약품", "quantity": 1, "supply_id": 3}], "destination": {"id": 10, "name": "102호"}, "scheduled_at": "2026-10-30T07:29:40.815000+00:00"}
+166	reserved	16:29:53	nurse		{"items": [{"name": "C 약품", "quantity": 1, "supply_id": 3}], "destination": {"id": 15, "name": "수술실"}, "scheduled_at": "2026-10-30T07:29:53.833000+00:00"}

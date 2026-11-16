@@ -4,6 +4,8 @@ A held block is a few centimetres from the wrist camera and fills most of the re
 just below the fingertips; a block left on the table (missed grasp) is ~6 cm further
 away and fills far less. So the check is the fraction of ROI pixels of the block's color.
 """
+import math
+
 import cv2
 import numpy as np
 
@@ -48,3 +50,38 @@ def draw_check(bgr, roi, fill, color, ok):
     cv2.putText(img, f'{color or "?"} {fill * 100:.0f}% {"OK" if ok else "MISS"}', (5, 20),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, col, 2)
     return img
+
+
+def blob_centre(bgr, hsv_ranges, near=None, min_area=400):
+    """Centre (u, v) of the `hsv_ranges` blob closest to pixel `near` (default: the largest), or None."""
+    mask = cv2.morphologyEx(color_mask(bgr, hsv_ranges), cv2.MORPH_OPEN, np.ones((5, 5), np.uint8))
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((15, 15), np.uint8))   # one block, one blob (shading)
+    best, best_key = None, None
+    for contour in cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)[0]:
+        m = cv2.moments(contour)
+        if m['m00'] < min_area:
+            continue
+        c = (m['m10'] / m['m00'], m['m01'] / m['m00'])
+        key = -m['m00'] if near is None else math.hypot(c[0] - near[0], c[1] - near[1])
+        if best_key is None or key < best_key:
+            best, best_key = c, key
+    return best
+
+
+def centering_step(c0, c_dx, c_dy, probe, ref, max_shift):
+    """One visual-servo step from three wrist views: at (x, y), (x + probe, y), (x, y + probe).
+
+    The two probe moves measure how the block moves in the image per metre of arm motion (a 2x2 image
+    Jacobian J), so the camera's mounting and rotation need not be known. [출력] (dx, dy) in metres that
+    bring the block centre c0 onto the reference pixel `ref` (clamped to max_shift), and J;
+    None when the probes did not move the image enough to invert J.
+    """
+    c0, c_dx, c_dy = (np.asarray(c, float) for c in (c0, c_dx, c_dy))
+    J = np.column_stack([(c_dx - c0) / probe, (c_dy - c0) / probe])        # pixels per metre
+    if abs(np.linalg.det(J)) < 1e-6 * np.abs(J).max() ** 2 or np.abs(J).max() < 100:
+        return None, J
+    d = -np.linalg.solve(J, c0 - np.asarray(ref, float))
+    n = float(np.hypot(*d))
+    if n > max_shift:
+        d *= max_shift / n
+    return (float(d[0]), float(d[1])), J

@@ -1,0 +1,10 @@
+# 빌드 컨텍스트(저장소 루트)에서 이미지에 쓰는 것만 보냄
+*
+!driving/graph/graph.yaml
+!driving/graph/edge_times.yaml
+!driving/tools/real_walls.yaml
+!driving/tools/left_wall_measured.json
+!fms/*.py
+!fms/rooms.yaml
+!fms/robots.yaml
+!fms/static

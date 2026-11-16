@@ -1,0 +1,72 @@
+delivery_id	request_id	fms_order_id	batch_id	fms_robot	status	sent_kst	delivered_kst
+167	emr-d167-s4-1	o-1	b-1	3	delivered	16:31:53	16:36:40
+167	emr-d167-s4-2	o-2	b-1	3	delivered	16:31:53	16:36:41
+168	emr-d168-s1-1	o-3	b-2	2	delivered	16:31:53	16:40:39
+169	emr-d169-s3-1	o-4	b-2	2	delivered	16:31:53	16:42:19
+170	emr-d170-s3-1	o-5	b-3	1	assigned	16:32:08	
+171	emr-d171-s2-1	o-6	b-4	3	assigned	16:32:19	
+172	emr-d172-s3-1	o-7	b-5	2	assigned	16:32:34	
+172	emr-d172-s3-2	o-8	b-5	2	assigned	16:32:34	
+173	emr-d173-s2-1	o-9			queued	16:32:34	
+174	emr-d174-s3-1	o-10			queued	16:32:34	
+175	emr-d175-s3-1	o-11			queued	16:32:44	
+176	emr-d176-s1-1	o-12	b-4	3	assigned	16:32:44	
+177	emr-d177-s4-1	o-13			queued	16:32:54	
+178	emr-d178-s2-1	o-14			queued	16:32:54	
+179	emr-d179-s2-1	o-15			queued	16:32:54	
+180	emr-d180-s2-1	o-16	b-4	3	assigned	16:33:09	
+181	emr-d181-s2-1	o-17			queued	16:33:19	
+181	emr-d181-s2-2	o-18			queued	16:33:19	
+182	emr-d182-s3-1	o-19			queued	16:33:19	
+183	emr-d183-s4-1	o-20			queued	16:33:19	
+184	emr-d184-s4-1	o-21	b-5	2	assigned	16:33:29	
+184	emr-d184-s4-2	o-22			queued	16:33:29	
+185	emr-d185-s2-1	o-23			queued	16:33:29	
+186	emr-d186-s1-1	o-24			queued	16:33:29	
+187	emr-d187-s1-1	o-25			queued	16:33:45	
+188	emr-d188-s2-1	o-26			queued	16:33:45	
+189	emr-d189-s3-1	o-27			queued	16:33:55	
+189	emr-d189-s3-2	o-28			queued	16:33:55	
+190	emr-d190-s1-1	o-29			queued	16:33:55	
+191	emr-d191-s1-1	o-30			queued	16:33:55	
+192	emr-d192-s3-1	o-31			queued	16:34:10	
+192	emr-d192-s3-2	o-32			queued	16:34:10	
+193	emr-d193-s1-1	o-33			queued	16:34:10	
+194	emr-d194-s3-1	o-34			queued	16:34:10	
+195	emr-d195-s3-1	o-35			queued	16:34:20	
+196	emr-d196-s3-1	o-36			queued	16:34:30	
+196	emr-d196-s3-2	o-37			queued	16:34:30	
+197	emr-d197-s2-1	o-38			queued	16:34:30	
+198	emr-d198-s1-1	o-39			queued	16:34:30	
+199	emr-d199-s2-1	o-40			queued	16:34:45	
+200	emr-d200-s3-1	o-41			queued	16:34:45	
+201	emr-d201-s1-1	o-42			queued	16:34:45	
+202	emr-d202-s3-1	o-43			queued	16:34:55	
+203	emr-d203-s4-1	o-44			queued	16:34:55	
+204	emr-d204-s1-1	o-45			queued	16:34:55	
+205	emr-d205-s2-1	o-46			queued	16:35:11	
+206	emr-d206-s1-1	o-47			queued	16:35:21	
+206	emr-d206-s1-2	o-48			queued	16:35:21	
+207	emr-d207-s2-1	o-49			queued	16:35:21	
+208	emr-d208-s1-1	o-50			queued	16:35:21	
+209	emr-d209-s4-1	o-51			queued	16:35:31	
+210	emr-d210-s2-1	o-52			queued	16:35:46	
+210	emr-d210-s2-2	o-53			queued	16:35:46	
+211	emr-d211-s4-1	o-54			queued	16:35:46	
+212	emr-d212-s3-1	o-55			queued	16:35:46	
+213	emr-d213-s1-1	o-56			queued	16:35:56	
+214	emr-d214-s1-1	o-57			queued	16:36:06	
+214	emr-d214-s1-2	o-58			queued	16:36:06	
+215	emr-d215-s3-1	o-59			queued	16:36:06	
+216	emr-d216-s3-1	o-60			queued	16:36:06	
+217	emr-d217-s2-1	o-61			queued	16:36:22	
+217	emr-d217-s2-2	o-62			queued	16:36:22	
+218	emr-d218-s3-1	o-63			queued	16:36:22	
+219	emr-d219-s2-1	o-64			queued	16:36:22	
+220	emr-d220-s1-1	o-65			queued	16:36:32	
+221	emr-d221-s3-1	o-66			queued	16:37:02	
+222	emr-d222-s3-1	o-67			queued	16:37:02	
+223	emr-d223-s2-1	o-68			queued	16:37:02	
+223	emr-d223-s2-2	o-69			queued	16:37:02	
+224	emr-d224-s1-1	o-70			queued	16:42:41	
+225	emr-d225-s1-1	o-71			queued	16:42:41	

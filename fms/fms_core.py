@@ -5,12 +5,14 @@
 
 - Graph      : driving/graph/graph.yaml 을 차선까지 그대로 읽는다 (보류 노드·엣지 제외)
 - Robot      : 가상 핑키. FMS 가 내준 구간(노드 목록)만 일정 속도로 달린다
-- FMS        : 주문 → 배송 묶음·배차 → 경로 → 구간 예약 → 상태(오염도·배터리·적재) 관리
+- FMS        : 주문 → 배송 묶음·배차 → 경로 → 구간 예약 → 상태(오염도·피로도·적재) 관리
 """
 import heapq
 import math
 import os
 import random
+import threading
+import time
 
 import yaml
 
@@ -20,6 +22,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 GRAPH = os.path.join(HERE, '../driving/graph/graph.yaml')   # 주행 그래프는 driving/ 의 것을 그대로 씀 (복사하지 말 것)
 
 PHARMACY, POCKET, CHARGER, SURGERY = 'PHARMACY', 'POCKET', 'CHARGER', 'SURGERY'
+PHARMACY_DOCK = 'PHARMACY_DOCK'   # 정밀 주차 자리 (graph: PHARMACY–PHARMACY_DOCK 엣지 mode dock). 실제 로봇만 씀
+LATE_X = 1.5                      # 실제 로봇: 엣지가 예상의 이만큼 + 2초 넘게 걸리면 '늦음' → 다시 계획
 ROOM_INFO = yaml.safe_load(open(os.path.join(HERE, 'rooms.yaml')))['rooms']    # 병실 → 이름·오염도·별칭 (관제 PC 이름)
 ROOM_CONTAM = {k: v['contam'] for k, v in ROOM_INFO.items()}   # 1인실 +10, 4인실 +50, 수술실 0 (오염도 0 으로만 진입)
 ROOMS = list(ROOM_CONTAM)
@@ -97,7 +101,18 @@ def parse_request(body):
         item = next((q[k] for k in ITEM_KEYS if k in q), '약')
         out.append((resolve_room(room), item))
     return out
-PARKING = ['B1_20', 'B2_20', 'T1_20', 'B1_195']   # 노는 로봇 주차 자리 (통행을 안 막는 복도 끝). T2_20 은 콘센트 자리라 그래프에서 뺌 (10-28)
+# 노는 로봇 주차 자리: 로봇별 고정이 아니라 가장 가까운 빈자리. 차선 위 자리는 다른 로봇 길을 막으면 waiting() 이 비키게 함
+# (10-30 사용자). T2_20 은 콘센트 자리라 그래프에서 뺌 (10-28)
+PARKING = ['B1_20', 'B2_20', 'B1_78', 'B1_130', 'B1_180', 'B1_195', 'T1_20', 'T2_130', 'T1_175']
+# 약제실이 차 있으면 다음 로봇이 여기까지 와서 기다림 (10-30 사용자: 주차 자리에서 기다리면 약제실까지 오는 시간이
+# 로봇마다 줄줄이 더해져 한 대씩만 움직임). 약제실 나가는 길(GT99U·T1_98.9·T2_98.9)은 뺌.
+# 우측통행이라 약제실로 들어오는 쪽 차선만: 서쪽에서 오면 T1(동쪽 방향)_40, 동쪽에서 오면 T2(서쪽 방향)_130.
+# 반대 차선(T2_40·T1_130)은 약제실에서 나가는 로봇이 지나감 (시뮬레이션: T2_40 에서 나오는 로봇과 마주쳐 교착)
+PHARMACY_QUEUE = ['T1_40', 'T2_130']     # [서쪽에서 올 때, 동쪽에서 올 때]
+# 11-03 감지기(detect.py) 결과: T1_40 은 왼쪽 협로 입구(GT40D) 건너는 길목이라, 거기서 기다리면 협로를 오가는 로봇이 돌아감.
+# 다른 로봇이 갈 길 위(출발 전 로봇의 다음 목적지 경로 포함)면 앞 대기 자리로 안 감.
+# (T1_20 을 대신 쓰면 협로에서 올라온 로봇이 T1_40 을 지나 20 cm 갔다 되돌아와서 손해 — 11-03 시험에서 뺌)
+QUEUE_ALT = ([], [])
 # B2_195 는 수술실 입구(GB180)에 너무 가까워 뺌.
 # CHARGER 는 막다른 곳이라 뺌. 같은 x 의 두 차선 자리(짝)에 약 실은 로봇 둘을 세우면 그 복도 끝을 아무도 못 지나가므로 짝은 하나만
 EAST_LANE = {'B': 'B1', 'T': 'T1'}                           # 우측통행: 동쪽(+x)으로 갈 때 쓰는 차선 (아래쪽 차선)
@@ -109,24 +124,26 @@ BODY_CLEAR_CM = 14.5                    # 지나간 노드는 이만큼 멀어�
 
 class Params:
     def __init__(self, **kw):
-        self.speed = 10.0          # cm/s 주행 속도
+        self.speed = 4.5           # cm/s — 실측 시간(graph/edge_times.yaml)이 없는 엣지에만 씀 (10-29 실측: 라인·벽 ≈ 4.2~4.6 cm/s)
         self.dock_s = 20.0         # 정밀 주차
         self.load_s = 10.0         # 관제 PC/OMX 적재 (가상: 주차 끝 알림 뒤 이 시간 지나면 적재 완료)
         self.spin_s = 8.0          # 병실 제자리 360° 회전 = 배송 완료
         self.dwell_s = 5.0         # POCKET 5초 = 오염도 0
-        self.charge_s = 10.0       # CHARGER 도착 10초 뒤 배터리 100
+        self.charge_s = 10.0       # CHARGER 도착 10초 뒤 피로도 100
         self.cap = 3               # 적재 용량 (실는 개수 = 맡은 주문 수. 여분은 싣지 않음 — 2026-10-27 사용자)
         self.pause_s = (1.0, 5.0)  # 병실 회전 뒤 다음 일까지 쉬는 시간 (무작위, 초) — 2026-10-27 사용자
         self.prep_s = 15.0         # 가상 OMX 물품 준비 (배차 → ready). 실제로는 관제 PC 가 POST .../ready
         self.auto_omx = True       # 가상 관제 PC/OMX: ready·loaded 를 시간 지나면 스스로 보냄. 외부 관제 PC 를 붙이면 끔
-        self.battery_per_room = 10
-        self.pharmacy_min_battery = 20   # 이 값 이하면 약제실 방문 금지
+        self.fatigue_per_room = 10     # 피로도: 가상 값 (실제 핑키 배터리 아님). 병실 하나 배송마다 −10, CHARGER 에서 100
+        self.pharmacy_min_fatigue = 20   # 이 값 이하면 약제실 방문 금지
         self.contam_max = 100
         self.wrong_lane = 1.5      # 우측통행 반대 차선 비용 배수
         self.replan_s = 2.0        # 예약 못 하고 기다릴 때 경로 다시 짜는 간격
         self.dispatch_s = 0.5
         self.planner = 'cbs'       # cbs = 시공간 A* + CBS 로 시간까지 계획 / reserve = 최단 경로 + 구간 예약만
         self.plan_step = 1.0       # CBS 시간 칸 (초)
+        self.node_stop_s = 0.0     # 비교용: 직선 이어 달리기가 없던 때처럼 지나는 노드마다 서는 시간 s (로봇 코드 시뮬레이션: ≈1.5 s)
+        self.plan_async = 'sync'   # sync | thread (서버: 계산 중에도 틱이 돎) | emulate (헤드리스: 계산 시간만큼 늦게 적용)
         for k, v in kw.items():
             setattr(self, k, v)
 
@@ -174,6 +191,37 @@ class Graph:
             self.seg_near[(a, b)] = {m for m in self.nodes if m not in (a, b)
                                      and seg_dist(self.xy(m), self.xy(a), self.xy(b)) < NEAR_CM}
         self._dist = {}
+        # 실측 엣지 시간 (driving/tools/edge_run.py → edge_costs.py → graph/edge_times.yaml). 없으면 길이 ÷ 속도
+        self.time, self.rot = {}, None
+        tp = os.path.join(os.path.dirname(path), 'edge_times.yaml')
+        if os.path.exists(tp):
+            t = yaml.safe_load(open(tp)) or {}
+            for v in (t.get('edges') or {}).values():
+                if (v['a'], v['b']) in self.edge:
+                    self.time[(v['a'], v['b'])] = float(v['move_s'])
+            R = t.get('rotate')
+            if R:
+                self.rot = (float(R['r0_s']), float(R['s_per_deg']))
+
+    def heading(self, a, b):
+        (ax, ay), (bx, by) = self.xy(a), self.xy(b)
+        return math.degrees(math.atan2(by - ay, bx - ax)) % 360
+
+    def edge_s(self, a, b, speed):
+        """a→b 이동 시간 s: 실측 중앙값 (방향별), 없으면 길이 ÷ speed"""
+        return self.time.get((a, b)) or self.edge[(a, b)]['L'] / speed
+
+    def rot_s(self, h0, h1):
+        """제자리 회전 시간 s (실측 식 r0 + 각도·s_per_deg). 모르는 방향(None)·회전 식 없음·1.5° 미만이면 0"""
+        if h0 is None or h1 is None or self.rot is None:
+            return 0.0
+        d = abs((h1 - h0 + 180) % 360 - 180)
+        return 0.0 if d < 1.5 else self.rot[0] + self.rot[1] * d
+
+    def time_to(self, a, b, speed):
+        """배차·ETA 용: 거리 기준 최단 경로를 실측 시간으로 (회전 제외)"""
+        p = self.path(a, b)
+        return sum(self.edge_s(p[i], p[i + 1], speed) for i in range(len(p) - 1)) if p else 1e9
 
     def xy(self, n):
         return tuple(self.nodes[n]['xy'])
@@ -285,7 +333,7 @@ class Robot:
     def __init__(self, rid, node, g, color):
         self.id, self.node, self.g, self.color = rid, node, g, color
         self.pos = g.xy(node)
-        self.battery, self.contam, self.load = 100, 0, 0
+        self.fatigue, self.contam, self.load = 100, 0, 0
         self.assigned = []          # 맡은 주문 (아직 배송 안 함)
         self.task = None            # None / delivery / decon / charge / park / yield
         self.step = None            # 지금 단계 dict
@@ -302,8 +350,18 @@ class Robot:
         self.depart = None          # CBS 계획: path[i] 에서 떠나도 되는 시각 (없으면 바로)
         self.plan_wait = False
         self.num, self.name = None, rid        # 관제 PC 로봇 번호, 이름 (robots.yaml)
-        self.heading = 0.0          # deg, 마지막으로 달린 엣지 방향
+        self.heading = 0.0          # deg, 마지막으로 달린 엣지 방향 (경로 계획의 회전 비용 시작 방향)
+        self.turn_left = None       # CBS 시각 없이 갈 때: 다음 엣지 방향으로 남은 회전 시간 s
+        self.stop_left = None       # 직선 이어 달리기가 없을 때 지나는 노드에서 서는 남은 시간 s (Params.node_stop_s)
         self.batch = None
+        # 실제 로봇 (robot_link.HttpLink). None = 시뮬레이션
+        self.link = None
+        self.drive = None           # 보낸 명령: dict(cid, kind, k0, j, extra, t, late)
+        self.fault = None           # 실패해 멈춤: dict(code, why, t, node, edge) — 사람이 풀 때까지 그 자리
+        self.at_dock = False        # 정밀 주차 자리(PHARMACY_DOCK)에 있음 → 다음 /drive 앞에 물러나기 엣지
+        self.link_lost = False
+        self.boot = None            # 로봇 boot_id (바뀌면 재부팅 → 위치를 믿을 수 없음)
+        self.reattach_t = 0.0
 
     @property
     def loaded(self):
@@ -311,7 +369,7 @@ class Robot:
 
     @property
     def idle(self):
-        return self.step is None and not self.queue
+        return self.step is None and not self.queue and not self.fault   # 실패로 멈춘 실제 로봇에는 일을 안 줌
 
     def holds(self):
         """지금 붙잡은 (노드, 엣지, zone)"""
@@ -332,6 +390,8 @@ class Robot:
         return nodes, edges, zones
 
     def state_name(self):
+        if self.fault:
+            return 'error'
         if self.step is None:
             return 'idle'
         k = self.step['kind']
@@ -342,8 +402,39 @@ class Robot:
 
 
 # ----------------------------------------------------------------------------------------------------------
+PROFILES = {
+    'naive': '① FMS 없음 — 로봇 1대, 들어온 순서대로 1건씩, 수술실 전 세척실(POCKET)',
+    'v2': '② 처음 CBS — 주차 없음, 직선 이어 달리기 없음, 수술실 먼저를 모름 (오염되면 세척 후 수술실)',
+    'v3': '③ 주차 9곳 + 직선 이어 달리기',
+    'v4': '④ CBS 고도화 + 약제실 앞 대기열',
+    'v5': '⑤ 감지기로 찾은 비키기·차례 충돌 고침 (11-03, 지금)',
+}
+
+
+def apply_profile(f, name):
+    """발표 영상 비교용 (11-02): 같은 코드에서 기능을 꺼서 예전 단계를 흉내. v4 = 지금 그대로"""
+    if name not in PROFILES:
+        raise ValueError(f'profile: {list(PROFILES)}')
+    if name in ('naive', 'v2', 'v3'):          # 예전 CBS: 그 자리에서 계산, 창·주기 재계획·협로 추론·ECBS 없음, 대기열 없음
+        f.PLAN_WINDOW_S, f.REPLAN_EVERY_S = None, float('inf')
+        f.p.plan_async = 'sync'
+        f.planner.corridor, f.planner.w, f.planner.cbs_expand = False, None, 15000
+        f.use_queue = False
+    if name in ('naive', 'v2'):                # 주차 없음, 직선 이어 달리기 없음
+        f.parking = []
+        f.p.node_stop_s = 1.5
+        f.planner.node_stop = 2               # 계획도 그만큼 (1초 칸, 올림)
+    if name == 'v2':                           # 수술실 먼저를 모름: 가까운 순서대로 돌다 오염됐으면 세척 후 수술실
+        f.dumb = True
+    if name == 'naive':                        # 묶음 없이 1건씩, 오염돼 있으면 수술실 전에 POCKET
+        f.naive = True
+        f.p.cap = 1
+    if name != 'v5':                           # 11-03 전: 차례가 앞선 로봇을 '길 막음'으로 비키게 함
+        f.turn_fix = False
+
+
 class FMS:
-    def __init__(self, n_robots=3, params=None, seed=None, graph=None):
+    def __init__(self, n_robots=3, params=None, seed=None, graph=None, links=None):
         self.p = params or Params()
         self.g = graph or Graph()
         self.rng = random.Random(seed)
@@ -364,9 +455,20 @@ class FMS:
         self._next_dispatch = 0.0
         self.auto_rate = 0.0         # 분당 자동 주문 수
         self._next_auto = None
-        self.planner = Planner(self.g, self.p.speed, step=self.p.plan_step, near_cm=NEAR_CM, wrong_lane=self.p.wrong_lane)
-        self.plan_stats = dict(replans=0, cbs=0, prioritized=0, failed=0, last=None)
+        self.planner = Planner(self.g, self.p.speed, step=self.p.plan_step, near_cm=NEAR_CM, wrong_lane=self.p.wrong_lane)   # 실측 시간·회전
+        self.plan_stats = dict(replans=0, cbs=0, ecbs=0, prioritized=0, failed=0, last=None)
         self.last_plans = {}
+        self._plan_job, self._replan_again, self._last_replan = None, None, 0.0
+        self.parking = list(PARKING)            # 주차 자리 (빈 목록 = 주차 안 함, 일 마친 자리에 서 있음)
+        self.use_queue = True                   # 약제실 앞 대기열
+        self.turn_fix = True                    # 11-03: 차례 기다리는 로봇은 실제로 길 위에 있을 때만 비킴 (차례 앞선 로봇을 비키게 해 차례를 뺏던 버그)
+        self.queue_fair = False                 # 시험 (run_headless --queue): 차례는 처음 기다린 시각으로 (대기 자리로 옮기거나 비켜도 유지)
+        self.queue_path = False                 # 시험 (run_headless --queue): 다른 로봇이 갈 길 위의 약제실 앞 대기 자리로는 안 감
+        self.naive = False                      # 비교용: 묶음 1건·수술실 전 POCKET 들르기 (apply_profile 'naive')
+        self.dumb = False                       # 비교용: 수술실 먼저를 모름 (apply_profile 'v2')
+        for r in self.robots:                   # 실제 로봇: 시작 노드 = 로봇이 보고한 노드
+            if links and r.name in links:
+                self.attach_real(r, links[r.name])
 
     # ---- 기록 ----
     def log(self, msg, kind='info'):
@@ -387,12 +489,13 @@ class FMS:
         path = r.path[r.k:] if moving else []
         st = r.state_name()
         dest = r.step['to'] if r.step and r.step['kind'] == 'move' else None
-        return dict(robot=r.num, name=r.name, online=True,
+        return dict(robot=r.num, name=r.name, online=(r.link.alive() if r.link else True), real=r.link is not None,
+                    fault=r.fault,
                     state={'planned': 'moving'}.get(st, st), task=self.task_name(r),
                     pose=dict(x=round(r.pos[0], 1), y=round(r.pos[1], 1), heading=round(r.heading, 1)),
                     node=r.node, next_node=path[1] if len(path) > 1 else None, place=place_of(r.node),
                     destination=None if dest is None else dict(node=dest, room=room_or_none(dest)),
-                    path=path, battery=r.battery, contamination=r.contam, load=r.load, capacity=self.p.cap,
+                    path=path, fatigue=r.fatigue, contamination=r.contam, load=r.load, capacity=self.p.cap,
                     batch_id=r.batch.bid if r.batch else None, orders=[o.oid for o in r.assigned])
 
     def order_api(self, o):
@@ -459,7 +562,7 @@ class FMS:
             raise Conflict('bad_batch_state', f'묶음 {b.bid} 상태가 {b.status} (assigned 일 때만 ready)')
         r = b.robot
         b.status, b.status_t = 'called', self.t
-        eta = self.g.dist(r.node, PHARMACY) / self.p.speed + self.p.dock_s
+        eta = self.g.time_to(r.node, PHARMACY, self.p.speed) + self.p.dock_s
         self.log(f'관제 PC → FMS: 묶음 {b.bid} 준비 완료 → {r.id} 약제실로')
         self.emit('robot_called', batch_id=b.bid, robot=r.num, eta_s=round(eta))
         return round(eta)
@@ -473,8 +576,12 @@ class FMS:
         self.emit('batch_departed', batch_id=b.bid, robot=b.robot.num, rooms=[room_code(x) for x in b.rooms])
 
     # ---- 단계 만들기 ----
-    def visit_steps(self, start, rooms, c0):
-        """병실 방문 단계: 가까운 병실부터. 수술실은 오염도 0 에서만 → 맨 앞(오염도 0 일 때) 또는 POCKET 들렀다가"""
+    def visit_steps(self, start, rooms, c0, pocket=False, dumb=False):
+        """병실 방문 단계: 가까운 병실부터. 수술실은 오염도 0 에서만.
+        pocket=False (배송, 10-29 사용자: 오염도가 0 이 아니어도 배송을 주되 POCKET 을 들르지 않고 끝낼 수 있어야 함):
+        수술실이 있으면 오염도 0 일 때 맨 앞으로만, 아니면 None (이 로봇은 못 함).
+        pocket=True: 예전 방식 — 중간에 POCKET 들렀다가 수술실
+        dumb=True (발표 영상 ②, 11-03): 수술실 먼저를 모름 — 수술실도 가까운 순서대로, 그때 오염돼 있으면 바로 앞에 POCKET"""
         def nn(frm, rs):
             out, here, rs = [], frm, list(rs)
             while rs:
@@ -502,9 +609,18 @@ class FMS:
             return L
 
         rooms = list(dict.fromkeys(rooms))      # 같은 병실은 한 번
+        if dumb:
+            out, c = [], c0
+            for r in nn(start, rooms):
+                if r == SURGERY and c > 0:
+                    out.append('POCKET*'); c = 0
+                out.append(r); c += ROOM_CONTAM[r]
+            return steps(out)
         if SURGERY not in rooms:
             return steps(nn(start, rooms))
         rest = [r for r in rooms if r != SURGERY]
+        if not pocket:
+            return steps([SURGERY] + nn(SURGERY, rest)) if c0 == 0 else None
         cands = []
         if c0 == 0:
             cands.append([SURGERY] + nn(SURGERY, rest))
@@ -515,12 +631,12 @@ class FMS:
         return steps(min(cands, key=length))
 
     def feasible(self, r, steps, include_current=True):
-        """오염도 ≤ 100, 수술실은 0 에서만, 배터리 ≥ 0, 약제실은 배터리 > 20"""
-        c, b = r.contam, r.battery
+        """오염도 ≤ 100, 수술실은 0 에서만, 피로도 ≥ 0, 약제실은 피로도 > 20"""
+        c, b = r.contam, r.fatigue
         seq = ([r.step] if include_current and r.step else []) + steps
         for s in seq:
             if s['kind'] == 'move':
-                if s['to'] == PHARMACY and b <= self.p.pharmacy_min_battery:
+                if s['to'] == PHARMACY and b <= self.p.pharmacy_min_fatigue:
                     return False
                 if s['to'] in ROOM_CONTAM and not s.get('arrived'):
                     if s['to'] == SURGERY and c > 0:
@@ -529,7 +645,7 @@ class FMS:
                     if c > self.p.contam_max:
                         return False
             elif s['kind'] == 'spin':
-                b -= self.p.battery_per_room
+                b -= self.p.fatigue_per_room
                 if b < 0:
                     return False
             elif s['kind'] == 'dwell':
@@ -648,25 +764,26 @@ class FMS:
         for r in self.robots:                               # 노는 로봇: 충전·오염 제거 먼저
             if not r.idle:
                 continue
-            if r.battery <= p.pharmacy_min_battery:
+            if r.fatigue <= p.pharmacy_min_fatigue:
                 st = ([dict(kind='move', to=POCKET, also={'charger'}), dict(kind='dwell')] if r.contam > 0 else []) + \
                      [dict(kind='move', to=CHARGER), dict(kind='charge')]
-                self.start_task(r, 'charge', st, f'배터리 {r.battery} → 충전')
-            elif r.contam > 0:
-                self.start_task(r, 'decon', [dict(kind='move', to=POCKET), dict(kind='dwell')], f'오염도 {r.contam} → POCKET')
+                self.start_task(r, 'charge', st, f'피로도 {r.fatigue} → 충전')
 
         # 배차 때 묶음이 정해지면 그 목록은 바꾸지 않는다 (배송 중인 로봇에 끼워 넣기 없음 — 2026-10-27 사용자).
         # 새 주문은 노는 로봇이 생길 때까지 기다린다.
         waiting = sorted([o for o in self.orders if o.state == 'waiting'], key=lambda o: o.created)
-        while waiting:                                      # 1) 노는 로봇에 새 묶음
+        while waiting:                                      # 1) 노는 로봇에 새 묶음 (오염도가 있어도 POCKET 없이 끝낼 수 있으면)
             if not self.new_bundle(waiting):
                 break
             waiting = [o for o in waiting if o.state == 'waiting']
+        for r in self.robots:                               # 2) 배송을 못 받은 노는 로봇은 오염도가 있으면 POCKET 으로
+            if r.idle and r.contam > 0:
+                self.start_task(r, 'decon', [dict(kind='move', to=POCKET), dict(kind='dwell')], f'오염도 {r.contam} → POCKET')
 
         taken = {r.step['to'] for r in self.robots if r.step and r.step['kind'] == 'move'} | \
                 {s['to'] for r in self.robots for s in r.queue if s['kind'] == 'move'}
-        for r in self.robots:                               # 2) 남는 로봇은 주차 자리로
-            if r.idle and r.node not in PARKING:
+        for r in self.robots:                               # 3) 남는 로봇은 주차 자리로
+            if r.idle and r.node not in self.parking:
                 spot = self.free_parking(r, taken)
                 if spot:
                     taken.add(spot)
@@ -674,12 +791,15 @@ class FMS:
 
     def parking_partner(self, s):
         x, lane = self.g.xy(s)[0], self.g.nodes[s].get('lane')
-        return next((m for m in PARKING if m != s and self.g.xy(m)[0] == x
+        return next((m for m in self.parking if m != s and self.g.xy(m)[0] == x
                      and self.g.nodes[m].get('lane', ' ')[0] == lane[0]), None)
 
-    def free_parking(self, r, taken, avoid=()):
-        """가장 가까운 빈 주차 자리. 약을 실었으면 짝 자리에 실은 로봇이 있거나 누가 가는 중인 자리는 뺀다"""
+    def free_parking(self, r, taken, avoid=(), spots_from=None, key=None):
+        """가장 가까운 빈 주차 자리. 약을 실었으면 짝 자리에 실은 로봇이 있거나 누가 가는 중인 자리는 뺀다.
+        다른 로봇이 지금 가는 길 위(와 그 가까이)의 자리도 뺀다"""
         occ = {o.node: o for o in self.robots if o is not r}
+        onpath = {n for o in self.robots if o is not r and o.path for n in o.path[o.k:]}
+        onpath |= {m for n in onpath for m in self.g.near[n]}
         going = {}
         for o in self.robots:
             if o is not r:
@@ -687,44 +807,52 @@ class FMS:
                     if st['kind'] == 'move':
                         going[st['to']] = o
         spots = []
-        for s in PARKING:
-            if s in occ or s in taken or s in avoid or s in going:
+        for s in (self.parking if spots_from is None else spots_from):
+            if s in occ or s in taken or s in avoid or s in going or s in onpath:
                 continue
             m = self.parking_partner(s)
             if r.loaded and m and ((m in occ and occ[m].loaded) or (m in going and going[m].loaded) or m in taken):
                 continue
             spots.append(s)
-        return min(spots, key=lambda s: self.g.dist(r.node, s)) if spots else None
+        return min(spots, key=key or (lambda s: self.g.dist(r.node, s))) if spots else None
 
     def new_bundle(self, waiting):
+        """먼저 들어온 주문부터 씨앗으로: 그 주문을 POCKET 없이 끝낼 수 있는 노는 로봇이 있으면 묶음을 만든다.
+        못 받는 주문(예: 오염된 로봇만 남았는데 수술실)은 건너뛰고 다음 주문을 본다"""
+        for seed in waiting:
+            if self.bundle_from(seed, [o for o in waiting if o is not seed]):
+                return True
+        return False
+
+    def bundle_from(self, seed, others):
         p = self.p
-        seed = waiting[0]
         cands = []
         for r in self.robots:
-            if not r.idle or (r.contam > 0) or r.battery < p.battery_per_room:
+            if not r.idle or r.fatigue < p.fatigue_per_room:
                 continue
-            if r.battery <= p.pharmacy_min_battery:
+            if r.fatigue <= p.pharmacy_min_fatigue:
                 continue
             cands.append((self.g.dist(r.node, PHARMACY), r))
         for _, r in sorted(cands, key=lambda c: c[0]):
             cap, start = p.cap, PHARMACY
             prefix = [dict(kind='wait_ready'), dict(kind='move', to=PHARMACY), dict(kind='dock'), dict(kind='load')]
             bundle, here = [seed], seed.room
-            if not self.feasible(r, prefix + self.visit_steps(start, [seed.room], r.contam), include_current=False):
+            first = self.visit_steps(start, [seed.room], r.contam, pocket=self.naive, dumb=self.dumb)
+            if first is None or not self.feasible(r, prefix + first, include_current=False):
                 continue
-            rest = [o for o in waiting[1:]]
+            rest = list(others)
             while len(bundle) < cap and rest:
                 rest.sort(key=lambda o: self.g.dist(here, o.room))
                 for o in rest:
-                    trial = self.visit_steps(start, [b.room for b in bundle] + [o.room], r.contam)
-                    if self.feasible(r, prefix + trial, include_current=False):
+                    trial = self.visit_steps(start, [b.room for b in bundle] + [o.room], r.contam, pocket=self.naive, dumb=self.dumb)
+                    if trial is not None and self.feasible(r, prefix + trial, include_current=False):
                         bundle.append(o)
                         rest.remove(o)
                         here = o.room
                         break
                 else:
                     break
-            steps = prefix + self.visit_steps(start, [b.room for b in bundle], r.contam)
+            steps = prefix + self.visit_steps(start, [b.room for b in bundle], r.contam, pocket=self.naive, dumb=self.dumb)
             r.loaded_done = False
             rooms = [s['room'] for s in steps if s['kind'] == 'spin']
             b = Batch(r, bundle, rooms, self.t)
@@ -797,27 +925,29 @@ class FMS:
             return True
         dz = self.g.stop_zones(to) | set(r.step.get('also', ()))     # 충전하러 가면 POCKET 들르기 전에 충전기 자리도
         nodes, _, zones, _ = self.other_holds(r)
+
+        def hold(why, blockers):                # 약제실이면 지금 자리 말고 약제실 앞 대기 자리로 가서 기다림
+            if self.queue_fair:
+                r.step.setdefault('wait_t0', self.t)    # 처음 기다린 시각: 대기 자리로 옮기거나 비켜도 step 복사로 이어짐
+            if not (to == PHARMACY and self.use_queue and self.go_queue(r)):
+                self.waiting(r, why, blockers)
+            return False
         busy = [z for z in dz if z in zones]
         if busy:
-            self.waiting(r, f'{to} 차례 기다림 ({zones[busy[0]].id})', [zones[busy[0]]])
-            return False
-        for o in self.robots:                   # 같은 구역을 더 오래 기다린 로봇이 먼저
-            if o is r or not (o.step and o.step['kind'] == 'move' and not o.step.get('started')):
-                continue
-            if self.dest_zones_of(o) & dz and o.wait_s > r.wait_s + 1e-9:
-                self.waiting(r, f'{to} 차례 기다림 ({o.id} 먼저)', [o])
-                return False
+            return hold(f'{to} 차례 기다림 ({zones[busy[0]].id})', [zones[busy[0]]])
+        for o in self.robots:                   # 같은 구역을 더 오래 기다린 로봇이 먼저 (대기 자리로 가는 중인 로봇 포함)
+            st = None if o is r else self.pending_move(o)
+            if st and self.zones_of_step(st) & dz and self.turn_key(o, st) > self.turn_key(r, r.step) + 1e-9:
+                return hold(f'{to} 차례 기다림 ({o.id} 먼저)', [o])
         for o in self.robots:                   # 그 구역 안쪽 막다른 곳(예: POCKET 뒤 CHARGER)에 있는 로봇이 먼저 나온다
             if o is not r and self.trapped_behind(o.node, dz):
-                self.waiting(r, f'{to} 차례 기다림 ({o.id} 나오는 중)', [o])
-                return False
+                return hold(f'{to} 차례 기다림 ({o.id} 나오는 중)', [o])
         for o in self.robots:                   # 그 구역을 지나가야 하는 로봇이 이미 출발했으면 먼저 보낸다
             if o is r or not (o.step and o.step['kind'] == 'move' and o.step.get('started') and o.path):
                 continue
             rest = o.path[o.k:]
             if any(self.g.edge[(rest[i], rest[i + 1])]['zone'] in dz for i in range(len(rest) - 1)):
-                self.waiting(r, f'{to} 차례 기다림 ({o.id} 지나가는 중)', [o])
-                return False
+                return hold(f'{to} 차례 기다림 ({o.id} 지나가는 중)', [o])
         if not self.trapped_behind(r.node, self.g.stop_zones(r.node) | {self.g.edge[(r.node, m)]['zone'] for m in self.g.adj[r.node]}):
             self.plan(r)                        # 막다른 곳에 갇힌 게 아니면: 오래(15초+) 기다리는 로봇의 목적지 구역을 지나가는 이동은 보류
             if r.path:
@@ -835,6 +965,65 @@ class FMS:
         if r.path is not None:
             self.replan_all(f'{r.id} 출발')
         return r.path is not None
+
+    def pending_move(self, o):
+        """o 가 차례를 기다리는 (아직 출발 안 한) 이동 단계"""
+        if o.step and o.step['kind'] == 'move' and not o.step.get('started'):
+            return o.step
+        # 대기 자리로 가는 중인 로봇은 순서에서 뺌: 가는 길에 막히면 약제실이 비어도 모두 기다림 (11-03 시험: 642초 멈춤)
+        return None
+
+    def zones_of_step(self, st):
+        return self.g.stop_zones(st['to']) | set(st.get('also', ()))
+
+    def waited(self, o, st):
+        """차례 순서: 처음 기다린 시각부터 (queue_fair), 아니면 지금 자리에서 기다린 시간"""
+        return self.t - st['wait_t0'] if self.queue_fair and 'wait_t0' in st else o.wait_s
+
+    def turn_key(self, o, st):
+        """같은 구역 차례: 큰 쪽이 먼저. turn_fix = 기다린 시간 − 거기까지 걸리는 시간 (가까운 로봇이 먼저 들어가 구역이
+        덜 비고, 멀어도 오래 기다리면 결국 먼저 — 11-03 고정 주문 비교에서 '먼저 기다린 순서'만 지키면 약제실이 비어 느려짐)"""
+        k = self.waited(o, st)
+        return k - self.g.time_to(o.node, st['to'], self.p.speed) if self.turn_fix else k
+
+    def routes_of_others(self, r):
+        """다른 로봇이 지금 가는 길 + 출발 전이면 다음 목적지까지 최단 경로 (가로지르는 차선 노드·가까운 노드까지)"""
+        g, out = self.g, set()
+        for o in self.robots:
+            if o is r:
+                continue
+            if o.step and o.step['kind'] == 'move' and o.path and len(o.path) > o.k + 1:
+                p = o.path[o.k:]
+            else:
+                nxt = next((s for s in ([o.step] if o.step else []) + o.queue if s['kind'] == 'move'), None)
+                p = g.path(o.node, nxt['to']) if nxt and nxt['to'] != o.node else None
+            if p:
+                out |= self.route_set(p)
+        return out
+
+    def go_queue(self, r):
+        """약제실 차례를 기다릴 로봇을 약제실 앞 대기 자리로 보낸다: 서쪽에서 오면 T1_40, 동쪽에서 오면 T2_130
+        (약제실을 지나쳐 가지 않게 온 쪽 자리만). 비어 있고 지금 자리보다 약제실에 가까울 때만. 보냈으면 True.
+        queue_path: 다른 로봇이 갈 길 위의 자리는 뺌 (QUEUE_ALT 도 후보)"""
+        if r.node in PHARMACY_QUEUE:
+            return False
+        g = self.g
+        side = 0 if g.xy(r.node)[0] <= g.xy(PHARMACY)[0] else 1
+        taken = {o.node for o in self.robots if o is not r} | \
+                {st['to'] for o in self.robots if o is not r for st in ([o.step] if o.step else []) + o.queue if st['kind'] == 'move'}
+        onpath = {n for o in self.robots if o is not r and o.path for n in o.path[o.k:]}   # 지금 지나갈 로봇이 있으면 지나간 뒤에
+        cands = [PHARMACY_QUEUE[side]] + (QUEUE_ALT[side] if self.queue_path else [])
+        busy = taken | onpath | (self.routes_of_others(r) if self.queue_path else set())
+        cands = [s for s in cands if s != r.node and s not in busy and not g.near[s] & (taken | onpath)
+                 and g.dist(s, PHARMACY) < g.dist(r.node, PHARMACY)]
+        if not cands:
+            return False
+        spot = min(cands, key=lambda s: g.dist(r.node, s) + g.dist(s, PHARMACY))
+        self.log(f'{r.id}: 약제실 차례 → 앞 대기 자리 {spot} 에서 기다림')
+        r.queue.insert(0, dict(r.step, started=False))
+        r.step = dict(kind='move', to=spot, queue_spot=True)
+        self.next_step_init_move(r)
+        return True
 
     def dest_zones_of(self, o):
         return self.g.stop_zones(o.step['to']) | set(o.step.get('also', ()))
@@ -888,53 +1077,141 @@ class FMS:
         legs.append([goal, dwell if more else INF, lo])     # 그 뒤 이동이 없으면 계속 거기 있음
         return [(gl, INF if d >= INF else max(1, math.ceil(d / step)), lo_) for gl, d, lo_ in legs]
 
+    PLAN_WINDOW_S = 30.0    # CBS 가 푸는 충돌: 앞으로 이 시간 안. 그 뒤 충돌은 다음 계획에서 (RHCR, 11-02)
+    REPLAN_EVERY_S = 5.0    # 움직이는 로봇이 있으면 이 간격으로 다시 계획 (창을 앞으로 밂)
+
     def replan_all(self, why=''):
         """CBS 로 다시 계획. 움직이는 로봇 = 지금 목적지 + 거기서 머무는 시간 + 다음 목적지.
         작업 중(정밀 주차·적재·회전·POCKET·충전)이고 다음 이동이 정해진 로봇 = 남은 작업 시간 뒤 다음 목적지로 (계획만, 실행은 출발 때 다시).
-        그 밖의 서 있는 로봇 = 끝까지 그 자리"""
+        그 밖의 서 있는 로봇 = 끝까지 그 자리.
+        계산 방식 p.plan_async: 'sync' = 여기서 바로 (헤드리스 기본), 'thread' = 따로 스레드 (서버: 계산하는 동안 틱이 안 멈춤),
+        'emulate' = 여기서 계산하되 걸린 시간만큼 시뮬레이션 시간이 지난 뒤 적용 (헤드리스로 'thread' 흉내).
+        계산 중에 또 부르면 끝난 뒤 한 번 더 한다"""
         if self.p.planner != 'cbs':
             return
+        if self._plan_job is not None:
+            self._replan_again = why or '다시'
+            return
+        self._last_replan = self.t
+        snap = self._plan_inputs()
+        if snap is None:
+            return
+        agents, statics, info = snap
+        win = max(1, math.ceil(self.PLAN_WINDOW_S / self.p.plan_step)) if self.PLAN_WINDOW_S else None
+        job = dict(agents=agents, info=info, why=why, now=self.t, plans=None, stats=None, done=False)
+
+        def run():
+            t0 = time.time()
+            job['plans'] = self.planner.solve(agents, statics, window=win)
+            job['stats'] = dict(self.planner.last)
+            job['wall'] = time.time() - t0
+            job['done'] = True
+        mode = self.p.plan_async
+        if mode == 'thread':
+            self._plan_job = job
+            threading.Thread(target=run, daemon=True).start()
+            return
+        run()
+        if mode == 'emulate':
+            job['ready_t'] = self.t + job['wall']
+            self._plan_job = job
+            return
+        self._apply_plans(job)
+
+    def poll_plan(self):
+        """틱마다: 끝난 계획을 적용하고, 그동안 쌓인 요청·주기 다시 계획"""
+        job = self._plan_job
+        if job is not None:
+            if not job['done'] or self.t < job.get('ready_t', -1.0):
+                return
+            self._plan_job = None
+            self._apply_plans(job)
+        if self._replan_again:
+            why, self._replan_again = self._replan_again, None
+            self.replan_all(why)
+        elif self.p.planner == 'cbs' and self.t - self._last_replan >= self.REPLAN_EVERY_S and any(
+                r.step and r.step['kind'] == 'move' and r.step.get('started') for r in self.robots):
+            self.replan_all('주기')
+
+    def _plan_inputs(self):
+        """계획 입력을 지금 상태에서 복사: (agents, statics, info) 또는 None (움직이는 로봇 없음).
+        info = 로봇마다 계획을 만든 순간의 상태 (적용할 때 그 뒤 움직였는지 보려고)"""
         g, step, now = self.g, self.p.plan_step, self.t
         agents, statics, movers = [], [], {}
         for r in self.robots:
+            if r.link and r.drive and r.drive['kind'] == 'drive' and not r.fault:
+                # 실제 로봇이 묶음을 달리는 중: 묶음 끝 노드에서 시작, 남은 묶음 엣지는 그동안 차지 (고정)
+                j = r.drive['j']
+                rest = r.path[r.k:j + 1]
+                left = sum(g.edge_s(rest[i], rest[i + 1], self.p.speed) for i in range(len(rest) - 1))
+                if r.edge_t > 0:
+                    left -= r.edge_t / g.edge[(rest[0], rest[1])]['L'] * g.edge_s(rest[0], rest[1], self.p.speed)
+                t0 = max(1, math.ceil(max(0.0, left) / step))
+                agents.append(dict(id=r.id, loaded=r.loaded, wait=r.wait_s, start=rest[-1], t0=t0,
+                                   heading=g.heading(rest[-2], rest[-1]) if len(rest) > 1 else r.heading,
+                                   legs=self.legs_for(r, r.step['to'], 0.0, r.queue),
+                                   prefix=[Item(g, 'edge', (rest[i], rest[i + 1]), 0, t0, r.loaded, r.id, fixed=True)
+                                           for i in range(len(rest) - 1)]))
+                movers[r.id] = r
+                continue
             moving = (r.step and r.step['kind'] == 'move' and r.step.get('started') and r.path
                       and r.k < len(r.path) - 1)
             busy = (r.step and r.step['kind'] in self.ACT_KINDS and any(s['kind'] == 'move' for s in r.queue))
             if moving:
-                a = dict(id=r.id, loaded=r.loaded, wait=r.wait_s,
+                a = dict(id=r.id, loaded=r.loaded, wait=r.wait_s, heading=r.heading,
                          legs=self.legs_for(r, r.step['to'], 0.0, r.queue))
                 if r.edge_t > 0:
                     u, v = r.path[r.k], r.path[r.k + 1]
-                    t0 = max(1, math.ceil((g.edge[(u, v)]['L'] - r.edge_t) / self.p.speed / step))
-                    a.update(start=v, t0=t0, prefix=[Item(g, 'edge', (u, v), 0, t0, r.loaded, r.id, fixed=True)])
+                    left = (1 - r.edge_t / g.edge[(u, v)]['L']) * g.edge_s(u, v, self.p.speed)   # 남은 실측 시간
+                    t0 = max(1, math.ceil(left / step))
+                    a.update(start=v, t0=t0, heading=g.heading(u, v),
+                             prefix=[Item(g, 'edge', (u, v), 0, t0, r.loaded, r.id, fixed=True)])
                 else:
                     a.update(start=r.node, t0=0)
                 agents.append(a)
                 movers[r.id] = r
             elif busy:
                 legs = self.legs_for(r, r.node, self.act_time(r.step, r.timer), r.queue)
-                agents.append(dict(id=r.id, loaded=r.loaded, wait=0.0, start=r.node, t0=0, legs=legs, plan_only=True))
+                agents.append(dict(id=r.id, loaded=r.loaded, wait=0.0, start=r.node, t0=0, legs=legs, plan_only=True,
+                                   heading=r.heading))
             else:
                 statics.append(Item(g, 'node', r.node, 0, INF, r.loaded, r.id, zones=r.holds()[2]))
         if not movers:
-            return
-        plans = self.planner.solve(agents, statics)
+            return None
+        info = {}
+        for rid, r in movers.items():
+            u = r.path[r.k] if r.path else r.node
+            on_edge = (u, r.path[r.k + 1]) if r.edge_t > 0 and r.path and r.k + 1 < len(r.path) else None
+            info[rid] = dict(r=r, step=r.step, node=r.node, on_edge=on_edge,
+                             drive_j=r.drive['j'] if r.link and r.drive and r.drive['kind'] == 'drive' else None,
+                             drive_cid=r.drive['cid'] if r.link and r.drive else None)
+        return agents, statics, info
+
+    def _apply_plans(self, job):
+        plans, info, why, now = job['plans'], job['info'], job['why'], job['now']
+        step = self.p.plan_step
         st = self.plan_stats
         st['replans'] += 1
-        st[self.planner.last['mode']] += 1
-        st['last'] = dict(self.planner.last, why=why, t=round(now, 1))
-        legs_of = {a['id']: a['legs'] for a in agents}
+        st[job['stats']['mode']] = st.get(job['stats']['mode'], 0) + 1
+        st['last'] = dict(job['stats'], why=why, t=round(now, 1), wall_ms=round(job['wall'] * 1000, 1))
+        st.setdefault('wall', []).append(job['wall'])
+        legs_of = {a['id']: a['legs'] for a in job['agents']}
         self.last_plans = {}                    # 화면용 예정표: 목적지마다 도착·떠날 시각
         for rid, p_ in plans.items():
             lg = legs_of[rid]
             self.last_plans[rid] = [dict(node=n, arrive=round(now + ta * step, 1),
                                          leave=None if td >= INF else round(now + td * step, 1))
                                     for n, ta, td, li, _ in p_ if li < len(lg) and n == lg[li][0]]
-        for rid, r in movers.items():
+        stale = False
+        for rid, m in info.items():
+            r = m['r']
+            if r.step is not m['step'] or not r.step or r.step['kind'] != 'move':
+                continue                        # 그사이 이 이동이 끝났거나 바뀜
             plan = plans.get(rid)
             if plan is None:
                 st['failed'] += 1
-                r.depart = None                 # 못 풀면 최단 경로 + 예약으로 (예전 방식)
+                if not (r.link and r.drive):
+                    r.depart = None             # 못 풀면 최단 경로 + 예약으로 (예전 방식)
                 continue
             goal0 = r.step['to']
             end = next(i for i, e in enumerate(plan) if e[0] == goal0 and e[3] == 0)
@@ -942,12 +1219,43 @@ class FMS:
             nodes = [e[0] for e in plan]
             dep = [now + e[2] * step if e[2] < INF else INF for e in plan]
             dep[-1] = INF
+            if r.link and r.drive and r.drive['cid'] != m['drive_cid']:
+                # 11-02 충돌: 서 있을 때 계획을 시작 → 계산 중에 /drive 가 나감 → 달리는 중에 r.path 를 갈아 끼움 →
+                # 주행이 끝나자 새 경로의 같은 순번(T2_98.9)에 있다고 믿음 (실제는 T1_98.9). 그사이 보낸 /drive 가 있으면 버림
+                stale = True
+                continue
+            if m['drive_j'] is not None:        # 실제 로봇이 달리는 묶음은 그대로, 그 뒤만 바꿈
+                if r.link and r.drive and r.drive['kind'] == 'drive' and r.drive['j'] == m['drive_j']:
+                    j = r.drive['j']
+                    r.path, r.depart = r.path[:j] + nodes, [now] * j + dep
+                else:
+                    stale = True
+                continue
+            # 계획을 만든 뒤 로봇이 움직였으면 맞는 데서 이어 붙임 (스레드로 계산하면 그사이 틱이 돎)
+            e0 = m['on_edge'] or (m['node'], nodes[1] if len(nodes) > 1 else None)
             if r.edge_t > 0:
-                nodes, dep = [r.path[r.k]] + nodes, [now] + dep
+                cur = tuple(r.path[r.k:r.k + 2])
+                if m['on_edge'] and cur == m['on_edge']:
+                    nodes, dep = [cur[0]] + nodes, [now] + dep              # 만들 때 지나던 엣지를 아직 지나는 중
+                elif not m['on_edge'] and cur == e0:
+                    dep = [now] + dep[1:]                                    # 그사이 계획의 첫 엣지로 들어섬
+                else:
+                    stale = True
+                    continue
+            elif r.node != (m['on_edge'][1] if m['on_edge'] else m['node']):
+                stale = True
+                continue
+            elif (r.depart is not None and r.k + 1 < len(r.path) and len(nodes) > 1
+                  and nodes[:2] == r.path[r.k:r.k + 2]):
+                # 다음 엣지가 같으면 이미 기다린(회전한) 시간을 버리지 않는다. 10-30: 막힌 로봇이 2초마다 다시 계획 →
+                # 회전 대기 중인 R2 의 출발이 매번 '지금 + 회전 시간'으로 밀려 영영 못 떠남 (그 R2 가 막힌 로봇의 길을 막음)
+                dep[0] = min(dep[0], r.depart[r.k])
             r.path, r.depart = nodes, dep
             r.k = 0
             r.res_to = 1 if r.edge_t > 0 else 0         # 지나는 중인 엣지만 남기고 예약은 출발 시각에 다시
             r.extra_nodes = set()
+        if stale:
+            self._replan_again = self._replan_again or '계획 중에 움직임'
 
     def plan(self, r, penalize=False):
         to = r.step['to']
@@ -1068,6 +1376,17 @@ class FMS:
                                  and n not in {x.node for x in self.robots} and not (self.g.near[n] & avoid)), None)
                 if spot:
                     self.start_task(o, 'yield', [dict(kind='move', to=spot)], f'{r.id} 에게 비켜 줌 → {spot}')
+            elif (o.step and o.step['kind'] == 'move' and not o.step.get('started') and not o.step.get('sidestep')
+                  and o.wait_s > 1.0 and r.wait_s > 1.0 and (not self.turn_fix or self.in_way(r, o))):
+                # 차례를 기다리느라 서 있는 로봇(아직 출발 전)이 길을 막으면 그 로봇도 비킨다.
+                # 10-29: R2 가 약제실 차례를 T2_190 (POCKET 으로 가는 유일한 길)에서 기다리고, 약제실의 R1 은 102호의 R3 를,
+                # R3 는 POCKET 으로 가려고 R2 를 기다림 → 실측 시간(더 느림)에서 영구 교착 (R1 은 CBS 출발 시각 대기라 교착 검사에 안 걸림)
+                found = self.sidestep_spot(o, [x for x in self.robots if x is not o])
+                if found:
+                    self.log(f'{o.id} 가 차례 기다리다 {r.id} 길을 막음 → {found[0]} 로 비킴', 'warn')
+                    o.queue.insert(0, dict(o.step, started=False))
+                    o.step = dict(kind='move', to=found[0], sidestep=True)
+                    self.next_step_init_move(o)
         if r.step['started'] and r.wait_s - r.replan_t > self.p.replan_s:   # 다른 길 찾아보기
             r.replan_t = r.wait_s
             if self.p.planner == 'cbs':
@@ -1075,11 +1394,48 @@ class FMS:
             elif r.edge_t == 0.0 and r.res_to <= r.k:
                 self.plan(r, penalize=True)
 
+    def route_set(self, p):
+        """경로가 붙잡게 될 노드: 지나는 노드 + 가로지르는 차선 노드 + 엣지 가까이 노드 + 그 가까운 노드"""
+        g, out = self.g, set(p)
+        for i in range(len(p) - 1):
+            out |= set(g.crossed.get((p[i], p[i + 1]), [])) | g.seg_near[(p[i], p[i + 1])]
+        return out | {m for n in out for m in g.near[n]}
+
+    def in_way(self, r, o):
+        """o 가 서 있는 자리가 r 이 갈 길 위인가 (r 이 아직 출발 전이면 최단 경로로 봄)"""
+        if r.path and len(r.path) > r.k + 1:
+            p = r.path[r.k:]
+        else:
+            p = self.g.path(r.node, r.step['to']) or []
+        return o.node in self.route_set(p)
+
+    REATTACH = ('unreachable', 'not_localized', 'not_at_node', 'rebooted')
+
+    def check_real(self, r):
+        """실제 로봇: 재부팅 알아채기, 붙지 못한(또는 쉬다가 재부팅한) 로봇은 준비되면 자동으로 다시 붙이기"""
+        L = r.link
+        if not L.alive():
+            return
+        boot = (L.st.get('robot') or {}).get('boot_id')
+        if not r.fault and r.boot and boot and boot != r.boot:
+            self.real_fault(r, 'rebooted', '로봇이 재부팅됨 — 위치를 믿을 수 없음. 노드에 놓고 /set_pose')
+            return
+        if (r.fault and r.fault['code'] in self.REATTACH and r.step is None and not r.queue
+                and self.t - r.reattach_t > 2.0):
+            r.reattach_t = self.t
+            if L.st.get('pose_confirmed') is not False:
+                self.attach_real(r, L)
+
     def tick_robot(self, r, dt):
         p, s = self.p, r.step
-        if s is None:
+        if r.link:
+            self.check_real(r)
+        if s is None or r.fault:
             return
         k = s['kind']
+        if r.link and k in ('dock', 'spin'):
+            self.tick_real_act(r, k)
+            return
         if k == 'move':
             if not s['started']:
                 if not self.begin_move(r):
@@ -1087,25 +1443,50 @@ class FMS:
             if r.path is None:
                 self.next_step(r)
                 return
-            dist = p.speed * dt
+            if r.link:
+                self.tick_real_move(r)
+                return
+            tt = dt                                     # 이번 틱에 쓸 수 있는 시간 s (엣지마다 실측 속도로 움직임)
             r.plan_wait = False
-            while dist > 1e-9:
+            while tt > 1e-9:
                 if r.k >= len(r.path) - 1:
                     break
                 if r.edge_t == 0 and r.depart is not None and self.t < r.depart[r.k] - 1e-9:
-                    r.plan_wait = True                  # CBS 가 정한 출발 시각까지 기다림
+                    r.plan_wait = True                  # CBS 가 정한 출발 시각까지 기다림 (제자리 회전 시간도 여기 들어 있음)
                     break
                 if r.res_to <= r.k and not self.try_reserve(r):
                     break
                 a, b = r.path[r.k], r.path[r.k + 1]
+                if p.node_stop_s and r.edge_t == 0 and r.k > 0:   # 이어 달리기 없음: 같은 방향·방식으로 지나는 노드에서도 섬
+                    if r.stop_left is None:
+                        e0, e1 = self.g.edge.get((r.path[r.k - 1], a)), self.g.edge[(a, b)]
+                        straight = (e0 is not None and e0['mode'] == e1['mode'] and e1['mode'] in ('line', 'wall')
+                                    and round(self.g.heading(r.path[r.k - 1], a)) % 360 == round(self.g.heading(a, b)) % 360)
+                        r.stop_left = p.node_stop_s if straight else 0.0
+                    use = min(tt, r.stop_left)
+                    r.stop_left -= use
+                    tt -= use
+                    if r.stop_left > 1e-9:
+                        break
+                if r.edge_t == 0 and r.depart is None:  # CBS 시각이 없으면 엣지 방향으로 도는 시간을 직접
+                    if r.turn_left is None:
+                        r.turn_left = self.g.rot_s(r.heading, self.g.heading(a, b))
+                    use = min(tt, r.turn_left)
+                    r.turn_left -= use
+                    tt -= use
+                    if r.turn_left > 1e-9:
+                        break
                 L = self.g.edge[(a, b)]['L']
-                d = min(dist, L - r.edge_t)
+                v = L / self.g.edge_s(a, b, p.speed)    # cm/s
+                d = min(v * tt, L - r.edge_t)
                 r.edge_t += d
                 r.since += d
-                dist -= d
+                tt -= d / v
+                r.heading = self.g.heading(a, b)
                 if r.edge_t >= L - 1e-9:
                     r.k += 1
                     r.edge_t = 0.0
+                    r.turn_left = r.stop_left = None
                     r.prev_node, r.since = a, 0.0
                     r.node = b
                     if r.k >= r.res_to:
@@ -1148,24 +1529,7 @@ class FMS:
         elif k == 'spin':
             r.timer += dt
             if r.timer >= p.spin_s:
-                done = [o for o in r.assigned if o.room == s['room']]
-                for o in done:
-                    o.state, o.done_t, o.delivered_at = 'delivered', self.t, self.stamp()
-                    r.assigned.remove(o)
-                    r.load -= 1
-                    self.stats['delivered'] += 1
-                    self.emit('order_delivered', order_id=o.oid, room=room_code(o.room), robot=r.num,
-                              batch_id=o.batch.bid if o.batch else None)
-                b = r.batch
-                if b and b.status != 'completed' and all(o.state == 'delivered' for o in b.orders):
-                    b.status, b.status_t = 'completed', self.t
-                    self.emit('batch_completed', batch_id=b.bid, robot=r.num)
-                r.battery -= p.battery_per_room
-                if r.load < 0 or r.battery < 0:
-                    self.log(f'{r.id}: 적재 {r.load} / 배터리 {r.battery} 음수', 'violation')
-                self.log(f'{r.id}: {s["room"]} 배송 완료 {[f"#{o.id}" for o in done]} → 관제 PC (배터리 {r.battery})')
-                r.step = dict(kind='pause', dur=self.rng.uniform(*p.pause_s))   # 한 바퀴 뒤 1~5초 쉬고 다음 일
-                r.timer = 0.0
+                self.finish_spin(r, s)
         elif k == 'pause':
             r.timer += dt
             if r.timer >= s['dur']:
@@ -1179,9 +1543,222 @@ class FMS:
         elif k == 'charge':
             r.timer += dt
             if r.timer >= p.charge_s:
-                r.battery = 100
+                r.fatigue = 100
                 self.log(f'{r.id}: 충전 끝 → 100')
                 self.next_step(r)
+
+    # ---- 실제 로봇 (robot_link.HttpLink) — 설계: FMS ↔ Pinky 주행 API 설계 문서 (10-29) ----
+    def attach_real(self, r, link):
+        """실제 로봇 붙이기: 시작 노드·자세 = 로봇 /status 의 drive.node·pose"""
+        prev = (r.fault or {}).get('code')       # 같은 이유로 다시 안 되면 로그를 되풀이하지 않음
+        r.link, r.fault = link, None
+        if not link.wait_status():
+            r.fault = dict(code='unreachable', why=f'{link.url} /status 없음 ({link.err})', t=self.t, node=r.node, edge=None)
+            if prev != r.fault['code']:
+                self.log(f'{r.id} ({r.name}): 로봇 API 안 됨 — {link.err}', 'violation')
+            return
+        want = next((row.get('serial') for row in ROBOT_TABLE if row.get('name') == r.name), None)
+        got = ((link.st or {}).get('robot') or {}).get('serial')
+        if want and got and want != got:          # IP 가 바뀌어 다른 로봇에 붙음
+            r.fault = dict(code='wrong_robot', why=f'{link.url} 는 시리얼 {got} (표: {want})', t=self.t, node=r.node, edge=None)
+            if prev != r.fault['code']:
+                self.log(f'{r.id} ({r.name}): {link.url} 는 다른 로봇 (시리얼 {got}) — robots.yaml url 확인', 'violation')
+            return
+        if link.st.get('pose_confirmed') is False:   # 재부팅·Nav2 재시작 뒤 /set_pose 안 함 → 초기 위치(A)를 믿으면 안 됨 (10-30)
+            r.fault = dict(code='not_localized', why='로봇 위치 확인 안 됨 — 노드에 놓고 로봇 /set_pose', t=self.t, node=r.node, edge=None)
+            if prev != r.fault['code']:
+                self.log(f'{r.id} ({r.name}): 위치 확인 안 됨 — 노드에 놓고 /set_pose 하면 자동으로 붙음', 'warn')
+            return
+        r.boot = (link.st.get('robot') or {}).get('boot_id')
+        d, pose = link.drive_status(), link.pose()
+        node = d and d.get('node')
+        if node == PHARMACY_DOCK:
+            node, r.at_dock = PHARMACY, True
+        if node not in self.g.nodes:
+            r.fault = dict(code='not_at_node', why=f'로봇이 노드 위에 있지 않음 (pose {pose})', t=self.t, node=None, edge=None)
+            if prev != r.fault['code']:
+                self.log(f'{r.id} ({r.name}): 노드 위에 있지 않음 {pose} — 노드에 올리고 다시 시작', 'violation')
+            return
+        r.node, r.pos = node, self.g.xy(node)
+        if pose:
+            r.heading = pose['heading'] % 360
+        self.log(f'{r.id} = 실제 로봇 {r.name} ({link.url}) at {node}')
+
+    def real_sync_pos(self, r):
+        pose = r.link.pose()
+        if pose:
+            r.pos, r.heading = (pose['x'], pose['y']), pose['heading'] % 360
+
+    def real_fault(self, r, code, why=None):
+        """실제 로봇 실패: 그 자리(지나던 엣지 포함)를 계속 차지한 채 멈춤. 관제 PC 에 robot_error, 다른 로봇은 다시 계획"""
+        edge = [r.path[r.k], r.path[r.k + 1]] if r.edge_t > 0 and r.path and r.k < len(r.path) - 1 else None
+        node = (r.link.drive_status() or {}).get('node')
+        if not edge and node in self.g.nodes and node != r.node:
+            # 로봇이 보고한 노드를 믿음 (11-02: FMS 는 T2_98.9, 로봇은 T1_98.9 → 빈 줄 안 T1_98.9 로 다른 로봇을 들여보냄)
+            self.log(f'{r.id} ({r.name}): FMS 는 {r.node}, 로봇은 {node} 에 있다고 보고 → {node} 로 고침', 'warn')
+            r.node, r.pos, r.depart = node, self.g.xy(node), None
+            if r.step and r.step['kind'] == 'move':
+                self.plan(r)                    # 고친 노드에서 다시 (아래 replan_all 이 CBS 로 덮어씀)
+        r.fault = dict(code=code, why=why, t=round(self.t, 1), node=None if edge else r.node, edge=edge)
+        r.drive = None
+        self.log(f'{r.id} ({r.name}) 실패: {code} {why or ""} @ {edge or r.node}', 'violation')
+        self.emit('robot_error', robot=r.num, name=r.name, code=code, why=why, node=r.fault['node'], edge=edge,
+                  task=self.task_name(r), batch_id=r.batch.bid if r.batch else None)
+        self.replan_all(f'{r.id} 실패')
+
+    def clear_fault(self, r):
+        """사람이 로봇을 확인한 뒤: 실패 표시를 지우고 이어서 (엣지 중간이면 다음 /drive 가 "@here" 로 마저 감)"""
+        if r.fault:
+            self.log(f'{r.id}: 실패 표시 지움 ({r.fault["code"]}) → 이어서')
+            r.fault = None
+            r.wait_s = r.replan_t = 0.0
+
+    def real_chunk(self, r):
+        """CBS 계획을 따르는 실제 로봇이 이번에 보낼 묶음의 끝 index: 다음 대기 지점(계획상 도착보다 늦게 떠나는 노드)까지,
+        지금 다른 로봇이 차지한 자리와 부딪히는 엣지 앞까지. 첫 엣지부터 막히면 None (기다림)"""
+        g, path, now = self.g, r.path, self.t
+        others = [(o, self.occupancy(o)) for o in self.robots if o is not r]
+        T, h, j = 0.0, r.heading, r.k
+        for i in range(r.k, len(path) - 1):
+            a, b = path[i], path[i + 1]
+            mine = [Item(g, 'edge', (a, b), 0, 0, r.loaded, r.id), Item(g, 'node', b, 0, 0, r.loaded, r.id)]
+            hit = [o for o, occ in others if any(space_conflict(g, X, Y, NEAR_CM) for X in mine for Y in occ)]
+            if hit:
+                if i == r.k:
+                    self.waiting(r, '길 막힘', hit)
+                    return None
+                break
+            T += g.rot_s(h, g.heading(a, b)) + g.edge_s(a, b, self.p.speed)
+            h = g.heading(a, b)
+            j = i + 1
+            if j < len(path) - 1 and r.depart[j] < INF and r.depart[j] > now + T + 2.0:
+                break                           # 여기서 기다려야 함 (계획상 늦게 떠남) → 묶음 끝
+        r.wait_s, r.wait_why, r.blocked_by = 0.0, '', set()
+        return j
+
+    def tick_real_move(self, r):
+        L, d = r.link, r.drive
+        if not L.alive():
+            if not r.link_lost:
+                r.link_lost = True
+                self.log(f'{r.id} ({r.name}): /status 끊김 — 마지막 자리를 계속 차지한 것으로 봄', 'warn')
+            return
+        r.link_lost = False
+        if d is None:                           # 다음 묶음 보내기
+            if r.k >= len(r.path) - 1:
+                self.arrive(r)
+                return
+            if r.depart is not None and self.t < r.depart[r.k] - 1e-9:
+                r.plan_wait = True              # CBS 출발 시각까지 기다림
+                return
+            r.plan_wait = False
+            if r.depart is not None:
+                j = self.real_chunk(r)
+                if j is None:
+                    return
+                r.res_to = j
+                r.extra_nodes = set()
+            else:                               # CBS 못 풂 → 예전 방식 (차선 노드까지 예약)
+                if r.res_to <= r.k and not self.try_reserve(r):
+                    return
+                j = r.res_to
+            route, extra = list(r.path[r.k:j + 1]), 0
+            if r.edge_t > 0:                    # 엣지 중간에 멈췄던 로봇 → 그 엣지 끝까지 마저
+                route[0] = '@here'
+            elif r.at_dock and route[0] == PHARMACY:
+                route, extra = [PHARMACY_DOCK] + route, 1      # 정밀 주차 자리에서 먼저 물러나기
+            nxt = r.path[j + 1] if j + 1 < len(r.path) else None
+            r.drive = dict(cid=L.drive(route, nxt), kind='drive', k0=r.k, j=j, extra=extra, t=self.t, late=set())
+            self.log(f'{r.id} → {r.name}: /drive {route}' + (f' (다음 {nxt})' if nxt else ''))
+            return
+        res = L.result(d['cid'])
+        if res is not None and res[0] not in (200, 202):
+            self.real_fault(r, (res[1] or {}).get('error', f'http_{res[0]}'), (res[1] or {}).get('why'))
+            return
+        st = L.drive_status(d['cid'])
+        if st is None:
+            if self.t - d['t'] > 10.0:
+                self.real_fault(r, 'no_ack', '/drive 를 보냈는데 로봇 상태에 그 명령이 안 보임')
+            return
+        done = len(st['done_edges']) - d['extra']
+        if st['done_edges'] and d['extra']:
+            r.at_dock = False
+        newk = d['k0'] + max(0, done)
+        while r.k < min(newk, d['j']):          # 끝난 엣지만큼 앞으로
+            r.prev_node, r.since = r.path[r.k], 0.0
+            r.k += 1
+            r.node, r.edge_t = r.path[r.k], 0.0
+        e = st.get('edge')
+        if e and st['state'] == 'driving' and r.k < len(r.path) - 1 and e[1] == r.path[r.k + 1]:
+            r.edge_t = (st.get('edge_progress') or 0.0) * self.g.edge[(r.path[r.k], r.path[r.k + 1])]['L']
+        self.real_sync_pos(r)
+        el, ex = st.get('edge_elapsed_s'), st.get('edge_expected_s')
+        if e and el and ex and el > LATE_X * ex + 2.0 and tuple(e) not in d['late']:
+            d['late'].add(tuple(e))
+            self.log(f'{r.id} ({r.name}) 늦음: {e[0]}→{e[1]} {el:.0f}s (예상 {ex:.0f}s) → 다시 계획', 'warn')
+            self.replan_all(f'{r.id} 늦음')
+        if st['state'] == 'done':
+            r.k, r.edge_t, r.drive = d['j'], 0.0, None
+            r.node, r.res_to = r.path[r.k], r.k
+            if r.k >= len(r.path) - 1:
+                self.arrive(r)
+        elif st['state'] in ('failed', 'canceled'):
+            err = st.get('error') or {}
+            self.real_fault(r, err.get('code', st['state']), err.get('why'))
+
+    def tick_real_act(self, r, k):
+        """정밀 주차 (PHARMACY → PHARMACY_DOCK 엣지) · 병실 360° 회전 (/action spin)"""
+        L, d = r.link, r.drive
+        if not L.alive():
+            return
+        if d is None:
+            cid = L.drive([PHARMACY, PHARMACY_DOCK]) if k == 'dock' else L.action('spin')
+            r.drive = dict(cid=cid, kind=k, t=self.t)
+            self.log(f'{r.id} → {r.name}: ' + ('정밀 주차' if k == 'dock' else '/action spin'))
+            return
+        res = L.result(d['cid'])
+        if res is not None and res[0] not in (200, 202):
+            self.real_fault(r, (res[1] or {}).get('error', f'http_{res[0]}'), (res[1] or {}).get('why'))
+            return
+        st = L.drive_status(d['cid'])
+        r.timer = self.t - d['t']
+        self.real_sync_pos(r)
+        if st is None:
+            if r.timer > 10.0:
+                self.real_fault(r, 'no_ack', f'{k} 명령을 보냈는데 로봇 상태에 안 보임')
+            return
+        if st['state'] == 'done':
+            r.drive = None
+            if k == 'dock':
+                r.at_dock = True
+                self.next_step(r)
+            else:
+                self.finish_spin(r, r.step)
+        elif st['state'] in ('failed', 'canceled'):
+            err = st.get('error') or {}
+            self.real_fault(r, err.get('code', st['state']), err.get('why'))
+
+    def finish_spin(self, r, s):
+        """병실 360° 회전 끝 = 배송 완료 (시뮬레이션·실제 로봇 같이)"""
+        p = self.p
+        done = [o for o in r.assigned if o.room == s['room']]
+        for o in done:
+            o.state, o.done_t, o.delivered_at = 'delivered', self.t, self.stamp()
+            r.assigned.remove(o)
+            r.load -= 1
+            self.stats['delivered'] += 1
+            self.emit('order_delivered', order_id=o.oid, room=room_code(o.room), robot=r.num,
+                      batch_id=o.batch.bid if o.batch else None)
+        b = r.batch
+        if b and b.status != 'completed' and all(o.state == 'delivered' for o in b.orders):
+            b.status, b.status_t = 'completed', self.t
+            self.emit('batch_completed', batch_id=b.bid, robot=r.num)
+        r.fatigue -= p.fatigue_per_room
+        if r.load < 0 or r.fatigue < 0:
+            self.log(f'{r.id}: 적재 {r.load} / 피로도 {r.fatigue} 음수', 'violation')
+        self.log(f'{r.id}: {s["room"]} 배송 완료 {[f"#{o.id}" for o in done]} → 관제 PC (피로도 {r.fatigue})')
+        r.step = dict(kind='pause', dur=self.rng.uniform(*p.pause_s))   # 한 바퀴 뒤 1~5초 쉬고 다음 일
+        r.timer = 0.0
 
     def arrive(self, r):
         to = r.step['to']
@@ -1190,8 +1767,8 @@ class FMS:
         r.dest_zones, r.extra_nodes = set(), set()
         r.wait_s, r.wait_why, r.blocked_by = 0.0, '', set()
         r.depart, r.plan_wait = None, False
-        if to == PHARMACY and r.battery <= self.p.pharmacy_min_battery:
-            self.log(f'{r.id}: 배터리 {r.battery} 로 약제실 도착', 'violation')
+        if to == PHARMACY and r.fatigue <= self.p.pharmacy_min_fatigue:
+            self.log(f'{r.id}: 피로도 {r.fatigue} 로 약제실 도착', 'violation')
         self.emit('robot_arrived', robot=r.num, node=to, room=room_or_none(to))
         if to in ROOM_CONTAM and r.step.get('visit'):
             if to == SURGERY and r.contam > 0:
@@ -1232,12 +1809,24 @@ class FMS:
                 self._next_auto += self.rng.expovariate(self.auto_rate / 60.0)
         else:
             self._next_auto = None
+        self.poll_plan()
         if self.t >= self._next_dispatch:
             self.dispatch()
             self._next_dispatch = self.t + self.p.dispatch_s
         for r in self.robots:
             self.tick_robot(r, dt)
         self.check_bodies()
+        self.send_peers()
+
+    PEERS_S = 0.3
+    def send_peers(self):
+        """실제 로봇마다 다른 실제 로봇의 지금 위치(로봇이 보고한 pose)를 보낸다 → 로봇이 AMCL 스캔에서 지움 (10-29)"""
+        if self.t < getattr(self, '_next_peers', 0.0):
+            return
+        self._next_peers = self.t + self.PEERS_S
+        real = [(o, o.link.pose()) for o in self.robots if o.link and o.link.alive()]
+        for r, _ in real:
+            r.link.set_peers([(p['x'], p['y']) for o, p in real if o is not r and p])
 
     # ---- 화면용 ----
     def snapshot(self):
@@ -1245,12 +1834,15 @@ class FMS:
         for r in self.robots:
             n, e, z = r.holds()
             rs.append(dict(id=r.id, color=r.color, x=round(r.pos[0], 2), y=round(r.pos[1], 2), node=r.node,
-                           state=r.state_name(), task=r.task, battery=r.battery, contam=r.contam, load=r.load,
+                           heading=round(r.heading or 0.0, 1),
+                           state=r.state_name(), task=r.task, fatigue=r.fatigue, contam=r.contam, load=r.load,
                            orders=[o.id for o in r.assigned],
                            step=None if r.step is None else {k: v for k, v in r.step.items() if k in ('kind', 'to', 'room')},
                            queue=[{k: v for k, v in s.items() if k in ('kind', 'to', 'room')} for s in r.queue],
                            path=r.path[r.k:] if r.step and r.step['kind'] == 'move' and r.path else [],
                            res_to=max(0, r.res_to - r.k), wait=r.wait_why if r.wait_s > 0 else '',
+                           real=r.link is not None, fault=r.fault, at_dock=r.at_dock, name=r.name,
+                           url=r.link.url if r.link else None, find=r.link.find if r.link else None,
                            wait_s=round(r.wait_s, 1), timer=round(r.timer, 1),
                            plan=self.last_plans.get(r.id, []) if (r.step and (r.step['kind'] != 'move' or r.step.get('started'))) else [],
                            held=dict(nodes=sorted(n), edges=[list(x) for x in e], zones=sorted(z))))

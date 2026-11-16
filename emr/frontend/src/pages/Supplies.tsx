@@ -15,7 +15,13 @@ import type { SupplyCategory, SupplyCreate, RequestableBy } from '../api/types'
 import { Button, Input, Label, LoadError, PageTitle, Select, Table, Td, Th } from '../components/ui'
 
 const CATEGORY_LABEL: Record<SupplyCategory, string> = { medication: '약품', supply: '비품' }
-const REQ_LABEL: Record<RequestableBy, string> = { nurse: '간호사', patient: '환자' }
+const REQ_LABEL: Record<RequestableBy, string> = { nurse: '간호사', patient: '환자(병상)' }
+
+/** 목적격 조사 — 마지막 글자에 받침이 있으면 '을', 없으면 '를'. [입력] word [출력] '을' | '를' */
+function objectParticle(word: string): string {
+  const code = word.charCodeAt(word.length - 1) - 0xac00
+  return code >= 0 && code <= 11171 && code % 28 !== 0 ? '을' : '를'
+}
 
 function SupplyCreateForm({ onDone }: { onDone: () => void }) {
   const { create } = useSupplyMutations()
@@ -36,11 +42,11 @@ function SupplyCreateForm({ onDone }: { onDone: () => void }) {
         </Label>
         <Label text="요청 가능">
           <Select value={form.requestable_by} onChange={e => set('requestable_by', e.target.value as RequestableBy)}>
-            <option value="nurse">간호사</option><option value="patient">환자</option>
+            <option value="nurse">간호사</option><option value="patient">환자(병상)</option>
           </Select>
         </Label>
         <Label text="재고"><Input type="number" min={0} value={form.stock_qty} onChange={e => set('stock_qty', Number(e.target.value))} /></Label>
-        <Label text="부족 알림 기준 (선택)">
+        <Label text="이 수량 이하면 알림 (선택)">
           <Input type="number" min={0} placeholder="알림 안 함" value={form.low_stock_threshold_qty ?? ''}
             onChange={e => set('low_stock_threshold_qty', e.target.value === '' ? null : Number(e.target.value))} />
         </Label>
@@ -67,22 +73,22 @@ export function Supplies() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <PageTitle>비품·약품</PageTitle>
+        <PageTitle>재고 관리</PageTitle>
         <div className="flex gap-2">
-          <div className="w-48"><Input placeholder="코드·이름 검색" value={q} onChange={e => setQ(e.target.value)} /></div>
-          <Button onClick={() => setShowForm(v => !v)}>{showForm ? '닫기' : '+ 등록'}</Button>
+          <div className="w-64"><Input placeholder="물품 번호나 물품 이름으로 찾기" value={q} onChange={e => setQ(e.target.value)} /></div>
+          <Button onClick={() => setShowForm(v => !v)}>{showForm ? '닫기' : '+ 물품 추가'}</Button>
         </div>
       </div>
       {showForm && <SupplyCreateForm onDone={() => setShowForm(false)} />}
-      <p className="text-sm text-slate-500">재고는 배송 예약에 잡힌 수량을 뺀 값입니다. 예약하면 빠지고, 취소하면 돌아옵니다. 실사로 고칠 때도 예약된 수량은 빼고 입력하세요.</p>
-      <p className="text-sm text-slate-500">부족 알림 기준을 넣으면 재고가 그 수량 이하가 될 때 모든 간호사 화면에 알림이 뜹니다. 비워 두면 알리지 않습니다.</p>
+      <p className="text-sm text-slate-500">남은 수량은 신청된 수량을 뺀 값입니다. 직접 세어 고칠 때도 신청된 수량을 빼고 입력해 주세요.</p>
+      <p className="text-sm text-slate-500">기준 수량을 넣으면, 남은 수량이 그 이하일 때 모든 간호사에게 알림이 갑니다.</p>
 
       {supplies.isError ? (
         <LoadError what="비품 목록" error={supplies.error} onRetry={() => void supplies.refetch()} />
       ) : (
         <Table>
           <thead>
-            <tr><Th>코드</Th><Th>이름</Th><Th>분류</Th><Th>요청 가능</Th><Th>재고 (예약 가능)</Th><Th>부족 알림 기준</Th><Th>유효기간</Th><Th>{' '}</Th></tr>
+            <tr><Th>코드</Th><Th>이름</Th><Th>분류</Th><Th>요청 가능</Th><Th>재고 (신청 가능)</Th><Th>부족 알림 기준</Th><Th>유효기간</Th><Th>{' '}</Th></tr>
           </thead>
           <tbody>
             {rows.map(s => {
@@ -90,7 +96,8 @@ export function Supplies() {
               return (
               <tr key={s.id} className={isLowStock ? 'bg-red-50' : undefined}>
                 <Td className="font-mono">{s.code}</Td>
-                <Td>{s.name}{isLowStock && <span className="ml-2 rounded bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-700">재고 부족</span>}</Td>
+                <Td>{s.name}{isLowStock && <span className="ml-2 rounded bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-700">부족</span>}
+                  {isLowStock && <span className="block text-xs text-red-700">기준 수량보다 부족합니다. 수량을 확인해서 입력해 주세요.</span>}</Td>
                 <Td>{CATEGORY_LABEL[s.category]}</Td>
                 <Td>{REQ_LABEL[s.requestable_by]}</Td>
                 <Td>
@@ -115,13 +122,13 @@ export function Supplies() {
                 </Td>
                 <Td className="whitespace-nowrap tabular-nums">{s.expiry_date ?? '—'}</Td>
                 <Td>
-                  <Button variant="danger" onClick={() => { if (confirm(`${s.name} 삭제?`)) remove.mutate(s.id) }}>삭제</Button>
+                  <Button variant="danger" onClick={() => { if (confirm(`${s.name}${objectParticle(s.name)} 목록에서 뺄까요?`)) remove.mutate(s.id) }}>삭제</Button>
                 </Td>
               </tr>
               )
             })}
             {!supplies.isPending && rows.length === 0 && (
-              <tr><td colSpan={8} className="px-3 py-2 text-slate-500">비품이 없습니다</td></tr>
+              <tr><td colSpan={8} className="px-3 py-2 text-slate-500">등록된 물품이 없습니다.</td></tr>
             )}
           </tbody>
         </Table>

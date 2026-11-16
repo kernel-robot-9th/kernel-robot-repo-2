@@ -21,7 +21,7 @@ export function ArucoMarker({ arucoMarkerId, markerSideMm, className }: {
   const cells = arucoMarkerCells(arucoMarkerId)
   return (
     <svg
-      role="img" aria-label={`ArUco 4x4 마커 ${arucoMarkerId}번`}
+      role="img" aria-label={`인식표 ${arucoMarkerId}번`}
       viewBox={`0 0 ${totalCells} ${totalCells}`} width={totalSideMm} height={totalSideMm}
       shapeRendering="crispEdges" className={className}
     >

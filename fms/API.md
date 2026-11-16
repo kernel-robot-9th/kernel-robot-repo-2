@@ -113,7 +113,7 @@ curl $F/api/v1/state
              "node": "R58", "next_node": "GB130", "place": "오른쪽 협로",
              "destination": {"node": "ROOM1_CLR", "room": "108호"},
              "path": ["R58", "GB130", "B2_130", "B2_78"],
-             "battery": 70, "contamination": 10, "load": 2, "capacity": 3,
+             "fatigue": 70, "contamination": 10, "load": 2, "capacity": 3,
              "batch_id": "b-5", "orders": ["o-17", "o-18"]}]}
 ```
 
@@ -124,7 +124,7 @@ curl $F/api/v1/state
 | `node`, `next_node`, `path` | 지도 노드 이름 (`GET /api/v1/map`): 마지막으로 지난 곳, 다음, 남은 길 |
 | `place` | 사람이 읽는 위치: 아래 복도, 위 복도, 왼쪽 협로, 오른쪽 협로, 단일차선 협로, 약제실, 101호…, POCKET(대기), 충전기 |
 | `destination` | 지금 가는 곳. 병실·약제실이면 `room` 에 이름, 아니면 `null` |
-| `battery` | 0~100. 병실 하나당 −10, 20 이하면 충전하러 감 |
+| `fatigue` | 피로도 0~100 (가상 값, 실제 배터리 아님). 병실 하나당 −10, 20 이하면 충전 자리로 가서 100 |
 | `contamination` | 0~100. 1인실 +10, 4인실 +50, POCKET 5초면 0 |
 | `load` / `capacity` | 실은 물품 수 / 최대 3 |
 | `batch_id`, `orders` | 맡은 묶음, 아직 배송 안 끝난 주문 |
@@ -177,7 +177,7 @@ curl $F/api/v1/state
 ## 시뮬레이터로 시험하기
 
 ```bash
-python3 fms/sim_server.py --host 0.0.0.0 --control-url http://<관제 PC IP>:8000 --no-auto-omx
+python3 pinky_map_rev3/fms/sim_server.py --host 0.0.0.0 --control-url http://<관제 PC IP>:8000 --no-auto-omx
 ```
 
 - `--control-url` 을 주면 로봇 상태·이벤트를 그 주소로 보낸다. 없으면 안 보내고 `GET /api/v1/events?after=0` 으로만 볼 수 있다.

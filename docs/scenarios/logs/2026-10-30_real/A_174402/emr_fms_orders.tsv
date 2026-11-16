@@ -1,0 +1,4 @@
+delivery_id	request_id	fms_order_id	batch_id	fms_robot	status	sent_kst	delivered_kst
+342	emr-d342-s1-1	o-1	b-1	2	assigned	17:44:21	
+343	emr-d343-s2-1	o-2	b-1	2	assigned	17:44:21	
+344	emr-d344-s3-1	o-3	b-1	2	assigned	17:44:21	

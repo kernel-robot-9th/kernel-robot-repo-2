@@ -19,7 +19,7 @@ from urllib.parse import parse_qs, urlparse
 import yaml
 
 import openapi_v1
-from fms_core import FMS, PARKING, PHARMACY, ROOM_CONTAM, ROOM_INFO, Conflict, Params, parse_request, room_code
+from fms_core import FMS, PHARMACY, PHARMACY_QUEUE, PROFILES, ROOM_CONTAM, ROOM_INFO, Conflict, Params, apply_profile, parse_request, room_code
 
 KST = datetime.timezone(datetime.timedelta(hours=9))
 
@@ -56,24 +56,38 @@ def load_walls():
 
 
 class Sim:
-    def __init__(self, control_url=None):
+    def __init__(self, control_url=None, links=None, n_robots=3, profile=None, trace_dir=None):
         self.lock = threading.Lock()
+        self.trace_dir, self.rec = trace_dir, None   # 기록기 (sim_trace.Recorder): 다시 시작할 때마다 새 파일
+        self.profile = profile        # 발표 영상 비교용 (fms_core.PROFILES), None = 지금 그대로
         self.speed = 1.0
         self.paused = False
         self.f = None
-        self.reset(3)
+        self.links = links or {}      # 이름 → robot_link.HttpLink (실제 로봇). 다시 시작해도 연결은 그대로
+        self.reset(n_robots)
         self.push = Pusher(self, control_url)
         threading.Thread(target=self.loop, daemon=True).start()
 
     def reset(self, n, auto=0.0, planner='cbs', auto_omx=None):
         with self.lock:
             old = self.f
-            self.f = FMS(n_robots=n, params=Params(planner=planner))
+            self.f = FMS(n_robots=n, params=Params(planner=planner, plan_async='thread'), links=self.links)   # 계산 중에도 틱이 돎
+            if self.links:
+                self.speed = 1.0                           # 실제 로봇이 있으면 실시간만
+            if self.profile:
+                apply_profile(self.f, self.profile)
             self.f.auto_rate = auto
             self.f.clock = now_iso
             if old is not None:
                 self.f._seq = old._seq                     # 이벤트 번호는 다시 시작해도 이어간다
                 self.f.p.auto_omx = old.p.auto_omx if auto_omx is None else auto_omx
+            if self.trace_dir:
+                from sim_trace import Recorder
+                if self.rec:
+                    self.rec.close()
+                path = os.path.join(self.trace_dir, f'trace_{self.profile or "v5"}_{time.strftime("%m%d_%H%M%S")}.jsonl')
+                self.rec = Recorder(self.f, path, meta=dict(profile=self.profile or 'v5', robots_n=n, auto=auto,
+                                                            started=time.strftime('%Y-%m-%d %H:%M:%S')))
 
     def loop(self):
         dt, last = 0.05, time.time()
@@ -89,6 +103,8 @@ class Sim:
                 while sim > 1e-9:
                     h = min(dt, sim)
                     self.f.step_sim(h)
+                    if self.rec:
+                        self.rec.tick()
                     sim -= h
 
 
@@ -257,8 +273,12 @@ class H(BaseHTTPRequestHandler):
             return self.send(200, openapi_v1.SPEC)
         if u.path == '/docs':
             return self.send(200, openapi_v1.SWAGGER_HTML.encode(), 'text/html')
-        if self.path in ('/', '/index.html'):
+        if u.path in ('/', '/index.html'):
             return self.send(200, open(os.path.join(HERE, 'static/index.html'), 'rb').read(), 'text/html')
+        if u.path in ('/quad.html', '/tri.html'):     # 발표 영상: 시뮬레이터 4개 2×2 (demo_quad.py) · 3개 세로 칸 (demo_tri.py)
+            return self.send(200, open(os.path.join(HERE, 'static' + u.path), 'rb').read(), 'text/html')
+        if u.path == '/hospital.png':                 # 발표 화면 배경 (새 미니맵 그림의 아레나 0~210 × 0~200 cm 부분)
+            return self.send(200, open(os.path.join(HERE, 'static/hospital.png'), 'rb').read(), 'image/png')
         if self.path == '/api/map':
             return self.send(200, MAP)
         if self.path == '/api/state':
@@ -285,8 +305,17 @@ class H(BaseHTTPRequestHandler):
                     made = [SIM.f.add_order(room, item).as_dict() for room, item in reqs]
                 return self.send(200, made[0] if isinstance(b, dict) and 'orders' not in b else made)
             if self.path == '/api/control':
-                if 'speed' in b:
+                if 'speed' in b and not SIM.links:              # 실제 로봇이 있으면 실시간만
                     SIM.speed = max(0.1, min(50.0, float(b['speed'])))
+                if 'clear_fault' in b:                           # 실제 로봇 실패 표시 지우고 이어서 {"clear_fault": "R1"}
+                    with SIM.lock:
+                        for rr in SIM.f.robots:
+                            if rr.id == b['clear_fault'] or rr.name == b['clear_fault']:
+                                SIM.f.clear_fault(rr)
+                if 'find_pose' in b:                             # 실제 로봇 위치 찾기 {"find_pose": "R1"} (화면 버튼)
+                    for rr in SIM.f.robots:
+                        if rr.link and b['find_pose'] in (rr.id, rr.name):
+                            rr.link.find_pose()
                 if 'paused' in b:
                     SIM.paused = bool(b['paused'])
                 if 'auto_rate' in b:
@@ -312,23 +341,39 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--port', type=int, default=8770)
     ap.add_argument('--host', default='127.0.0.1', help='다른 PC 에서 붙으려면 0.0.0.0')
-    ap.add_argument('--control-url', default=None, help='관제 PC 주소 (예: http://192.168.129.135:8000). 로봇 상태·이벤트를 여기로 POST')
+    ap.add_argument('--control-url', default=None, help='관제 PC 주소 (예: http://CONTROL_PC_IP:8000). 로봇 상태·이벤트를 여기로 POST')
     ap.add_argument('--no-auto-omx', action='store_true', help='가상 관제 PC 끔: ready·loaded 를 진짜 관제 PC 가 보냄')
+    ap.add_argument('--real', action='append', default=[], metavar='이름=URL',
+                    help='실제 로봇 (robots.yaml 이름). 예: --real pinky_6364=http://PINKY1_IP:8080 — 나머지 로봇은 가상')
+    ap.add_argument('--real-table', action='store_true', help='robots.yaml 에 url 이 있는 로봇은 모두 실제 로봇으로')
+    ap.add_argument('--robots', type=int, default=3, help='로봇 수 (실제 + 가상)')
+    ap.add_argument('--profile', choices=list(PROFILES), default=None, help='발표 영상 비교용: 기능을 꺼서 예전 단계 흉내 (fms_core.PROFILES)')
+    ap.add_argument('--trace', nargs='?', const=os.path.join(HERE, 'logs'), default=None, metavar='폴더',
+                    help='0.5초마다 로봇 상태 기록 (기본 폴더 logs/) → detect.py 로 분석')
     a = ap.parse_args()
-    SIM = Sim(a.control_url)
+    from robot_link import HttpLink
+    links = {}
+    reals = [x.split('=', 1) for x in a.real]
+    if a.real_table:
+        from fms_core import ROBOT_TABLE
+        reals += [(row['name'], row['url']) for row in ROBOT_TABLE if row.get('url')]
+    for name, url in reals:
+        links[name] = HttpLink(name, url)
+    SIM = Sim(a.control_url, links, a.robots, a.profile, a.trace)
     SIM.f.p.auto_omx = not a.no_auto_omx
     g = SIM.f.g
     segs, ghost = load_walls()
     MAP = dict(walls=segs, invisible=ghost, size=[210, 200],
+               walls_show=segs[:-1] + [[[0, -1], [0, 200]]],     # 발표 화면: 기울어진 왼쪽 외벽(실측) 대신 반듯한 x=0
                nodes={k: dict(xy=n['xy'], type=n['type'], name=n.get('name')) for k, n in g.nodes.items()},
                edges=[dict(a=e['a'], b=e['b'], mode=e['mode'], zone=e['zone'])
                       for (a, b), e in g.edge.items() if (a, b) == (e['a'], e['b'])],
                rooms={k: v for k, v in ROOM_CONTAM.items()}, room_names={k: v['name'] for k, v in ROOM_INFO.items()},
                room_codes={**{k: room_code(k) for k in ROOM_INFO}, PHARMACY: '약제실'},
-               parking=PARKING)
+               parking=SIM.f.parking, pharmacy_queue=PHARMACY_QUEUE)
     srv = ThreadingHTTPServer((a.host, a.port), H)
     print(f'FMS 시뮬레이터: http://{a.host}:{a.port}  (API v1 Swagger: /docs, 관제 PC 로 보내기: {SIM.push.url or "끔"}, '
-          f'가상 OMX {"켬" if SIM.f.p.auto_omx else "끔"})')
+          f'가상 OMX {"켬" if SIM.f.p.auto_omx else "끔"}, 실제 로봇 {list(links) or "없음"})')
     srv.serve_forever()
 
 

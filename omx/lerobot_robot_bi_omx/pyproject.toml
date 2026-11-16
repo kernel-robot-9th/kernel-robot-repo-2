@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lerobot_robot_bi_omx"
+version = "0.1.0"
+description = "Bimanual OMX follower/leader for LeRobot v0.4.4 (auto-loaded as a third-party plugin)"
+requires-python = ">=3.10"
+
+[tool.setuptools]
+packages = ["lerobot_robot_bi_omx"]

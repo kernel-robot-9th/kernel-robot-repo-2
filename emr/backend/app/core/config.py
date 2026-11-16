@@ -8,6 +8,8 @@
 # =============================================================================
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -26,6 +28,76 @@ class Settings(BaseSettings):
     JWT_EXPIRE_MINUTES: int = 480      # 간호사 1교대(8h) 동안 재로그인 없음
 
     CORS_ORIGINS: list[str] = ["http://localhost:5173"]
+
+    # 간호사 배송 수령 방법 (2026-10-22, 사용자 결정: 마커는 일단 끄고 간호사도 "받았습니다" 버튼).
+    # button = 간호사 화면 "받았습니다"(POST /deliveries/{id}/receipt) · marker = 로봇이 일회용 마커를 읽음(2026-10-20 방식)
+    # 마커를 되살리려면 .env에 NURSE_RECEIPT_METHOD=marker. 일회용 마커는 어느 쪽이든 도착 때 만든다(DB 규칙 그대로)
+    NURSE_RECEIPT_METHOD: Literal["button", "marker"] = "button"
+
+    # 로그인(JWT) 잠시 끄기 (2026-10-22, 사용자 요청: "아무나 접근 가능하게"). true면 토큰이 없거나 틀려도 관리자 AUTH_DISABLED_AS로 본다.
+    # 같은 LAN 누구나 관리자 권한 — 시연·시험 동안만. 로봇 키(X-Robot-Api-Key)·병상 단말 키는 그대로 검사한다
+    AUTH_DISABLED: bool = False
+    AUTH_DISABLED_AS: str = "N001"
+    # 로봇 API 키 잠시 끄기 (2026-10-22, 사용자 요청). true면 X-Robot-Api-Key가 없거나 틀려도 로봇 ROBOT_KEY_DISABLED_AS로 본다
+    # (맞는 키를 보내면 그 로봇). 같은 LAN 누구나 로봇 API(claim·도착·실패 보고)를 부를 수 있다 — 시연·시험 동안만
+    ROBOT_KEY_DISABLED: bool = False
+    ROBOT_KEY_DISABLED_AS: int = 1
+
+    # 배송 배정 때 로봇 상태 기준 (2026-10-23, 사용자 결정: "배터리, 오염도 넣어서 미션을 할당" — claim할 때마다 EMR이
+    # 로봇 서버(robots.robot_server_url, 팀원 Pinky API)의 GET /status를 물어 검사). 벗어나면 claim이 새 배송을 주지 않는다
+    # (204 + X-Claim-Skip-Reason). 이미 맡은 배송은 그대로 돌려준다. [검토 필요] 기준값은 가정값 — 팀원·로봇 부서와 맞춘다
+    CLAIM_MIN_BATTERY_PERCENT: float = 30.0         # 이 값 미만이면 robot_battery_low
+    CLAIM_MAX_CONTAMINATION_PERCENT: float = 70.0   # 이 값 초과면 robot_contamination_high
+    ROBOT_SERVER_TIMEOUT_SECONDS: float = 2.0       # 로봇 서버가 이 안에 답하지 않으면 robot_server_unreachable
+
+    # 팀원 OMX(로봇팔) API — 관리자가 EMR에서 명령을 보내고 상태를 본다 (2026-10-26, app/clients/omx.py).
+    # /command는 예전 형식(명령 문장) — 10-26 합의한 색깔별 개수 형식은 팀원 쪽이 바뀐 뒤에
+    # 2026-10-28 사용자: OMX 주소가 OMX_IP로 바뀜(이 PC enp130s0 = CONTROL_PC_IP, NetworkManager 'shared' 망 — 예전 OMX_IP).
+    # [검토 필요] 그 망의 방화벽이 도커 컨테이너 → 10.42.0.x 새 연결을 거절해 개발 스택은 .env로 이 PC의 중계 주소를 쓴다
+    OMX_BASE_URL: str = ""   # 예 "http://OMX_IP:8000" — 주소는 .env로 넣는다(저장소에 실제 IP를 두지 않음). 비어 있으면 OMX 호출은 503 omx_unavailable
+    OMX_TIMEOUT_SECONDS: float = 3.0     # 이 안에 답하지 않으면 omx_unavailable(503)
+
+    # 팀원 FMS API v1 연동 1단계 (2026-10-27, 계약 docs/api_contract_delivery_2026-10-20.md 10장). EMR은 FMS·OMX만 연결(상위 관제).
+    # FMS_BASE_URL이 비어 있으면 끔(주문 보내기 주기 작업 없음, 예전 claim 그대로). 있으면 claim은 늘 204로 막힌다
+    FMS_BASE_URL: str = ""                    # 예 "http://FMS_IP:8770" — FMS는 --control-url http://<EMR>:8000 으로 띄운다
+    FMS_TIMEOUT_SECONDS: float = 3.0
+    FMS_SEND_INTERVAL_SECONDS: float = 5.0    # 신청 시각이 된 배송을 FMS로 보내는 회차 간격
+    # FMS 로봇 번호(robots.yaml 1·2·3) → EMR 로봇 id. [검토 필요] 10-27 EMR 로봇 1 배송로봇 1호·3 2호·4 3호(2는 OMX) 기준 가정값 — 로봇 탭 칸은 다음 단계
+    FMS_ROBOT_MAP: dict[int, int] = {1: 1, 2: 3, 3: 4}
+    # 병원 지도에 로봇 위치 (2026-10-29, services/fms_robot_positions.py). FMS robot-status의 pose(그림 cm)를 그릴 EMR 맵 이름 —
+    # 그 맵은 같은 그림을 cm/100 = m로 옮긴 것이어야 한다(scripts/make_arena_floorplan.py, 장소 좌표도 같은 프레임)
+    FMS_MAP_NAME: str = "Pinky 아레나"
+    FMS_POSITION_STALE_SECONDS: float = 5.0   # [검토 필요] 마지막 상태를 받은 지 이보다 오래면 '연결 끊김'으로 표시 (FMS는 1초마다 보냄)
+    # 2단계: FMS 묶음마다 실제 OMX로 적재·탑재 (2026-10-27, services/fms_omx.py). false면 ready·loaded를 FMS(가상 OMX)가 스스로 보낸다.
+    # true면 로봇팔이 움직인다 — 묶음마다 /command {"blue": N, "green": N}(집기) → 들고 대기 → FMS ready → 정밀 주차 뒤 /pinky(내려놓기) → FMS loaded
+    FMS_OMX_ENABLED: bool = False
+    FMS_OMX_ROUND_SECONDS: float = 1.0        # OMX /status를 보고 다음 단계를 보내는 간격
+    # 내려놓기(/pinky)를 보낼 '정밀 주차 끝' 신호 (2026-10-28 사용자: "정밀 주차 완료 후"). fms = FMS 이벤트 robot_at_pharmacy(계약 10.4),
+    # pinky = 실물 Pinky가 정밀 주차를 마치고 보내는 POST /api/v1/robot/arrived — FMS가 가상인 동안 임시(FMS가 실물을 몰면 fms로)
+    FMS_PHARMACY_SIGNAL: Literal["fms", "pinky"] = "fms"
+    # OMX /command 형식 — counts = {"blue": N, "green": N} (10-27 결정). sentence = 임시(10-27 사용자: "임시 방편으로 이전 버전 API,
+    # 수량 무시하고 거즈 문장으로") — 지금 실제 OMX(vision 47bcb47)가 문장만 받아서. 팀원 OMX가 개수 형식을 받으면 counts로 되돌린다.
+    # FMS 묶음(services/fms_omx.py)과 관리자 API(/omx/command) 둘 다 이 값을 따른다.
+    # fixed = 시연(10-30 사용자 "OMX 갯수 부족으로 블루 1개, 그린 1개로 고정해서 보내주면 될거 같아 FMS으로 정상으로") —
+    # 개수와 상관없이 늘 {"blue": 1, "green": 1}, FMS 주문·묶음 개수는 그대로
+    OMX_COMMAND_FORMAT: Literal["counts", "sentence", "fixed"] = "counts"
+    # fixed일 때 보낼 색깔별 개수 (10-30 저녁 사용자 "진행해" — 녹색 거즈를 못 찾아 .env에서 {"blue": 1}로). JSON
+    OMX_FIXED_COMMAND: dict[str, int] = {"blue": 1, "green": 1}
+
+    # 음성 배송 예약 초안 (2026-10-26, app/services/voice_request.py). 사용자 결정: Gemini로 시작, 로컬 모델은 나중에 같은 인터페이스로.
+    # gemini면 녹음·문장이 Google 클라우드로 나간다 — 시연·시험 동안만. 키는 .env에만(문서·로그에 넣지 않는다)
+    VOICE_PARSER: Literal["gemini", "disabled"] = "disabled"   # disabled면 /voice/* 503 voice_disabled
+    GEMINI_API_KEY: str = ""
+    VOICE_MODEL: str = "gemini-3.8-flash"   # [검토 필요] ~/voice_module(10-14)에서 동작한 모델명 — 바뀌면 .env로
+    VOICE_TIMEOUT_SECONDS: float = 20.0     # 이 안에 답하지 않으면 voice_unavailable(503)
+    # 안내 음성 POST /voice/speak (2026-10-26) — 켜고 끄기·키는 위와 같다
+    VOICE_TTS_MODEL: str = "gemini-3.8-flash-tts"   # 10-26 이 서버에서 동작 확인
+    VOICE_TTS_VOICE: str = "Kore"                   # voice를 안 보내면 쓰는 목소리 — 요청마다 voice로 바꿀 수 있다
+    # voice에 "female"·"male"을 보내면 쓰는 목소리 (2026-10-27 사용자 결정: 여성 Kore, 남성 Algenib — 듣기 비교와 음 높이 199Hz·131Hz로 고름.
+    # Orus·Fenrir·Puck는 Google 표에는 남성이지만 160~180Hz로 높아 여성처럼 들려 뺐다)
+    VOICE_TTS_VOICE_FEMALE: str = "Kore"
+    VOICE_TTS_VOICE_MALE: str = "Algenib"
+    VOICE_TTS_STYLE: str = "병원 안내 방송처럼 차분하고 또박또박, 자연스러운 속도로"
 
     def db_host_for_log(self) -> str:
         """로그용 DB 주소 — 비밀번호 제거.

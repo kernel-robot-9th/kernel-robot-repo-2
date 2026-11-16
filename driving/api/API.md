@@ -1,6 +1,6 @@
 # Pinky REST API 목록
 
-- 주소: `http://<로봇 IP>:8080` (지금 FASTCAMPUS_10F 에서 **pinky_6364 = `192.168.129.68`** (2026-10-26~; ee3a = .107, 62f4 = .122), 로봇 AP 에서는 `192.168.4.1`)
+- 주소: `http://<로봇 IP>:8080` (지금 FASTCAMPUS_10F 에서 **pinky_6364 = `PINKY1_IP`** (2026-10-26~; ee3a = .107, 62f4 = .122), 로봇 AP 에서는 `192.168.4.1`)
 - **Swagger UI: `http://<로봇 IP>:8080/docs`** (여기서 바로 눌러 볼 수 있음, 화면을 그리는 데 인터넷 필요) · OpenAPI 명세: `/openapi.json`
 - 좌표: 그림 cm (아레나 왼쪽 아래 원점, x 오른쪽, y 위), 위치 = **라이다 중심**, heading deg (0 = +x, 90 = +y, 반시계 +)
 - 본문은 JSON (`Content-Type: application/json`). 오류는 `{"error": "..."}`
@@ -29,7 +29,7 @@
 `/set_pose` 이름 (tools/points.yaml): A, B, C, D, F, G, start_A, omx_stop, omx_approach.
 
 ```bash
-B=http://192.168.129.68:8080
+B=http://PINKY1_IP:8080
 curl $B/status
 curl -X POST -H "Content-Type: application/json" -d '{"x":182.7,"y":24,"heading":180}' $B/goto
 curl $B/jobs/<id>
@@ -43,7 +43,7 @@ curl -X POST $B/cancel
 
 ```bash
 # 한 번 등록 (로봇에 저장, 재시작해도 남음). 지금 등록된 곳 = 관제 서버(팀원)의 '지금 도착했습니다'
-curl -X PUT -H "Content-Type: application/json" -d '{"url":"http://192.168.129.135:8000/api/v1/robot/arrived","dests":["PHARMACY"]}' http://192.168.129.68:8080/notify
+curl -X PUT -H "Content-Type: application/json" -d '{"url":"http://CONTROL_PC_IP:8000/api/v1/robot/arrived","dests":["PHARMACY"]}' http://PINKY1_IP:8080/notify
 # 관제 서버가 로봇 키를 요구하게 되면: ... -d '{"headers":{"X-Robot-Api-Key":"<키>"}}'  (GET /notify 에서는 값이 가려짐)
 ```
 
@@ -51,7 +51,7 @@ curl -X PUT -H "Content-Type: application/json" -d '{"url":"http://192.168.129.1
 
 ```json
 {"event": "arrived", "dest": "PHARMACY",
- "robot": {"serial": "1cdda27b956a1efc", "ips": ["192.168.129.122", "192.168.4.1"]},
+ "robot": {"serial": "1cdda27b956a1efc", "ips": ["PINKY3_IP", "192.168.4.1"]},
  "job_id": "b709869d", "time": "2026-10-22T21:52:02+0900",
  "pose": {"x": 96.2, "y": 187.1, "heading": 88.5},
  "dock_error": {"fwd_mm": -0.4, "left_mm": 1.7, "heading_deg": 0.4}}

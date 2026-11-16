@@ -57,6 +57,15 @@ def test_to_png_converts_pgm():
         assert image.getpixel((0, 31)) == 0 and image.getpixel((0, 0)) == 254   # 벽·빈 곳이 그대로
 
 
+def test_to_png_keeps_color_floorplan():
+    source = io.BytesIO()
+    Image.new("RGB", (40, 30), (240, 230, 210)).save(source, format="PNG")   # 색 있는 평면도 (2026-10-29)
+    png_bytes, width_px, height_px = to_png(source.getvalue())
+    assert (width_px, height_px) == (40, 30)
+    with Image.open(io.BytesIO(png_bytes)) as image:
+        assert image.mode == "RGB" and image.getpixel((0, 0)) == (240, 230, 210)
+
+
 def test_to_png_rejects_non_image_and_too_large():
     with pytest.raises(BadRequest) as error:
         to_png(b"not an image")

@@ -39,7 +39,7 @@ class Map(TimestampMixin, Base):
     origin_x_m: Mapped[float] = mapped_column(Float, nullable=False)      # 맵 이미지 왼쪽 아래 픽셀의 x, 미터
     origin_y_m: Mapped[float] = mapped_column(Float, nullable=False)      # 맵 이미지 왼쪽 아래 픽셀의 y, 미터
     origin_yaw_rad: Mapped[float] = mapped_column(Float, nullable=False)  # 맵 회전, 라디안
-    # 업로드한 맵 이미지 (PGM·PNG → 흑백 PNG). 목록 조회 때 읽지 않도록 deferred — GET /maps/{id}/image에서만 읽는다
+    # 업로드한 맵 이미지 (PGM·PNG → PNG, 흑백 맵은 흑백·색 평면도는 색). 목록 조회 때 읽지 않도록 deferred — GET /maps/{id}/image에서만 읽는다
     image_png: Mapped[bytes | None] = deferred(mapped_column(LargeBinary))
     image_width_px: Mapped[int | None] = mapped_column(Integer)   # 이미지 가로 픽셀
     image_height_px: Mapped[int | None] = mapped_column(Integer)  # 이미지 세로 픽셀 (좌표 변환에 필요: ROS는 y가 위로)

@@ -3,12 +3,13 @@
 # 역할   : 장소 조회·삭제
 # 작성일 : 2026-10-14
 # 구성   :
-#   - LocationRepository  list_by_name, get_by_name, is_used_by_delivery, is_robot_home(2026-10-20), delete
+#   - LocationRepository  list_by_name, get_by_name, is_used_by_delivery, clear_robot_home(2026-10-27), delete
 # =============================================================================
 from __future__ import annotations
 
-from sqlalchemy import exists, select
+from sqlalchemy import exists, select, update
 
+from app.models.bedside_device import BedsideDevice
 from app.models.delivery import Delivery
 from app.models.robot import Robot
 from app.models.location import Location
@@ -34,6 +35,10 @@ class LocationRepository(BaseRepository[Location]):
         """
         return self.db.scalar(select(Location).where(Location.name == name))
 
+    def get_by_robot_dest(self, robot_dest: str) -> Location | None:
+        """로봇 목적지 이름으로 한 건 (2026-10-22). [입력] robot_dest [출력] Location | None"""
+        return self.db.scalar(select(Location).where(Location.robot_dest == robot_dest))
+
     def is_used_by_delivery(self, location_id: int) -> bool:
         """이 장소를 배송 위치로 쓰는 예약이 있는가 (상태 무관).
         [입력] location_id
@@ -41,12 +46,19 @@ class LocationRepository(BaseRepository[Location]):
         """
         return bool(self.db.scalar(select(exists().where(Delivery.destination_location_id == location_id))))
 
-    def is_robot_home(self, location_id: int) -> bool:
-        """이 장소를 복귀 장소로 쓰는 로봇이 있는가 (2026-10-20).
+    def clear_robot_home(self, location_id: int) -> None:
+        """이 장소를 예전 복귀 장소로 가진 로봇의 값을 비운다 (2026-10-27: 복귀 장소를 쓰지 않음, 장소 삭제 전 FK 정리).
+        [입력] location_id
+        [출력] 없음
+        """
+        self.db.execute(update(Robot).where(Robot.home_location_id == location_id).values(home_location_id=None))
+
+    def is_bedside_room(self, location_id: int) -> bool:
+        """이 장소를 병실로 쓰는 병상 단말이 있는가 (2026-10-22).
         [입력] location_id
         [출력] bool
         """
-        return bool(self.db.scalar(select(exists().where(Robot.home_location_id == location_id))))
+        return bool(self.db.scalar(select(exists().where(BedsideDevice.location_id == location_id))))
 
     def delete(self, location: Location) -> None:
         """행 삭제.

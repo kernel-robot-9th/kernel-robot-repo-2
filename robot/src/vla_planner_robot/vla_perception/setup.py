@@ -22,6 +22,7 @@ setup(
     entry_points={
         'console_scripts': [
             'perception_node = vla_perception.perception_node:main',
+            'camera_node = vla_perception.camera_node:main',
         ],
     },
 )

@@ -1,0 +1,17 @@
+# Real right arm on the calibration board (2026-10-22): every named place stays on the board.
+vla_planner:
+  ros__parameters:
+    use_sim_time: false
+    ollama_host: http://localhost:11434
+    model: gemma4:e2b
+    llm_timeout: 90.0
+    block_height: 0.025
+    relative_offset: 0.05
+    min_clearance: 0.035
+    min_reach: 0.12
+    max_reach: 0.27
+    dry_run: false
+    verify_tolerance: 0.03
+    region_names: [center, left, right, front, back, front_left, front_right, back_left, back_right]
+    region_x: [0.215, 0.205, 0.205, 0.250, 0.190, 0.240, 0.240, 0.190, 0.190]
+    region_y: [-0.020, 0.070, -0.110, -0.020, -0.020, 0.050, -0.090, 0.060, -0.100]

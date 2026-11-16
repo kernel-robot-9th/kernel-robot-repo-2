@@ -1,0 +1,66 @@
+flowchart TB
+  %% 병원 배송 로봇 SW 3계층 구조 — 최종판 (main 통합본, 2026-11-16)
+  %% draw.io: Arrange > Insert > Advanced > Mermaid 에 붙여 넣기 / 또는 mermaid.live 에서 PNG 내보내기
+  %% 색: 초록 = EMR(웹 팀) / 파랑 = 로봇 팀(FMS·주행·OMX·topview) / 회색 = 확장 기능 · 기술 검증
+  %% 10-29판(구현 상태 색 구분)은 docs/history/sw_3layer_2026-10-29.mmd
+
+  subgraph P["Presentation Layer — 브라우저 · EMR 웹 React :5173"]
+    direction LR
+    UI["간호사·관리자 UI<br/>물품 관리 · 물품 신청(여러 병동) · 단계(신청→준비→출발→도착→받음)<br/>받았습니다 버튼 · 알림 · 병원 지도(로봇 위치·배터리·오염도) · 배송 기록"]:::emr
+    BED["병상 단말 (환자)<br/>품목 요청 · 받았습니다"]:::emr
+    VOI["음성 물품 신청<br/>말 → 신청 초안 → 간호사 확인<br/>안내 음성"]:::emr
+  end
+
+  subgraph A["Application Layer — EMR FastAPI :8000 + PostgreSQL 16 (emr/)"]
+    direction TB
+    REQ["Request Service<br/>간호사 신청 · 병상 환자 요청"]:::emr
+    INV["Inventory Service<br/>비품 · 재고 · 유효기간 · 재고 부족"]:::emr
+    DSP["FMS 연동 (Task Dispatcher)<br/>물품 1개 = 주문 1건 → FMS<br/>FMS 이벤트 → 단계"]:::emr
+    FLT["Fleet State<br/>FMS robot-status 1초 → 지도 위 위치"]:::emr
+    OMXC["OMX 적재 진행<br/>묶음마다 /command → ready → /pinky → loaded"]:::emr
+    ALT["Alert Service<br/>LISTEN/NOTIFY → SSE"]:::emr
+    AUTH["Auth / 역할<br/>JWT · 로봇 키 · 병상 단말 키"]:::emr
+    LOG["배송 기록<br/>delivery_events (JSONB)"]:::emr
+    MAP["Map Registry<br/>Pinky 맵 · 장소 = FMS 방 번호"]:::emr
+    DB[("PostgreSQL 16")]:::emr
+    REQ ~~~ AUTH ~~~ DB
+    INV ~~~ MAP ~~~ LOG
+    DSP ~~~ FLT ~~~ OMXC
+  end
+
+  subgraph R["Robot Layer"]
+    direction TB
+    subgraph RF["관제 PC · FMS API v1 :8770 (fms/, Docker)"]
+      direction LR
+      RTM["Robot Task Manager<br/>주문 묶기 · 배차 · A* + CBS/ECBS 경로(실측 엣지 시간)<br/>구간 예약 · 교착 풀기 · 약제실 앞 대기열 · 충전 · 오염<br/>이상 동작 감지"]:::robot
+    end
+    subgraph RP["Pinky Pro × 3 · Pinky API :8080 (driving/)"]
+      direction LR
+      NAV["Navigation<br/>/drive 구간 주행 · /action 제자리 동작<br/>Nav2 FollowPath · AMCL · 협로 벽 따라가기 · IR 테이프<br/>ArUco 약제실 정밀 주차"]:::robot
+    end
+    subgraph RO["약제실 · OMX-F 양팔 :8000 (omx/)"]
+      direction LR
+      VID["비품 식별<br/>YOLO blue_gauze · green_gauze"]:::robot
+      MAN["Manipulation<br/>클릭 픽 집기(두 팔 동시) · Pinky 위 내려놓기"]:::robot
+      SAF["Safety Pause<br/>사람 있음·신호 끊김 → 그 자리 정지"]:::robot
+    end
+    subgraph TV["탑뷰 감시 (topview/, GPU 노트북)"]
+      PER["사람 검출<br/>YOLO · UDP 또는 AWS SRT 영상"]:::robot
+    end
+  end
+
+  subgraph X["확장 기능 · 기술 검증"]
+    direction LR
+    GD["안내 로봇 (guide_robot/)<br/>RTAB-Map · 사람 인사 · 양보"]:::side
+    VLA["VLA 플래너 (robot/)<br/>Ollama LLM + MoveIt 2"]:::side
+  end
+
+  P <-->|"REST /api/v1 (JWT) · /api/v2 음성 · SSE 알림"| A
+  A <-->|"POST /orders · /batches/{id}/ready·loaded ⇄ /fms/robot-status · /fms/events"| RF
+  RF <-->|"POST /drive · /action · /cancel ⇄ GET /status 0.3초"| RP
+  A <-->|"POST /command · /pinky · GET /status ⇄ GET /robot/{id}/end-point"| RO
+  TV -->|"POST /safety person_exist 0.2초"| RO
+
+  classDef emr fill:#d9f2d9,stroke:#2e7d32,color:#1b3d1b
+  classDef robot fill:#dbe9ff,stroke:#1f5fbf,color:#0f2a55
+  classDef side fill:#eeeeee,stroke:#888888,color:#333333

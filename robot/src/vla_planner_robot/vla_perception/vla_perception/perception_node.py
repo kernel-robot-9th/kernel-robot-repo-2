@@ -5,9 +5,12 @@ Publishes vla_interfaces/BlockArray on /vla/blocks (base frame, metres) and an
 annotated image on /vla/debug_image. The homography is refreshed whenever all
 markers are visible and kept when the arm occludes some of them.
 """
+import os
+
 import cv2
 import numpy as np
 import rclpy
+import yaml
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import CameraInfo, Image
@@ -38,6 +41,9 @@ class PerceptionNode(Node):
         p('tray_min_length', 0.12)
         p('tray_height', 0.02)         # height used for the parallax correction of trays
         p('debug_every', 3)            # publish the debug image every N frames
+        # real top camera (2026-10-22): fixed calibration files instead of corner markers
+        p('calibration_dir', '')       # holds top_intrinsics.yaml + top_homography.yaml (vla_calibration top_camera)
+        p('roi_xy', [0.0])             # work-area polygon in frame_id, flattened [x0, y0, x1, y1, ...] (m)
         p('colors', list(DEFAULT_HSV))
         for c, rng in DEFAULT_HSV.items():
             p(f'hsv.{c}', rng)
@@ -53,7 +59,10 @@ class PerceptionNode(Node):
         self.K = None
         self.undistort = Undistorter()
         self.homography = None
+        self.fixed = False
         self.frame = 0
+        if self.get_parameter('calibration_dir').value:
+            self._load_calibration(os.path.expanduser(self.get_parameter('calibration_dir').value))
 
         self.pub = self.create_publisher(BlockArray, '/vla/blocks', 10)
         self.dbg = self.create_publisher(Image, '/vla/debug_image', 1)
@@ -64,7 +73,26 @@ class PerceptionNode(Node):
         self.get_logger().info(f'markers {self.get_parameter("aruco_dictionary").value} '
                                f'{self.marker_xy}, colors {list(self.hsv)}')
 
+    def _load_calibration(self, folder):
+        """K, distortion and the undistorted-pixel -> frame homography from the top_camera tool."""
+        with open(os.path.join(folder, 'top_intrinsics.yaml')) as handle:
+            intr = yaml.safe_load(handle)
+        with open(os.path.join(folder, 'top_homography.yaml')) as handle:
+            homo = yaml.safe_load(handle)
+        self.K, H = np.array(intr['K'], float), np.array(homo['H'], float)
+        self.undistort = Undistorter(self.K, np.array(intr['dist'], float))
+        w, h = intr['size']
+        grid = np.array([(u, v) for u in np.linspace(0, w, 9) for v in np.linspace(0, h, 6)], float)
+        table = cv2.perspectiveTransform(grid.reshape(-1, 1, 2), H).reshape(-1, 2)
+        self.homography = TableHomography(grid, table, self.K)   # same H; the camera centre feeds the parallax fix
+        self.fixed = True
+        c = self.homography.camera_center
+        self.get_logger().info(f'calibration {folder}: fit error {homo.get("fit_error_mm")}, check error '
+                               f'{homo.get("check_error_mm")} mm, camera at {None if c is None else np.round(c, 3).tolist()}')
+
     def _on_info(self, msg):
+        if self.fixed:
+            return
         if self.K is None and any(msg.k):
             self.K = np.array(msg.k).reshape(3, 3)
             self.undistort = Undistorter(self.K, np.array(msg.d) if len(msg.d) else None)
@@ -85,6 +113,13 @@ class PerceptionNode(Node):
         self.homography = h
 
     def _roi_mask(self, shape):
+        roi = list(self.get_parameter('roi_xy').value)
+        if len(roi) >= 6:      # explicit work area (real setup has no corner markers)
+            poly = self.homography.to_pixel(np.array(roi, float).reshape(-1, 2))
+            poly = cv2.convexHull(poly.astype(np.float32)).astype(np.int32)
+            mask = np.zeros(shape[:2], np.uint8)
+            cv2.fillConvexPoly(mask, poly, 255)
+            return mask, poly
         xy = np.array(list(self.marker_xy.values()), float)
         center = xy.mean(axis=0)
         m = self.get_parameter('roi_margin').value
@@ -101,8 +136,9 @@ class PerceptionNode(Node):
         except ValueError as e:
             self.get_logger().error(str(e), throttle_duration_sec=5.0)
             return
-        markers = detect_markers(bgr, self.aruco_dict)
-        self._update_homography(markers)
+        markers = {} if self.fixed else detect_markers(bgr, self.aruco_dict)
+        if not self.fixed:
+            self._update_homography(markers)
 
         out = BlockArray()
         out.header = msg.header

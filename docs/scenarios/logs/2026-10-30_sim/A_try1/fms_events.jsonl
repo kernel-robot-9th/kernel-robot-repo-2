@@ -1,0 +1,19 @@
+{"event_id": "e-1", "seq": 1, "time": "2026-10-30T12:42:01+09:00", "type": "order_created", "order_id": "o-1", "request_id": "emr-d82-s1-1", "room": "101호", "item": "A 약품"}
+{"event_id": "e-2", "seq": 2, "time": "2026-10-30T12:42:01+09:00", "type": "order_created", "order_id": "o-2", "request_id": "emr-d83-s2-1", "room": "103호", "item": "B 약품"}
+{"event_id": "e-3", "seq": 3, "time": "2026-10-30T12:42:01+09:00", "type": "order_created", "order_id": "o-3", "request_id": "emr-d84-s3-1", "room": "104호", "item": "C 약품"}
+{"event_id": "e-4", "seq": 4, "time": "2026-10-30T12:42:08+09:00", "type": "batch_assigned", "batch_id": "b-1", "robot": 2, "name": "pinky_ee3a", "orders": [{"order_id": "o-1", "room": "101호", "item": "A 약품"}, {"order_id": "o-3", "room": "104호", "item": "C 약품"}, {"order_id": "o-2", "room": "103호", "item": "B 약품"}], "count": 3, "rooms": ["101호", "104호", "103호"]}
+{"event_id": "e-5", "seq": 5, "time": "2026-10-30T12:42:23+09:00", "type": "robot_called", "batch_id": "b-1", "robot": 2, "eta_s": 50}
+{"event_id": "e-6", "seq": 6, "time": "2026-10-30T12:42:23+09:00", "type": "robot_departed", "robot": 2, "task": "delivery", "from": "T1_20", "to": {"node": "PHARMACY", "room": "약제실"}}
+{"event_id": "e-7", "seq": 7, "time": "2026-10-30T12:43:00+09:00", "type": "robot_arrived", "robot": 2, "node": "PHARMACY", "room": "약제실"}
+{"event_id": "e-8", "seq": 8, "time": "2026-10-30T12:43:20+09:00", "type": "robot_at_pharmacy", "batch_id": "b-1", "robot": 2}
+{"event_id": "e-9", "seq": 9, "time": "2026-10-30T12:43:30+09:00", "type": "batch_departed", "batch_id": "b-1", "robot": 2, "rooms": ["101호", "104호", "103호"]}
+{"event_id": "e-10", "seq": 10, "time": "2026-10-30T12:43:30+09:00", "type": "robot_departed", "robot": 2, "task": "delivery", "from": "PHARMACY", "to": {"node": "ROOM4_L", "room": "101호"}}
+{"event_id": "e-11", "seq": 11, "time": "2026-10-30T12:44:22+09:00", "type": "robot_arrived", "robot": 2, "node": "ROOM4_L", "room": "101호"}
+{"event_id": "e-12", "seq": 12, "time": "2026-10-30T12:44:30+09:00", "type": "order_delivered", "order_id": "o-1", "room": "101호", "robot": 2, "batch_id": "b-1"}
+{"event_id": "e-13", "seq": 13, "time": "2026-10-30T12:44:32+09:00", "type": "robot_departed", "robot": 2, "task": "delivery", "from": "ROOM4_L", "to": {"node": "ROOM1_CUL", "room": "104호"}}
+{"event_id": "e-14", "seq": 14, "time": "2026-10-30T12:45:20+09:00", "type": "robot_arrived", "robot": 2, "node": "ROOM1_CUL", "room": "104호"}
+{"event_id": "e-15", "seq": 15, "time": "2026-10-30T12:45:28+09:00", "type": "order_delivered", "order_id": "o-3", "room": "104호", "robot": 2, "batch_id": "b-1"}
+{"event_id": "e-16", "seq": 16, "time": "2026-10-30T12:45:29+09:00", "type": "robot_departed", "robot": 2, "task": "delivery", "from": "ROOM1_CUL", "to": {"node": "ROOM1_LU", "room": "103호"}}
+{"event_id": "e-17", "seq": 17, "time": "2026-10-30T12:46:20+09:00", "type": "robot_arrived", "robot": 2, "node": "ROOM1_LU", "room": "103호"}
+{"event_id": "e-18", "seq": 18, "time": "2026-10-30T12:46:28+09:00", "type": "order_delivered", "order_id": "o-2", "room": "103호", "robot": 2, "batch_id": "b-1"}
+{"event_id": "e-19", "seq": 19, "time": "2026-10-30T12:46:28+09:00", "type": "batch_completed", "batch_id": "b-1", "robot": 2}

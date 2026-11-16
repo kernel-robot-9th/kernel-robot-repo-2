@@ -1,0 +1,18 @@
+# 관제 PC 에서:  cd fms && CONTROL_URL=http://<관제 서버>:<포트> docker compose up -d --build
+#   화면·API: http://<관제 PC>:8770   (API v1 Swagger: /docs)      로그: docker compose logs -f fms
+#   로봇 주소는 robots.yaml (url) — 컨테이너에 붙여 쓰므로 고친 뒤 docker compose restart fms 만 하면 됨
+#   실제 로봇 없이 시뮬레이션만: FMS_ARGS="--no-auto-omx" (기본은 --real-table --no-auto-omx)
+services:
+  fms:
+    build:
+      context: ..
+      dockerfile: fms/Dockerfile
+    image: kernel-robot-fms:latest
+    ports:
+      - "8770:8770"
+    volumes:
+      - ./robots.yaml:/app/fms/robots.yaml:ro
+    environment:
+      - TZ=Asia/Seoul
+    entrypoint: ["sh", "-c", "exec python3 sim_server.py --host 0.0.0.0 --port 8770 ${FMS_ARGS:---real-table --no-auto-omx} ${CONTROL_URL:+--control-url $CONTROL_URL}"]
+    restart: unless-stopped

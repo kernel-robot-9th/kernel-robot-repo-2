@@ -14,6 +14,8 @@
   <exec_depend>vla_executor</exec_depend>
   <exec_depend>vla_planner</exec_depend>
   <exec_depend>rqt_image_view</exec_depend>
+  <exec_depend>vla_teleop</exec_depend>
+  <exec_depend>open_manipulator_bringup</exec_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

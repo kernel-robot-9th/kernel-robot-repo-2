@@ -271,3 +271,10 @@ robot/src/pinky_pro/
 robot/src/open_manipulator/
 robot/src/dynamixel_hardware_interface/
 robot/src/robotis_interfaces/
+
+# 영상은 저장소에 올리지 않는다 (2026-11-02 사용자 "영상은 안올라게") — 파일은 로컬에만, 문서에는 경로만
+*.mp4
+*.webm
+*.mov
+*.avi
+*.mkv
