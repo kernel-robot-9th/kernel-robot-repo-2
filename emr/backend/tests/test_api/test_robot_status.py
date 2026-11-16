@@ -89,10 +89,10 @@ def test_claim_accepts_boundary_values(client, robot_server, robot_with_key, res
 @requires_db
 def test_robot_server_url_must_be_http_address(client, auth_headers, robot_with_key):
     url = f"{ROBOTS}/{robot_with_key['id']}"
-    assert client.patch(url, headers=auth_headers, json={"robot_server_url": "192.168.129.107:8080"}).status_code == 422
-    assert client.patch(url, headers=auth_headers, json={"robot_server_url": "http://192.168.129.107:8080/status"}).status_code == 422
-    changed = client.patch(url, headers=auth_headers, json={"robot_server_url": "http://192.168.129.107:8080"})
-    assert changed.status_code == 200 and changed.json()["robot_server_url"] == "http://192.168.129.107:8080"
+    assert client.patch(url, headers=auth_headers, json={"robot_server_url": "PINKY2_IP:8080"}).status_code == 422
+    assert client.patch(url, headers=auth_headers, json={"robot_server_url": "http://PINKY2_IP:8080/status"}).status_code == 422
+    changed = client.patch(url, headers=auth_headers, json={"robot_server_url": "http://PINKY2_IP:8080"})
+    assert changed.status_code == 200 and changed.json()["robot_server_url"] == "http://PINKY2_IP:8080"
 
 
 @requires_db

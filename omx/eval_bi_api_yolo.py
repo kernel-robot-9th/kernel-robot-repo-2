@@ -8,7 +8,7 @@
   (--step: 팔/그리퍼 단계마다 이 터미널에서 SPACE를 눌러야 다음 단계로, q = 그 자리에서 중단)
   (--dry-run: 모터 없이 시험. YOLO와 click pick 계획은 실제로 돌고, 팔 이동은 로그만)
   시험 송신기: python api_sender_yolo.py flow --command "pick and place green gauze"
-  EMR(관제 서버)로 결과 보내기: --callback-url 대신 --emr-api http://192.168.129.135:8000/api/v1
+  EMR(관제 서버)로 결과 보내기: --callback-url 대신 --emr-api http://CONTROL_PC_IP:8000/api/v1
      성공하면 GET <emr-api>/robot/<request_id>/end-point (200이면 전달 완료, 3번까지 재시도).
      실패 결과는 보내지 않습니다 (EMR이 성공만 받음). /status에는 남습니다.
 
@@ -542,7 +542,7 @@ def parse_server_args(argv=None):
                    help="which arm picks (right: omxtest-main --arm right, right ROI and home)")
     p.add_argument("--callback-url", default=os.environ.get("END_POINT_CALLBACK_URL") or None)
     p.add_argument("--emr-api", default=None,
-                   help="EMR base URL, e.g. http://192.168.129.135:8000/api/v1: on success send "
+                   help="EMR base URL, e.g. http://CONTROL_PC_IP:8000/api/v1: on success send "
                         "GET <emr-api>/robot/<request_id>/end-point instead of the POST callback")
     p.add_argument("--auto", action="store_true", help="no typed MOVE / PICK / DROP confirmations")
     p.add_argument("--step", action="store_true",

@@ -23,7 +23,7 @@
 | FMS 경로 계획 | 시공간 A* + CBS, 거리로 낸 시간 | 같은 A* + CBS에 **실측 엣지 시간**(`driving/graph/edge_times.yaml`, 방향별 142개)과 실측 회전 식 |
 | EMR 배송 단계 | 신청 → 출발(`batch_assigned`) → 도착 → 받음 | 신청 → **준비**(`robot_called`) → 출발(약제실 정밀 주차 끝) → 도착 → 받음. 마이그레이션 0017 |
 | 지도 위 로봇 위치 | FMS `robot-status`를 받기만 | **병원 지도에 Pinky 위치 표시**: 메모리에 마지막 위치 → `GET /api/v1/robot-positions` → 화면이 1초마다 물음. 아레나 평면도(`scripts/make_arena_floorplan.py`) |
-| OMX | 개수 형식만 | 10-28: 0개 색은 뺌(`{"green": 1}`), OMX가 형식을 거절(422)하면 OMX 싣기 생략 후 `ready` → `loaded`, 주소 `10.42.0.147:8000`, 정밀 주차 신호를 실물 Pinky로 받는 스위치 `FMS_PHARMACY_SIGNAL=pinky` |
+| OMX | 개수 형식만 | 10-28: 0개 색은 뺌(`{"green": 1}`), OMX가 형식을 거절(422)하면 OMX 싣기 생략 후 `ready` → `loaded`, 주소 `OMX_IP:8000`, 정밀 주차 신호를 실물 Pinky로 받는 스위치 `FMS_PHARMACY_SIGNAL=pinky` |
 
 ### 10-26판과 달라진 것 (2026-10-27)
 
@@ -70,7 +70,7 @@ EMR 쪽에서 비어 있는 것: **FMS 다시 시작 대응**, **FMS 취소 연�
 |---|---|
 | Presentation | EMR 웹(React 19 + Vite, `:5173`). 간호사·관리자가 같은 화면을 쓰고 역할로 메뉴를 나눈다. 병상 단말은 같은 웹의 `/bedside`(병상 단말 키) |
 | Application | EMR API(FastAPI + SQLAlchemy 2, `:8000`) + PostgreSQL 16(`:5432`). Docker로 상시 기동 |
-| Robot | **팀원 FMS API v1**(`fms/`, 관제 PC 도커 `:8770`) → **Pinky API**(`driving/api/`, 로봇마다 Flask `:8080`) → Pinky 위 ROS 2(Nav2 FollowPath·AMCL·카메라·IR). **팀원 OMX API**(`10.42.0.147:8000`, YOLO + click pick, 양팔 탑재 — 저장소 밖) |
+| Robot | **팀원 FMS API v1**(`fms/`, 관제 PC 도커 `:8770`) → **Pinky API**(`driving/api/`, 로봇마다 Flask `:8080`) → Pinky 위 ROS 2(Nav2 FollowPath·AMCL·카메라·IR). **팀원 OMX API**(`OMX_IP:8000`, YOLO + click pick, 양팔 탑재 — 저장소 밖) |
 
 ### 2.1 Robot 계층 안 (10-29)
 
@@ -286,7 +286,7 @@ batch_assigned → POST /command {"command": {"blue": N, "green": N}} → OMX �
 - `<services/fms_omx.py, FmsOmxRunner · run_omx_round>` : 1초마다 묶음 단계 하나씩(`pick → picking → ready → called → pinky → loading → loaded → delivering`, 멈춤 `failed`). 끝났는지는 OMX `/status`로. **OMX가 running·grabbing·holding·releasing·returning이면 `/command`를 보내지 않음**(팀원 OMX는 들고 있어도 받아 버림), 정밀 주차 전에는 `/pinky`를 보내지 않음, OMX는 한 번에 묶음 하나
 - `<models/fms_batch.py, FmsBatch>` : 묶음의 OMX 적재 진행(마이그레이션 0016, blue·green 개수, 단계, request_id `emr-b{id}`, 시각들)
 - `<services/omx_items.py, OMX_COLOR_BY_CATEGORY · omx_counts · omx_command>` : 약품 → blue, 비품 → green, **0개인 색은 뺌**(`{"green": 1}`, 10-28). `omx_command`는 설정 `OMX_COMMAND_FORMAT`(기본 `counts`, 임시 `sentence` = 수량 무시 거즈 문장 하나)
-- 10-28 보완: OMX가 명령 형식을 받지 않으면(422) 그 묶음은 OMX 싣기를 생략하고 `ready` → `loaded`로 넘김, `loaded` 전에 FMS `GET /batches/{id}`로 `at_pharmacy`인지 확인, 주소 기본값 `10.42.0.147:8000`(compose `OMX_BASE_URL`)
+- 10-28 보완: OMX가 명령 형식을 받지 않으면(422) 그 묶음은 OMX 싣기를 생략하고 `ready` → `loaded`로 넘김, `loaded` 전에 FMS `GET /batches/{id}`로 `at_pharmacy`인지 확인, 주소 기본값 `OMX_IP:8000`(compose `OMX_BASE_URL`)
 - `<app/main.py, _run_omx_forever>` : 주기 작업(`FMS_OMX_ENABLED=1`일 때 — 로봇팔이 움직임)
 - `<api/v1/omx.py, router>` : 관리자 `POST /omx/command`(개수, 임시 스위치를 켜면 문장도 — 꺼져 있으면 400 `omx_sentence_disabled`), `GET /omx/status`
 - `<services/omx_control.py, OmxControlService · new_request_id>` : 작업 번호 만들기, OMX 응답 없음 503 `omx_unavailable` · 거절 409 `omx_rejected`

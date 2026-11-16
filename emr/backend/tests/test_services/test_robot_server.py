@@ -22,8 +22,8 @@ def _serve(monkeypatch, handler) -> list[str]:
 
 def test_returns_status_object_and_joins_url(monkeypatch):
     called = _serve(monkeypatch, lambda url: httpx.Response(200, json={"state": "idle", "battery_percent": 80}))
-    assert fetch_robot_status("http://192.168.129.107:8080/", 2.0) == {"state": "idle", "battery_percent": 80}
-    assert called == ["http://192.168.129.107:8080/status"]
+    assert fetch_robot_status("http://PINKY2_IP:8080/", 2.0) == {"state": "idle", "battery_percent": 80}
+    assert called == ["http://PINKY2_IP:8080/status"]
 
 
 @pytest.mark.parametrize("response", [

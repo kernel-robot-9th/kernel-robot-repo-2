@@ -254,7 +254,7 @@ EMR 동작에 영향이 있는 항목만 다시 쟀다. 모두 문서와 같았�
 | 6 | 이벤트 필드 모양 통일 | `robot_departed.from`(문자열)과 `to`(객체), `robot_arrived`의 평평한 `node`·`room`, `robot_called`에 `name` 없음 |
 | 7 | 인증, `/api/control` 막기 (인증은 **없이 진행** — 10-27 사용자. `/api/control`은 FMS 쪽 일) | 같은 망 누구나 FMS를 다시 시작하거나 `control_url`을 바꿔 이벤트를 다른 곳으로 보낼 수 있다 |
 | 8 | FMS가 다시 시작됐음을 알리기 (예: `/state`에 시작 시각이나 세대 번호) | 다시 시작하면 주문·`request_id` 표가 비워진다. EMR이 이를 알아야 진행 중인 주문을 다시 보낼지 실패 처리할지 정할 수 있다 |
-| 9 | 정할 값 | FMS 서버 주소, `--control-url http://192.168.129.135:8000`(EMR), 로봇 2·3번 핑키 |
+| 9 | 정할 값 | FMS 서버 주소, `--control-url http://CONTROL_PC_IP:8000`(EMR), 로봇 2·3번 핑키 |
 
 ## 6. 구현 순서 제안 (결정 뒤)
 

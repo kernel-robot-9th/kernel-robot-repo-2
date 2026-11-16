@@ -39,4 +39,4 @@ TEST_DATABASE_URL=postgresql+psycopg://emr:emr@localhost:5432/emr_test pytest   
 - 클래스 docstring 3줄 이내, 메서드 1줄 + `[입력]` `[출력]`
 - 결정이 필요한 지점은 `# [검토 필요] 사유` — `python -m scripts.review` 로 `REVIEW.md` 재생성
 - `/docs`(OpenAPI)는 라우터 `summary/description/responses` + 스키마 `Field(description=)`로 별도 관리
-- `scripts/import_pinky_dests.py` — 팀원 Pinky API 목적지(`GET /dests`)를 맵 "Pinky 아레나"·장소(`robot_dest`)로 가져온다(다시 돌리면 갱신, 2026-10-22). `EMR_PASSWORD=... python3 backend/scripts/import_pinky_dests.py --pinky http://192.168.129.122:8080 --home START_A --robot-id 1`
+- `scripts/import_pinky_dests.py` — 팀원 Pinky API 목적지(`GET /dests`)를 맵 "Pinky 아레나"·장소(`robot_dest`)로 가져온다(다시 돌리면 갱신, 2026-10-22). `EMR_PASSWORD=... python3 backend/scripts/import_pinky_dests.py --pinky http://PINKY3_IP:8080 --home START_A --robot-id 1`

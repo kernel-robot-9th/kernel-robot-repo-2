@@ -4,7 +4,7 @@
 
 로봇 쪽 프로그램(팀원 Pinky FMS)이 EMR 배송을 가져가서 로봇을 보내고, 도착을 알리는 방법이다. 관제 PC 배송 실행기 없이 FMS가 직접 부른다.
 
-- EMR 주소: `http://192.168.129.135:8000/api/v1` (시험 화면 `http://192.168.129.135:8000/docs`)
+- EMR 주소: `http://CONTROL_PC_IP:8000/api/v1` (시험 화면 `http://CONTROL_PC_IP:8000/docs`)
 - **지금은 인증 없음**: 로봇 키(`X-Robot-Api-Key`)를 안 보내도 된다. 키 없이 부르면 EMR의 **배송로봇 1호**로 처리된다(시험 동안만).
 - 본문은 JSON, 오류는 `{"code": "...", "detail": "..."}`. 시각은 UTC ISO 8601.
 - 목적지 이름: EMR 장소에 Pinky 목적지 이름(`robot_dest`)이 들어 있다. FMS는 그 이름으로 `POST /goto {"dest": ...}`를 보내면 된다.
@@ -39,7 +39,7 @@ EMR에 배송 예약(간호사 화면 또는 POST /deliveries)
 
 ### 팀원 Pinky API에 필요한 것 (2026-10-23)
 
-EMR이 claim 때 로봇 서버(EMR 로봇 탭의 "로봇 서버" 주소, 지금 `http://192.168.129.107:8080`)의 `GET /status`를 직접 부른다(2초 제한, GET만). 지금 응답에 있는 `localized`·`nav2_ready`·`state`에 더해 **두 칸을 넣어 달라**:
+EMR이 claim 때 로봇 서버(EMR 로봇 탭의 "로봇 서버" 주소, 지금 `http://PINKY2_IP:8080`)의 `GET /status`를 직접 부른다(2초 제한, GET만). 지금 응답에 있는 `localized`·`nav2_ready`·`state`에 더해 **두 칸을 넣어 달라**:
 
 ```json
 {"localized": true, "nav2_ready": true, "state": "idle", "battery_percent": 82.5, "contamination_percent": 12, "pose": {"...": "..."}}
@@ -77,9 +77,9 @@ claim이 새 배송을 주지 않는 이유 (`X-Claim-Skip-Reason`): `robot_serv
 ## 3. curl로 한 번에 해 보기
 
 ```bash
-E=http://192.168.129.135:8000/api/v1
+E=http://CONTROL_PC_IP:8000/api/v1
 curl -i -X POST $E/robot/deliveries/claim     # 배송 #32(약제실 OMX)를 맡음 → robot_dest PHARMACY (204면 X-Claim-Skip-Reason 확인)
-# (로봇을 PHARMACY로 보냄 — 예: curl -X POST -H 'Content-Type: application/json' -d '{"dest":"PHARMACY","dock":true}' http://192.168.129.122:8080/goto)
+# (로봇을 PHARMACY로 보냄 — 예: curl -X POST -H 'Content-Type: application/json' -d '{"dest":"PHARMACY","dock":true}' http://PINKY3_IP:8080/goto)
 curl -X POST $E/robot/arrived                 # 도착 → EMR 간호사 화면에 "받았습니다" 버튼
 curl $E/robot/me                              # 간호사가 누르면 active_delivery가 null
 ```

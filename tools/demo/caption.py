@@ -14,7 +14,7 @@ import urllib.request
 from datetime import datetime
 
 FMS = os.environ.get("FMS", "http://127.0.0.1:8770")
-OMX = os.environ.get("OMX", "http://10.42.0.147:8000")
+OMX = os.environ.get("OMX", "http://OMX_IP:8000")
 STAGE = {"reserved": "신청", "preparing": "준비", "dispatched": "출발", "arrived": "도착", "received": "받음",
          "failed": "실패", "cancelled": "취소"}
 ORDER = ["reserved", "preparing", "dispatched", "arrived", "received"]

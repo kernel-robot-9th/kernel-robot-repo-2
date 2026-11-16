@@ -38,7 +38,7 @@ class RobotUpdate(BaseModel):
     robot_server_url: str | None = Field(
         default=None, max_length=255, pattern=r"^https?://[^\s/]+(:\d+)?/?$",
         description="로봇 서버(팀원 Pinky API) 주소 — claim 때 EMR이 GET {주소}/status로 배터리·오염도·주행 준비를 묻는다 (2026-10-23)",
-        examples=["http://192.168.129.107:8080"],
+        examples=["http://PINKY2_IP:8080"],
     )
 
 

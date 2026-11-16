@@ -1,8 +1,8 @@
 # 팀원 Pinky API(:8080) 분석과 배송 연동 제안 (2026-10-22)
 
 - 독자: 팀원 전체 — 웹(EMR), 로봇(Pinky·관제). 특히 Pinky API를 만든 팀원에게 9장의 질문을 부탁한다.
-- 대상: 팀원이 만든 Pinky 1대용 REST API `http://192.168.129.107:8080` (Swagger `/docs`, 명세 `/openapi.json`, 제목 "Pinky API" 0.1.0).
-- **주소 변경(2026-10-22 20시대)**: 팀원 API가 `http://192.168.129.122:8080`(로봇 serial `1cdda27b956a1efc`, 다른 Pinky)으로 옮겨졌다. 아래 2·11·12장 실측은 이전 주소 `192.168.129.107`(serial `8ab6b3c36a27f120`)에서 잰 것. API 형식은 같다.
+- 대상: 팀원이 만든 Pinky 1대용 REST API `http://PINKY2_IP:8080` (Swagger `/docs`, 명세 `/openapi.json`, 제목 "Pinky API" 0.1.0).
+- **주소 변경(2026-10-22 20시대)**: 팀원 API가 `http://PINKY3_IP:8080`(로봇 serial `1cdda27b956a1efc`, 다른 Pinky)으로 옮겨졌다. 아래 2·11·12장 실측은 이전 주소 `PINKY2_IP`(serial `8ab6b3c36a27f120`)에서 잰 것. API 형식은 같다.
 - **이름 변경(2026-10-22 같은 날)**: 팀원이 `/stops` → `/dests`, `POST /goto {"stop"}` → `{"dest"}`, `/plan?stop=` → `?dest=`로 바꿨다. 아래 본문의 stop은 dest로 읽는다(실행기는 반영함, 설정 키도 `dests`).
 - 방법: 이 PC에서 **GET만** 불렀다(`/status`, `/stops`, `/jobs`, `/plan`, `/openapi.json`). `POST /goto`·`/cancel`·`/set_pose`는 부르지 않았다 — **로봇은 움직이지 않았다.**
 - 상태: **구현함(2026-10-22)** — 사용자 결정: 지금은 **인증 없이** 진행, **수령 마커는 일단 끔**(간호사·환자 모두 "받았습니다" 버튼).
@@ -18,7 +18,7 @@ EMR 쪽 API·화면은 바꿀 필요가 없다(실행기 설정에 "EMR 장소 �
 
 | 항목 | 값 |
 |---|---|
-| 로봇 | `raspi`, serial `8ab6b3c36a27f120`, IP `192.168.129.107`(병원 LAN) + `192.168.4.1`(로봇 AP) |
+| 로봇 | `raspi`, serial `8ab6b3c36a27f120`, IP `PINKY2_IP`(병원 LAN) + `192.168.4.1`(로봇 AP) |
 | 상태 | `localized: true`, `nav2_ready: true`, `state: idle`, 작업 기록 0건 |
 | 위치 | (61.7, 144.5) cm, heading −179° — "그림 cm, 라이다 중심" |
 | 서버 | Flask 개발 서버(`Werkzeug/3.1.8 Python/3.12.3`) |
@@ -99,7 +99,7 @@ robots:
   pinky_1:
     emr_robot_id: 1
     api_key_file: ~/.config/delivery_executor/pinky_1.key
-    pinky_api: http://192.168.129.107:8080     # ros_domain_id 대신
+    pinky_api: http://PINKY2_IP:8080     # ros_domain_id 대신
     home_stop: POCKET
     stops:                                       # EMR 장소 id → Pinky 목적지 이름 (6장 표를 정한 뒤 채움)
       3: ROOM1_CUL        # 301호 (예시)

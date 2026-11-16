@@ -22,7 +22,7 @@ GET /status: "arms" (each arm's target, try, phase, click stage), "bin" (free / 
 blocked by ...), "tries" (one line per try). Both arms run in one process with one bin lock.
 
 Run (env main_project, in ~/kernel-robot-repo-2-il):
-  python eval_bi_api_yolo_botharm.py --host 0.0.0.0 --port 8000 --emr-api http://10.42.0.1:5173/api/v1 --auto \
+  python eval_bi_api_yolo_botharm.py --host 0.0.0.0 --port 8000 --emr-api http://CONTROL_PC_IP:5173/api/v1 --auto \
       --pinky --obb-rotate --joint-offset 14:-150 --open-scale 0.9 --close-extra 150 --slide 150
   Pick options (--joint-offset, --open-scale, --close-extra, --slide, --obb-rotate, --wrist-deg,
   --no-posture ...) go to both arms; --right-<option> overrides one for the right arm only.

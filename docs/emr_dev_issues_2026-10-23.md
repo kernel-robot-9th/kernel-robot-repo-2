@@ -43,8 +43,8 @@
 | 화면 | 9개 — `/login` · `/deliveries` · `/delivery-log`(관리자) · `/map` · `/supplies` · `/nurses` · `/sites`(장소·맵·로봇·병상 단말) · `/password` · `/bedside`(병상 태블릿) |
 | DB | PostgreSQL 16, 마이그레이션 0001 → **0012** |
 | 테스트 | 백엔드 테스트 함수 119개(파라미터 포함 실행 127개) 통과, 프론트 typecheck·lint·build 통과 |
-| 실행 | Docker(db·api·web) 상시 기동, `http://192.168.129.135:5173`(웹)·`:8000/docs`(API) |
-| 연동 | 팀원 Pinky API `192.168.129.107:8080`(로봇이 PHARMACY 도착 시 EMR `/robot/arrived`를 직접 부름), OMX API `192.168.129.86:8000`(탑재, 사용자가 직접 명령) |
+| 실행 | Docker(db·api·web) 상시 기동, `http://CONTROL_PC_IP:5173`(웹)·`:8000/docs`(API) |
+| 연동 | 팀원 Pinky API `PINKY2_IP:8080`(로봇이 PHARMACY 도착 시 EMR `/robot/arrived`를 직접 부름), OMX API `OMX_IP:8000`(탑재, 사용자가 직접 명령) |
 
 ## 2. 해결한 문제
 

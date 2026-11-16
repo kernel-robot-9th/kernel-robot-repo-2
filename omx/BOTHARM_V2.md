@@ -5,7 +5,7 @@
 
 - 탑 카메라는 YOLO 프로세스(`yolo_worker_v2.py`) 하나만 엽니다(1280x720, 30fps, 노출 90).
 - 읽은 프레임마다
-  - 영상 전송: H.264 RTP/UDP로 `--stream-host:--stream-port`(기본 10.42.0.222:5000)에 보냅니다. send_topview.sh와 같은 설정이라 받는 쪽은 그대로 쓰면 됩니다.
+  - 영상 전송: H.264 RTP/UDP로 `--stream-host:--stream-port`(기본은 환경 변수 `TOPVIEW_HOST`, 없으면 영상 안 보냄)에 보냅니다. send_topview.sh와 같은 설정이라 받는 쪽은 그대로 쓰면 됩니다.
   - YOLO: 가운데 4:3 부분(960x720)을 640x480으로 줄여서 씁니다. 카메라의 640x480 모드와 같은 화면이라 좌표 변환(×2.25+240)은 그대로입니다.
 - 영상 전송이 끊기거나 느려도 YOLO는 영향을 안 받습니다. 전송은 2초 뒤 다시 시작합니다.
 - 서버를 끄면 영상 전송도 같이 꺼집니다.
@@ -17,12 +17,12 @@
 pkill -f send_topview.sh; pkill -f 'udpsink host='
 fuser -v /dev/cam_top        # 아무것도 안 나와야 함
 
-# 2) 서버 (옵션은 예전과 같음, 영상은 기본으로 10.42.0.222:5000)
-python eval_bi_api_yolo_botharm_v2.py --host 0.0.0.0 --port 8000 --emr-api http://10.42.0.1:5173/api/v1 --auto --pinky \
+# 2) 서버 (옵션은 예전과 같음, 영상은 TOPVIEW_HOST:5000, 예: TOPVIEW_HOST=TOPVIEW_PC_IP)
+python eval_bi_api_yolo_botharm_v2.py --host 0.0.0.0 --port 8000 --emr-api http://CONTROL_PC_IP:5173/api/v1 --auto --pinky \
     --joint-offset 14:-150 --open-scale 0.9 --close-extra 150 --slide 150 --obb-rotate \
     --stage-seconds 2.5 --slow-seconds 2.5 --gripper-seconds 0.6 --return-home-time 2.5
 ```
-- 다른 주소로 보내기: `--stream-host 10.42.0.189 --stream-port 5000`
+- 다른 주소로 보내기: `--stream-host OTHER_RECEIVER_IP --stream-port 5000`
 - 영상 없이 YOLO만: `--no-stream`
 - 카메라 해상도 바꾸기: `--capture-size 1920x1080` (YOLO 화면 계산은 자동으로 맞춤)
 
@@ -37,7 +37,7 @@ python eval_bi_api_yolo_botharm_v2.py --host 0.0.0.0 --port 8000 --emr-api http:
 ### 기본 실행 (영상 전송 없음/기본 설정)
 
 ```bash
-python eval_bi_api_yolo_botharm_v2.py --host 0.0.0.0 --port 8000 --emr-api http://10.42.0.1:5173/api/v1 --auto --joint-offset 14:-150 --pinky --open-scale 0.9 --close-extra 150 --slide 150 --obb-rotate --stage-seconds 2.5 --slow-seconds 2.5 --gripper-seconds 0.6 --return-home-time 2.5 --right-no-posture
+python eval_bi_api_yolo_botharm_v2.py --host 0.0.0.0 --port 8000 --emr-api http://CONTROL_PC_IP:5173/api/v1 --auto --joint-offset 14:-150 --pinky --open-scale 0.9 --close-extra 150 --slide 150 --obb-rotate --stage-seconds 2.5 --slow-seconds 2.5 --gripper-seconds 0.6 --return-home-time 2.5 --right-no-posture
 ```
 
 ### AWS 버전 실행 (탑뷰 영상을 AWS로 중계)
@@ -47,13 +47,13 @@ python eval_bi_api_yolo_botharm_v2.py --host 0.0.0.0 --port 8000 --emr-api http:
 터미널 1 (OMX 서버):
 
 ```bash
-python eval_bi_api_yolo_botharm_v2.py --host 0.0.0.0 --port 8000 --emr-api http://10.42.0.1:5173/api/v1 --auto --joint-offset 14:-150 --pinky --open-scale 0.9 --close-extra 150 --slide 150 --obb-rotate --stage-seconds 2.5 --slow-seconds 2.5 --gripper-seconds 0.6 --return-home-time 2.5 --right-no-posture --stream-host 127.0.0.1 --stream-port 5000
+python eval_bi_api_yolo_botharm_v2.py --host 0.0.0.0 --port 8000 --emr-api http://CONTROL_PC_IP:5173/api/v1 --auto --joint-offset 14:-150 --pinky --open-scale 0.9 --close-extra 150 --slide 150 --obb-rotate --stage-seconds 2.5 --slow-seconds 2.5 --gripper-seconds 0.6 --return-home-time 2.5 --right-no-posture --stream-host 127.0.0.1 --stream-port 5000
 ```
 
 터미널 2 (AWS 중계):
 
 ```bash
-gst-launch-1.0 -v udpsrc port=5000 caps="application/x-rtp,media=video,encoding-name=H264,payload=96,clock-rate=90000" ! rtph264depay ! h264parse ! mpegtsmux ! srtsink uri="srt://3.35.89.35:8890?streamid=publish:topview&latency=200"
+gst-launch-1.0 -v udpsrc port=5000 caps="application/x-rtp,media=video,encoding-name=H264,payload=96,clock-rate=90000" ! rtph264depay ! h264parse ! mpegtsmux ! srtsink uri="srt://AWS_RELAY_IP:8890?streamid=publish:topview&latency=200"
 ```
 
 주의:

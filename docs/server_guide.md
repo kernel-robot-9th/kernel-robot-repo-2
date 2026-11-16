@@ -43,7 +43,7 @@ docker compose up -d --build      # 이후에는 docker compose up -d
 
 - 웹 http://localhost:5173 — 다른 PC에서는 `http://<이 PC IP>:5173` (IP는 `hostname -I`)
 - API 문서 http://localhost:8000/docs
-- 계정: `N001`(관리자) · `N002`(간호사) / 비밀번호 `nurse1234`
+- 계정: `N001`(관리자) · `N002`(간호사) / 비밀번호 `nurse1234` — ⚠️ 개발·시연용 시드 비밀번호. 운영 전에 반드시 바꾼다
 - 중지 `docker compose down`, DB까지 초기화 `docker compose down -v`
 
 ### 2) OMX-F 로봇팔 시뮬레이션 (필요할 때만)

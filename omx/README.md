@@ -17,7 +17,7 @@ fuser -v /dev/cam_top        # 아무것도 안 나와야 함
 ### 기본 실행
 
 ```bash
-python eval_bi_api_yolo_botharm_v2.py --host 0.0.0.0 --port 8000 --emr-api http://10.42.0.1:5173/api/v1 --auto --joint-offset 14:-150 --pinky --open-scale 0.9 --close-extra 150 --slide 150 --obb-rotate --stage-seconds 2.5 --slow-seconds 2.5 --gripper-seconds 0.6 --return-home-time 2.5 --right-no-posture
+python eval_bi_api_yolo_botharm_v2.py --host 0.0.0.0 --port 8000 --emr-api http://CONTROL_PC_IP:5173/api/v1 --auto --joint-offset 14:-150 --pinky --open-scale 0.9 --close-extra 150 --slide 150 --obb-rotate --stage-seconds 2.5 --slow-seconds 2.5 --gripper-seconds 0.6 --return-home-time 2.5 --right-no-posture
 ```
 
 ### AWS 버전 실행 (탑뷰 영상을 AWS로 중계)
@@ -27,13 +27,13 @@ python eval_bi_api_yolo_botharm_v2.py --host 0.0.0.0 --port 8000 --emr-api http:
 터미널 1 (OMX 서버):
 
 ```bash
-python eval_bi_api_yolo_botharm_v2.py --host 0.0.0.0 --port 8000 --emr-api http://10.42.0.1:5173/api/v1 --auto --joint-offset 14:-150 --pinky --open-scale 0.9 --close-extra 150 --slide 150 --obb-rotate --stage-seconds 2.5 --slow-seconds 2.5 --gripper-seconds 0.6 --return-home-time 2.5 --right-no-posture --stream-host 127.0.0.1 --stream-port 5000
+python eval_bi_api_yolo_botharm_v2.py --host 0.0.0.0 --port 8000 --emr-api http://CONTROL_PC_IP:5173/api/v1 --auto --joint-offset 14:-150 --pinky --open-scale 0.9 --close-extra 150 --slide 150 --obb-rotate --stage-seconds 2.5 --slow-seconds 2.5 --gripper-seconds 0.6 --return-home-time 2.5 --right-no-posture --stream-host 127.0.0.1 --stream-port 5000
 ```
 
 터미널 2 (AWS 중계):
 
 ```bash
-gst-launch-1.0 -v udpsrc port=5000 caps="application/x-rtp,media=video,encoding-name=H264,payload=96,clock-rate=90000" ! rtph264depay ! h264parse ! mpegtsmux ! srtsink uri="srt://3.35.89.35:8890?streamid=publish:topview&latency=200"
+gst-launch-1.0 -v udpsrc port=5000 caps="application/x-rtp,media=video,encoding-name=H264,payload=96,clock-rate=90000" ! rtph264depay ! h264parse ! mpegtsmux ! srtsink uri="srt://AWS_RELAY_IP:8890?streamid=publish:topview&latency=200"
 ```
 
 - 중계는 카메라(`v4l2src`)를 직접 열면 안 됩니다. 서버가 카메라를 쓰고 있어서 `Device busy`가 납니다.

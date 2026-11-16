@@ -8,7 +8,7 @@
 #   - sync_emr()         관리자 로그인 → 맵 "Pinky 아레나" 등록/교체 → 장소 등록/수정(robot_dest 기준). 로봇 복귀 장소 설정은 2026-10-27 없앰(팀원 FMS가 정함)
 # 좌표: Pinky 그림 cm(아레나 왼쪽 아래 원점, heading deg) → EMR 미터·라디안 그대로 환산(x/100, y/100, deg→rad). ROS map 프레임이 아니다
 # 표준 라이브러리만 — 호스트에서 바로 돌린다:
-#   EMR_PASSWORD=... python3 backend/scripts/import_pinky_dests.py --pinky http://192.168.129.122:8080
+#   EMR_PASSWORD=... python3 backend/scripts/import_pinky_dests.py --pinky http://PINKY3_IP:8080
 # 계약: docs/api_contract_delivery_2026-10-20.md 4장 · 분석: docs/pinky_fms_api_review_2026-10-22.md
 # =============================================================================
 from __future__ import annotations
@@ -155,7 +155,7 @@ def sync_emr(emr: str, token: str, dests: dict[str, Any], pgm: bytes, origin: di
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Pinky /dests → EMR 맵·장소 (다시 돌리면 갱신)")
-    parser.add_argument("--pinky", default="http://192.168.129.122:8080")
+    parser.add_argument("--pinky", default="http://PINKY3_IP:8080")
     parser.add_argument("--emr", default="http://localhost:8000/api/v1")
     parser.add_argument("--employee-no", default="N001", help="관리자 사번")
     arguments = parser.parse_args()

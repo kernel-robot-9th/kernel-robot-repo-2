@@ -1,7 +1,7 @@
 """v2 = eval_bi_api_yolo_botharm.py + ONE camera reader for YOLO and the top-view video stream.
 
 The YOLO process (yolo_worker_v2.py) is the only program that opens the top camera. Each frame
-  - is sent as H.264 RTP/UDP to --stream-host:--stream-port (default 10.42.0.222:5000, what
+  - is sent as H.264 RTP/UDP to --stream-host:--stream-port (default TOPVIEW_PC_IP:5000, what
     send_topview.sh did; --no-stream turns it off), and
   - goes to YOLO as the centre 4:3 part scaled to 640x480 (same view as before, --to-calib unchanged).
 So send_topview.sh must NOT run (it would hold the camera). The server checks this at start.
@@ -40,7 +40,7 @@ GET /status: "arms" (each arm's target, try, phase, click stage), "bin" (free / 
 blocked by ...), "tries" (one line per try). Both arms run in one process with one bin lock.
 
 Run (env main_project, in ~/kernel-robot-repo-2-il):
-  python eval_bi_api_yolo_botharm.py --host 0.0.0.0 --port 8000 --emr-api http://10.42.0.1:5173/api/v1 --auto \
+  python eval_bi_api_yolo_botharm.py --host 0.0.0.0 --port 8000 --emr-api http://CONTROL_PC_IP:5173/api/v1 --auto \
       --pinky --obb-rotate --joint-offset 14:-150 --open-scale 0.9 --close-extra 150 --slide 150
   Pick options (--joint-offset, --open-scale, --close-extra, --slide, --obb-rotate, --wrist-deg,
   --no-posture ...) go to both arms; --right-<option> overrides one for the right arm only.
@@ -505,9 +505,9 @@ def parse_args(argv=None):
     p.add_argument("--frames", type=int, default=5)
     p.add_argument("--save-dir", default=str(yb.YOLO_DIR / "outputs/api"))
     p.add_argument("--cam-top", default="/dev/cam_top")
-    p.add_argument("--stream-host", default="10.42.0.222",
+    p.add_argument("--stream-host", default=os.environ.get("TOPVIEW_HOST"),
                    help="send the top camera to this IP (H.264 RTP/UDP :--stream-port), from the same "
-                        "camera reader as YOLO (default 10.42.0.222, like send_topview.sh)")
+                        "camera reader as YOLO (default: env TOPVIEW_HOST = topview PC IP; unset = no stream)")
     p.add_argument("--no-stream", action="store_true", help="YOLO only, no video stream")
     p.add_argument("--stream-port", type=int, default=5000)
     p.add_argument("--capture-size", default=None, help="camera mode when streaming (default 1280x720)")

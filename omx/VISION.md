@@ -32,7 +32,7 @@ POST /command {"command": "pick and place blue gauze", "request_id": "..."}
 conda activate main_project
 cd ~/kernel-robot-repo-2-il
 # server (results to EMR; add --step instead of --auto to confirm each step with SPACE)
-python eval_bi_api_yolo.py --host 0.0.0.0 --port 8000 --emr-api http://192.168.129.135:8000/api/v1 --auto --pinky
+python eval_bi_api_yolo.py --host 0.0.0.0 --port 8000 --emr-api http://CONTROL_PC_IP:8000/api/v1 --auto --pinky
 # test sender (plays the command sender + Pinky)
 python api_sender_yolo.py flow --no-callback --pinky --command "pick and place blue gauze"
 ```

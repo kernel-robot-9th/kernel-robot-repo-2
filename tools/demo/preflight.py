@@ -2,7 +2,7 @@
 
 EMR(:8000)·EMR 설정·팀원 FMS(:8770)·팀원 OMX가 데모(시나리오 ① 여러 병동 신청 → 묶음 배송)를 찍을 수 있는 상태인지 본다.
 python3 tools/demo/preflight.py [--wards 12:3:1,20:5:1]   → 문제가 없으면 종료 코드 0
-env FMS (기본 http://127.0.0.1:8770), OMX (기본 http://10.42.0.147:8000), EMR (기본 http://127.0.0.1:8000)
+env FMS (기본 http://127.0.0.1:8770), OMX (기본 http://OMX_IP:8000), EMR (기본 http://127.0.0.1:8000)
 """
 import argparse
 import json
@@ -13,7 +13,7 @@ import urllib.request
 
 EMR = os.environ.get("EMR", "http://127.0.0.1:8000")
 FMS = os.environ.get("FMS", "http://127.0.0.1:8770")
-OMX = os.environ.get("OMX", "http://10.42.0.147:8000")
+OMX = os.environ.get("OMX", "http://OMX_IP:8000")
 ACTIVE = ("reserved", "preparing", "dispatched", "arrived")
 EXPECTED_ENV = {"FMS_OMX_ENABLED": "1", "OMX_COMMAND_FORMAT": "fixed", "FMS_PHARMACY_SIGNAL": "fms"}
 

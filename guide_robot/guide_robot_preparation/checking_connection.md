@@ -6,8 +6,8 @@
 
 | 장치 | 사용자 | IP (Wi-Fi) | 비고 |
 |---|---|---|---|
-| 노트북 (서버) | `zubayda` | `192.168.129.121` | |
-| Pinky (Raspberry Pi) | `pinky@raspi` | `192.168.129.116` | 네트워크가 2개 더 있음: `192.168.180.53`과 `192.168.4.1` (Pinky 자체 핫스팟) |
+| 노트북 (서버) | `zubayda` | `GUIDE_LAPTOP_IP` | |
+| Pinky (Raspberry Pi) | `pinky@raspi` | `GUIDE_PINKY_IP` | 네트워크가 2개 더 있음: `PINKY_OTHER_NET_IP`과 `192.168.4.1` (Pinky 자체 핫스팟) |
 
 * ROS 2: 양쪽 모두 **Jazzy**. RMW: 기본값 (Fast DDS), `RMW_IMPLEMENTATION`은 설정하지 않음.
 * 노트북, Pinky, 휴대폰은 같은 Wi-Fi 네트워크에 있음. 네트워크 이름과 비밀번호는 이 파일에 적지 않았습니다: 팀에 물어보세요.
@@ -52,7 +52,7 @@ ROS_DISTRO=jazzy
 노트북에서:
 
 ```bash
-ping 192.168.129.116
+ping GUIDE_PINKY_IP
 ```
 
 `64 bytes from ...`가 나오면 네트워크는 정상입니다. 응답이 없으면 문제는 ROS가 아니라 Wi-Fi입니다: 공유기가 기기끼리 분리했을 수 있습니다 (client isolation).
@@ -73,13 +73,13 @@ ros2 run demo_nodes_cpp listener    # 노트북에서
 노트북의 `~/.bashrc`에:
 
 ```bash
-export ROS_STATIC_PEERS=192.168.129.116    # Pinky IP
+export ROS_STATIC_PEERS=GUIDE_PINKY_IP    # Pinky IP
 ```
 
 Pinky의 `~/.bashrc`에:
 
 ```bash
-export ROS_STATIC_PEERS=192.168.129.121    # 노트북 IP
+export ROS_STATIC_PEERS=GUIDE_LAPTOP_IP    # 노트북 IP
 ```
 
 양쪽 모두:
@@ -105,7 +105,7 @@ ros2 daemon stop
 ```bash
 export ROS_DOMAIN_ID=90
 export ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET
-export ROS_STATIC_PEERS=192.168.129.116
+export ROS_STATIC_PEERS=GUIDE_PINKY_IP
 ```
 
 Pinky:
@@ -113,7 +113,7 @@ Pinky:
 ```bash
 export ROS_DOMAIN_ID=90
 export ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET
-export ROS_STATIC_PEERS=192.168.129.121
+export ROS_STATIC_PEERS=GUIDE_LAPTOP_IP
 ```
 
 Pinky의 드라이버가 systemd 서비스로 자동 실행된다면 `.bashrc`는 영향을 주지 않습니다: 서비스 파일에도 같은 변수를 넣고 Pinky를 재부팅하세요.
@@ -140,7 +140,7 @@ Pinky의 드라이버가 systemd 서비스로 자동 실행된다면 `.bashrc`�
     <transport_descriptor>
       <transport_id>wifi_only</transport_id>
       <type>UDPv4</type>
-      <interfaceWhiteList><address>192.168.129.116</address></interfaceWhiteList>
+      <interfaceWhiteList><address>GUIDE_PINKY_IP</address></interfaceWhiteList>
     </transport_descriptor>
   </transport_descriptors>
   <participant profile_name="default" is_default_profile="true">

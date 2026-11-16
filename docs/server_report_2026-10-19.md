@@ -25,7 +25,7 @@
 | CPU / RAM / swap | 24코어 / 15GB(사용 9GB) / 4GB(사용 2.9GB) — **메모리 압박** |
 | GPU | NVIDIA RTX 5080 Laptop 16GB (드라이버 580) |
 | 디스크 | 468GB 중 257GB 사용, 187GB 여유 |
-| LAN IP (바뀔 수 있음) | 192.168.129.135 |
+| LAN IP (바뀔 수 있음) | CONTROL_PC_IP |
 | ROS 2 | Jazzy (`/opt/ros/jazzy`) |
 | Docker | 29.9.0, Compose v5.6.0 |
 | Ollama | 0.40.1, systemd 서비스, `127.0.0.1:11434`, 모델 `gemma4:e2b`(4.6GB) |
@@ -182,7 +182,7 @@ vla_planner(OMX-F) ──POST /api/chat──▶ Ollama :11434 (같은 PC)   ◀
 **C. EMR 연동 — 계약 문서 확정 후**
 1. Pinky에서 도는 EMR 클라이언트 노드: `X-Robot-Api-Key` 보관(설정 파일 권한), `claim` 폴링 → Nav2 `navigate_to_pose`(장소 좌표 = EMR `map_x_m, map_y_m, map_yaw_rad`) → 도착 보고 → 간호사 마커 인식 → `receipt` 호출 → 복귀 장소 → 상태 보고 `POST /robot/status`(주기·배터리).
 2. 간호사 마커 인식(Pinky 카메라): `DICT_4X4_50`, 인쇄 크기 50mm 가정을 카메라 거리·자세로 검증해 EMR 쪽에 회신(`MarkerPrintDialog` `[검토 필요]`).
-3. 모니터와 EMR의 관계 결정: 모니터가 EMR에 상태를 올리는 서버↔서버 연동인지, 로봇이 직접 올리는지. 네트워크: 로봇이 EMR에 닿는 주소(`http://192.168.129.135:8000` → 운영은 https).
+3. 모니터와 EMR의 관계 결정: 모니터가 EMR에 상태를 올리는 서버↔서버 연동인지, 로봇이 직접 올리는지. 네트워크: 로봇이 EMR에 닿는 주소(`http://CONTROL_PC_IP:8000` → 운영은 https).
 4. EMR 맵 업로드용 맵(slam_toolbox yaml+pgm)을 Pinky에서 뽑아 EMR에 올리고, 장소 좌표가 Nav2 목표와 맞는지 1회 검증.
 
 ### 6.3 OMX(로봇팔 · VLA · LLM) 할 일 — `robot/src/vla_planner_robot`, `ollama_ws/`

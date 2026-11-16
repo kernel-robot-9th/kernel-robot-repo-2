@@ -34,7 +34,7 @@ class FmsRejected(Exception):
 
 def create_order(fms_base_url: str, request_id: str, room: str, item: str, timeout_seconds: float) -> dict[str, Any]:
     """FMS에 주문 1건(물품 1개)을 넣는다. 같은 request_id를 다시 보내면 FMS가 처음 주문을 200으로 돌려준다(다시 보내도 안전).
-    [입력] fms_base_url: 예 "http://192.168.129.50:8770" / request_id: EMR이 만든 고유 값 / room: FMS 방 번호(101호…) / item: 비품 이름
+    [입력] fms_base_url: 예 "http://FMS_IP:8770" / request_id: EMR이 만든 고유 값 / room: FMS 방 번호(101호…) / item: 비품 이름
     / timeout_seconds
     [출력] dict: FMS Order {order_id, request_id, room, item, status, …} (4xx면 FmsRejected, 그 밖은 FmsUnavailable)
     """

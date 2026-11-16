@@ -109,7 +109,7 @@ docker compose logs -f fms
   사람이 확인한 뒤 `POST /api/control {"clear_fault": "R1"}` → 엣지 중간이면 `"@here"` 로 마저 가고 이어서.
 - 가상 로봇만: `FMS_ARGS="--no-auto-omx" docker compose up -d` (가상 OMX 까지 켜려면 `FMS_ARGS=" "`).
 - 도커 없이: `python3 sim_server.py --host 0.0.0.0 --real-table --no-auto-omx --control-url <URL>`
-  (한 대만: `--real pinky_6364=http://192.168.129.68:8080 --robots 3` → 나머지는 가상).
+  (한 대만: `--real pinky_6364=http://PINKY1_IP:8080 --robots 3` → 나머지는 가상).
 
 ## 3. 화면 (http://<FMS IP>:8770)
 

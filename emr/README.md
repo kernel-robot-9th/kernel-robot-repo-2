@@ -17,6 +17,7 @@ cp .env.example .env            # JWT_SECRET 아무 긴 문자열로
 docker compose up --build
 ```
 - web  http://localhost:5173  (N001 관리자 · N002 일반 간호사 / 비밀번호 nurse1234)
+  - ⚠️ `nurse1234`는 **개발·시연용 시드 비밀번호**입니다. 운영이나 외부에 여는 환경에서는 첫 로그인 뒤 바로 바꾸고, 시드를 끄세요(`SEED=0`)
 - api  http://localhost:8000/docs
 - 첫 기동 후 `.env`의 `SEED=0`으로 바꿔 둔다 (시드 중복 방지)
 

@@ -8,11 +8,11 @@
 |---|---|
 | `ROS_DOMAIN_ID` | 9090이었음 (동작 안 함, 최대 232) → 양쪽 **90** |
 | `ROS_AUTOMATIC_DISCOVERY_RANGE` | 양쪽 `SUBNET` |
-| 노트북 → Pinky ping (192.168.129.116) | 성공 |
+| 노트북 → Pinky ping (GUIDE_PINKY_IP) | 성공 |
 | talker (Pinky) → listener (노트북) | 처음엔 조용했음: Pinky에 네트워크가 3개 있음 |
-| `ROS_STATIC_PEERS` (노트북 → 192.168.129.116, Pinky → 192.168.129.121) + `ros2 daemon stop` | **성공**, "I heard: Hello World" |
+| `ROS_STATIC_PEERS` (노트북 → GUIDE_PINKY_IP, Pinky → GUIDE_LAPTOP_IP) + `ros2 daemon stop` | **성공**, "I heard: Hello World" |
 
-IP: 노트북 `192.168.129.121`, Pinky `192.168.129.116`. Pinky의 다른 네트워크: `192.168.180.53`과 자체 핫스팟 `192.168.4.1`. IP가 바뀌면 `ROS_STATIC_PEERS`도 바꿔야 합니다.
+IP: 노트북 `GUIDE_LAPTOP_IP`, Pinky `GUIDE_PINKY_IP`. Pinky의 다른 네트워크: `PINKY_OTHER_NET_IP`과 자체 핫스팟 `192.168.4.1`. IP가 바뀌면 `ROS_STATIC_PEERS`도 바꿔야 합니다.
 
 ## 2. Pinky의 프로그램 찾기 ✅
 

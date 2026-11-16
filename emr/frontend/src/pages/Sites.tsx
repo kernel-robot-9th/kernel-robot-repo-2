@@ -249,7 +249,7 @@ function RobotsTab() {
                   {/* 팀원 Pinky API 주소 — claim 때 EMR이 GET {주소}/status로 배터리·오염도·주행 준비를 묻는다. 빈 칸 = 배송 안 맡음 (2026-10-23) */}
                   {isAdmin && r.robot_type === 'amr' ? (
                     <Input
-                      key={r.robot_server_url ?? ''} defaultValue={r.robot_server_url ?? ''} placeholder="http://192.168.129.107:8080"
+                      key={r.robot_server_url ?? ''} defaultValue={r.robot_server_url ?? ''} placeholder="http://PINKY2_IP:8080"
                       className="w-56" aria-label={`${r.name} 로봇 서버 주소`}
                       onBlur={e => {
                         const value = e.target.value.trim()

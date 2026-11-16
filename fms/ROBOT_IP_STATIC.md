@@ -11,15 +11,15 @@ FMS 의 `fms/robots.yaml` 이 이 IP 를 쓰므로, IP 가 바뀌면 FMS 가 로
 
 | 로봇 | MAC (wlan0) | 고정할 IP | 시리얼 (`:8080/status` 의 `robot.serial`) |
 | --- | --- | --- | --- |
-| pinky_6364 (FMS 1번) | 98:fe:54:07:63:65 | 10.42.0.171 | 0d4763d873e291b7 |
-| pinky_ee3a (FMS 2번) | 88:a2:9e:46:ee:3b | 10.42.0.79 | 8ab6b3c36a27f120 |
-| pinky_62f4 (FMS 3번) | 98:fe:54:07:62:f5 | 10.42.0.131 | 1cdda27b956a1efc |
+| pinky_6364 (FMS 1번) | 98:fe:54:07:63:65 | PINKY1_IP | 0d4763d873e291b7 |
+| pinky_ee3a (FMS 2번) | 88:a2:9e:46:ee:3b | PINKY2_IP | 8ab6b3c36a27f120 |
+| pinky_62f4 (FMS 3번) | 98:fe:54:07:62:f5 | PINKY3_IP | 1cdda27b956a1efc |
 
 IP 는 지금 받고 있는 값 그대로라 `robots.yaml` 은 고칠 필요 없다. (2026-10-30 확인)
 
 ## 망 구조 (2026-10-30 확인)
 
-- 관제 PC 가 **10.42.0.1**, 이 망의 DHCP·DNS·게이트웨이 (임대 3600초). Linux NetworkManager 의 "다른 컴퓨터와 공유"
+- 관제 PC 가 **CONTROL_PC_IP**, 이 망의 DHCP·DNS·게이트웨이 (임대 3600초). Linux NetworkManager 의 "다른 컴퓨터와 공유"
   (`ipv4.method shared`) → NetworkManager 가 띄운 **dnsmasq** 가 IP 를 나눠 준다.
 - iptime 은 관제 PC 와 LAN 으로 연결된 **무선 AP** 역할 (team2_5G / team2_2_4G). iptime 의 DHCP 는 쓰지 않는다.
 - 그래서 고정 IP 는 iptime 관리 화면이 아니라 **관제 PC 의 dnsmasq 설정**에 넣는다.
@@ -28,12 +28,12 @@ IP 는 지금 받고 있는 값 그대로라 `robots.yaml` 은 고칠 필요 없
 
 ```bash
 nmcli -f NAME,TYPE,DEVICE con show --active
-ip -4 addr | grep 10.42.0.1
+ip -4 addr | grep CONTROL_PC_IP
 pgrep -a dnsmasq | grep -i networkmanager
 ```
 
 **확인**
-- `10.42.0.1/24` 가 붙은 장치(보통 유선 `en…`/`eth…`)가 있다.
+- `CONTROL_PC_IP/24` 가 붙은 장치(보통 유선 `en…`/`eth…`)가 있다.
 - 그 장치의 연결 이름(NAME)으로 `nmcli -g ipv4.method con show "<NAME>"` → `shared` 가 나온다.
 - NetworkManager 가 띄운 dnsmasq 프로세스가 있다 (`--conf-dir=/etc/NetworkManager/dnsmasq-shared.d` 가 들어 있음).
 
@@ -45,7 +45,7 @@ pgrep -a dnsmasq | grep -i networkmanager
 sudo cat /var/lib/NetworkManager/dnsmasq-*.leases
 ```
 
-**확인**: 10.42.0.171 / .79 / .131 이 있다면 각각 위 표의 MAC 이어야 한다. 다른 MAC 이 그 IP 를 갖고 있으면 **멈추고 보고**.
+**확인**: PINKY1_IP / .79 / .131 이 있다면 각각 위 표의 MAC 이어야 한다. 다른 MAC 이 그 IP 를 갖고 있으면 **멈추고 보고**.
 
 ## 3. 고정 할당 파일 넣기
 
@@ -53,9 +53,9 @@ sudo cat /var/lib/NetworkManager/dnsmasq-*.leases
 sudo mkdir -p /etc/NetworkManager/dnsmasq-shared.d
 sudo tee /etc/NetworkManager/dnsmasq-shared.d/pinky-robots.conf >/dev/null <<'EOF'
 # 핑키 로봇 고정 IP (2026-10-30). FMS fms/robots.yaml 과 같아야 한다.
-dhcp-host=98:fe:54:07:63:65,10.42.0.171,pinky-6364
-dhcp-host=88:a2:9e:46:ee:3b,10.42.0.79,pinky-ee3a
-dhcp-host=98:fe:54:07:62:f5,10.42.0.131,pinky-62f4
+dhcp-host=98:fe:54:07:63:65,PINKY1_IP,pinky-6364
+dhcp-host=88:a2:9e:46:ee:3b,PINKY2_IP,pinky-ee3a
+dhcp-host=98:fe:54:07:62:f5,PINKY3_IP,pinky-62f4
 EOF
 cat /etc/NetworkManager/dnsmasq-shared.d/pinky-robots.conf
 ```
@@ -81,9 +81,9 @@ for ip in 171 79 131; do printf "10.42.0.$ip "; curl -s -m 3 http://10.42.0.$ip:
 
 **기대**
 ```
-10.42.0.171 0d4763d873e291b7
-10.42.0.79 8ab6b3c36a27f120
-10.42.0.131 1cdda27b956a1efc
+PINKY1_IP 0d4763d873e291b7
+PINKY2_IP 8ab6b3c36a27f120
+PINKY3_IP 1cdda27b956a1efc
 ```
 
 응답 없는 로봇이 있으면 망 전체에서 찾아본다 (켜져 있는지, 다른 IP 를 받았는지):

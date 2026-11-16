@@ -11,26 +11,26 @@
 **두 방식 모두 메시지 모양(봉투·종류·필드)이 같다.** WebSocket은 서버 하나로, MQTT는 토픽으로 보낼 곳을 정한다는 점만 다르다.
 인증·암호화가 없으니 **시험망에서만** 쓴다.
 
-## 지금 이 서버(192.168.129.135)에 떠 있는 것
+## 지금 이 서버(CONTROL_PC_IP)에 떠 있는 것
 
 | 무엇 | 주소 |
 |---|---|
-| 브라우저 시험 페이지 (WebSocket GUI) | **http://192.168.129.135:8765/** |
-| WebSocket | `ws://192.168.129.135:8765/?role=<gui\|robot>&name=<이름>` |
-| MQTT 브로커 | `192.168.129.135:1883` (TCP) · `ws://192.168.129.135:9001` (브라우저용 MQTT over WebSocket) |
+| 브라우저 시험 페이지 (WebSocket GUI) | **http://CONTROL_PC_IP:8765/** |
+| WebSocket | `ws://CONTROL_PC_IP:8765/?role=<gui\|robot>&name=<이름>` |
+| MQTT 브로커 | `CONTROL_PC_IP:1883` (TCP) · `ws://CONTROL_PC_IP:9001` (브라우저용 MQTT over WebSocket) |
 | 로봇 흉내 | WebSocket `pinky_sim`, MQTT `pinky_mqtt` — 작업을 받으면 단계 보고를 자동으로 보냄 |
 | 규격 감시기 | MQTT `hospital/#` 전체를 검사해 OK/ERR 기록 (`logs/mqtt_<날짜>.jsonl`) |
 
 ## 1. 빠르게 해 보기
 
 ### 웹 팀 — 브라우저만 있으면 된다
-1. http://192.168.129.135:8765/ 를 연다.
+1. http://CONTROL_PC_IP:8765/ 를 연다.
 2. 역할 `gui`, 이름(예: `web-kim`)으로 **접속**한다. 접속 목록에 `pinky_sim · robot`, `pinky_mqtt · robot (mqtt)`가 보인다.
 3. 메시지 종류 `task_assign`, 받는 쪽 `pinky_mqtt`(MQTT 로봇) 또는 `pinky_sim`(WebSocket 로봇)으로 **보내기**를 누른다.
 4. 오른쪽에 `ack` → `task_progress`(accepted) → `robot_status` 3번 → `arrived` → `done`이 차례로 쌓인다.
 
 ### 로봇 팀 — MQTT로 붙기
-브로커 `192.168.129.135:1883`에 붙어서 아래 **토픽 규칙**대로 주고받는다. 가장 작은 파이썬 예(`pip install paho-mqtt==2.1.0`):
+브로커 `CONTROL_PC_IP:1883`에 붙어서 아래 **토픽 규칙**대로 주고받는다. 가장 작은 파이썬 예(`pip install paho-mqtt==2.1.0`):
 
 ```python
 import json, time, uuid, datetime
@@ -53,7 +53,7 @@ def on_message(c, u, msg):
         c.publish(f"hospital/robot/{NAME}/progress",
                   envelope("task_progress", {"task_id": cmd["payload"]["task_id"], "stage": "accepted"}, cmd["from"]), qos=1)
 client.on_message = on_message
-client.connect("192.168.129.135", 1883)
+client.connect("CONTROL_PC_IP", 1883)
 client.loop_start()
 while True:                                                                         # 1초마다 상태·위치 보고
     client.publish(f"hospital/robot/{NAME}/status", envelope("robot_status",

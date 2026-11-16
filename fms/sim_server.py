@@ -341,10 +341,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--port', type=int, default=8770)
     ap.add_argument('--host', default='127.0.0.1', help='다른 PC 에서 붙으려면 0.0.0.0')
-    ap.add_argument('--control-url', default=None, help='관제 PC 주소 (예: http://192.168.129.135:8000). 로봇 상태·이벤트를 여기로 POST')
+    ap.add_argument('--control-url', default=None, help='관제 PC 주소 (예: http://CONTROL_PC_IP:8000). 로봇 상태·이벤트를 여기로 POST')
     ap.add_argument('--no-auto-omx', action='store_true', help='가상 관제 PC 끔: ready·loaded 를 진짜 관제 PC 가 보냄')
     ap.add_argument('--real', action='append', default=[], metavar='이름=URL',
-                    help='실제 로봇 (robots.yaml 이름). 예: --real pinky_6364=http://192.168.129.68:8080 — 나머지 로봇은 가상')
+                    help='실제 로봇 (robots.yaml 이름). 예: --real pinky_6364=http://PINKY1_IP:8080 — 나머지 로봇은 가상')
     ap.add_argument('--real-table', action='store_true', help='robots.yaml 에 url 이 있는 로봇은 모두 실제 로봇으로')
     ap.add_argument('--robots', type=int, default=3, help='로봇 수 (실제 + 가상)')
     ap.add_argument('--profile', choices=list(PROFILES), default=None, help='발표 영상 비교용: 기능을 꺼서 예전 단계 흉내 (fms_core.PROFILES)')

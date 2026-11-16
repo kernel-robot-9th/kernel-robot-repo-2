@@ -132,7 +132,7 @@ reserved ──(로봇 claim)──▶ dispatched ──(로봇 도착 보고)�
 | 422 | 번호가 0–249 밖 |
 
 ### 3.6 EMR → 로봇 서버 `GET {robot_server_url}/status` — claim 때 상태 묻기 (2026-10-23)
-- 방향이 반대다: **EMR이 부른다.** 로봇 서버 = 팀원 Pinky API(로봇마다 `:8080`). 주소는 관리자가 EMR 로봇 탭 "로봇 서버"에 넣는다(`robots.robot_server_url`, 예: `http://192.168.129.107:8080`, 0014).
+- 방향이 반대다: **EMR이 부른다.** 로봇 서버 = 팀원 Pinky API(로봇마다 `:8080`). 주소는 관리자가 EMR 로봇 탭 "로봇 서버"에 넣는다(`robots.robot_server_url`, 예: `http://PINKY2_IP:8080`, 0014).
 - 언제: 로봇이 claim을 불렀고 줄 배송이 있을 때 한 번. 제한 시간 2초. GET만 부른다(로봇을 움직이지 않음).
 - EMR이 읽는 필드(나머지는 무시):
 
@@ -242,7 +242,7 @@ Pinky API는 **인증이 없다** — 지금은 그대로 진행(사용자 결�
 
 ## 9. OMX → EMR 완료 신호 (2026-10-26)
 
-팀원 OMX(로봇팔 API `10.42.0.147:8000`)가 작업을 마치면 EMR에 알리는 곳이다. 사용자 결정: 단순하게 GET, 지금은 성공 신호만, 인증 없음.
+팀원 OMX(로봇팔 API `OMX_IP:8000`)가 작업을 마치면 EMR에 알리는 곳이다. 사용자 결정: 단순하게 GET, 지금은 성공 신호만, 인증 없음.
 
 - `GET {EMR}/api/v1/robot/{request_id}/end-point` — `request_id`는 OMX `/command`·`/pinky`에 넣은 값 그대로(영문·숫자·`._-`, 1~64자, 아니면 422).
 - 응답 200 `{"request_id": "yolo-8b5efa75", "received": true, "received_at": "2026-10-26T06:29:16Z"}`, 헤더 `Cache-Control: no-store`. 같은 id를 여러 번 보내도 매번 200.
@@ -301,7 +301,7 @@ FMS는 `--control-url http://<EMR>:8000`으로 띄운다.
 ⚠️ 10-27 실제 OMX(팀원 `vision` `47bcb47`)는 아직 **문장만 받는다**(`command`가 문자열).
 **임시 방편(10-27 사용자: "이전 버전 API, 수량 무시하고 거즈 문장으로" — 시험 뒤 "합의한 내용으로 변경"으로 **끔**)**: 설정 `OMX_COMMAND_FORMAT=sentence`면 개수 대신 문장 하나 `"pick and place blue gauze"`를 보낸다 — 파란 거즈가 하나라도 있으면 blue, 아니면 green, **수량은 무시**(OMX가 한 개만 집음). FMS 묶음과 관리자 API 둘 다. 관리자 API는 이 스위치가 켜졌을 때만 문장 본문 `{"command": "pick and place blue gauze"}`도 받는다(기본 `counts`면 400 `omx_sentence_disabled`). 10-27 실물 시험(NO 59·60)은 이 스위치로 했다 — `docs/emr_fms_omx_integration_2026-10-27.md` 3장.
 
-**EMR이 부르는 OMX API** (`http://10.42.0.147:8000`, 인증 없음)
+**EMR이 부르는 OMX API** (`http://OMX_IP:8000`, 인증 없음)
 
 | 요청 | 본문 | 언제 |
 |---|---|---|

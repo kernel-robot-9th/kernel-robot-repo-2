@@ -122,7 +122,7 @@ export interface Robot {
   /** 로봇 전용 API(/robot/...)용 키가 발급되어 있는지. 키 자체는 발급 응답에서 한 번만 나온다 */
   has_api_key: boolean
   api_key_issued_at: string | null
-  /** 로봇 서버(팀원 Pinky API) 주소, 예: http://192.168.129.107:8080. claim 때 EMR이 GET /status로 상태를 묻는다. null이면 배송을 맡지 않는다 (2026-10-23) */
+  /** 로봇 서버(팀원 Pinky API) 주소, 예: http://PINKY2_IP:8080. claim 때 EMR이 GET /status로 상태를 묻는다. null이면 배송을 맡지 않는다 (2026-10-23) */
   robot_server_url: string | null
   /** claim 때 로봇 서버에서 받은 마지막 배터리·오염도 (2026-10-23). null이면 아직 받은 적 없음 */
   status_report: RobotStatusReport | null

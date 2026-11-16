@@ -52,14 +52,14 @@ class Settings(BaseSettings):
 
     # 팀원 OMX(로봇팔) API — 관리자가 EMR에서 명령을 보내고 상태를 본다 (2026-10-26, app/clients/omx.py).
     # /command는 예전 형식(명령 문장) — 10-26 합의한 색깔별 개수 형식은 팀원 쪽이 바뀐 뒤에
-    # 2026-10-28 사용자: OMX 주소가 10.42.0.147로 바뀜(이 PC enp130s0 = 10.42.0.1, NetworkManager 'shared' 망 — 예전 192.168.129.86).
+    # 2026-10-28 사용자: OMX 주소가 OMX_IP로 바뀜(이 PC enp130s0 = CONTROL_PC_IP, NetworkManager 'shared' 망 — 예전 OMX_IP).
     # [검토 필요] 그 망의 방화벽이 도커 컨테이너 → 10.42.0.x 새 연결을 거절해 개발 스택은 .env로 이 PC의 중계 주소를 쓴다
-    OMX_BASE_URL: str = "http://10.42.0.147:8000"
+    OMX_BASE_URL: str = ""   # 예 "http://OMX_IP:8000" — 주소는 .env로 넣는다(저장소에 실제 IP를 두지 않음). 비어 있으면 OMX 호출은 503 omx_unavailable
     OMX_TIMEOUT_SECONDS: float = 3.0     # 이 안에 답하지 않으면 omx_unavailable(503)
 
     # 팀원 FMS API v1 연동 1단계 (2026-10-27, 계약 docs/api_contract_delivery_2026-10-20.md 10장). EMR은 FMS·OMX만 연결(상위 관제).
     # FMS_BASE_URL이 비어 있으면 끔(주문 보내기 주기 작업 없음, 예전 claim 그대로). 있으면 claim은 늘 204로 막힌다
-    FMS_BASE_URL: str = ""                    # 예 "http://192.168.129.50:8770" — FMS는 --control-url http://<EMR>:8000 으로 띄운다
+    FMS_BASE_URL: str = ""                    # 예 "http://FMS_IP:8770" — FMS는 --control-url http://<EMR>:8000 으로 띄운다
     FMS_TIMEOUT_SECONDS: float = 3.0
     FMS_SEND_INTERVAL_SECONDS: float = 5.0    # 신청 시각이 된 배송을 FMS로 보내는 회차 간격
     # FMS 로봇 번호(robots.yaml 1·2·3) → EMR 로봇 id. [검토 필요] 10-27 EMR 로봇 1 배송로봇 1호·3 2호·4 3호(2는 OMX) 기준 가정값 — 로봇 탭 칸은 다음 단계

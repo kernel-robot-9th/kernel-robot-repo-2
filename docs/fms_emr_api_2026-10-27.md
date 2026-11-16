@@ -10,7 +10,7 @@
 
 | 항목 | 값 |
 |---|---|
-| 주소 | `http://192.168.129.135:8000/api/v1` (시험 화면 `/docs`) |
+| 주소 | `http://CONTROL_PC_IP:8000/api/v1` (시험 화면 `/docs`) |
 | 인증 | 헤더 `X-Robot-Api-Key: <로봇별 키>`. **지금 개발 스택은 꺼 둠**(`ROBOT_KEY_DISABLED=1`) — 키 없이 부르면 **배송로봇 1호(id 1)**로 처리 |
 | 본문 | JSON. 시각은 UTC ISO 8601 |
 | 오류 | `{"code": "...", "detail": "..."}` — `code`로 분기, `detail`은 개발자용 영어 문장 |
@@ -162,7 +162,7 @@ Pinky가 약제실 정밀 주차를 마치면 한 번 부른다. 본문 없음, 
   "id": 1, "name": "배송로봇 1호", "robot_type": "amr", "status": "idle",
   "updated_at": "2026-10-23T09:12:59.060249Z",
   "has_api_key": false, "api_key_issued_at": null,
-  "robot_server_url": "http://192.168.129.107:8080",
+  "robot_server_url": "http://PINKY2_IP:8080",
   "status_report": null
 }
 ```
@@ -203,7 +203,7 @@ claim이 새 배송을 줄 때 한 번, 2초 제한, GET만(로봇을 움직이�
 ## 5. curl로 해 보기
 
 ```bash
-E=http://192.168.129.135:8000/api/v1          # 지금은 키 없이 → 배송로봇 1호
+E=http://CONTROL_PC_IP:8000/api/v1          # 지금은 키 없이 → 배송로봇 1호
 curl $E/robot/me
 curl "$E/robot/deliveries?due_only=false"
 curl $E/robots/1

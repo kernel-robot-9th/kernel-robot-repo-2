@@ -27,7 +27,7 @@ python record_click_pose.py --arm right carry_high      # -> click_pick_poses_ri
 # 4) 서버 (main_project) - 처음엔 --dry-run, 그다음 --step
 python eval_bi_api_yolo.py --arm right --dry-run --host 0.0.0.0 --port 8000
 python eval_bi_api_yolo.py --arm right --step --obb-rotate --host 0.0.0.0 --port 8000
-python eval_bi_api_yolo.py --arm right --auto --obb-rotate --emr-api http://192.168.129.135:8000/api/v1 --host 0.0.0.0 --port 8000
+python eval_bi_api_yolo.py --arm right --auto --obb-rotate --emr-api http://CONTROL_PC_IP:8000/api/v1 --host 0.0.0.0 --port 8000
 # 송신
 python api_sender_yolo.py flow --no-callback --command "blue:1"
 ```

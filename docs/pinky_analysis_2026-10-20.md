@@ -15,7 +15,7 @@
 
 | 항목 | 값 |
 |---|---|
-| 주소 | Pinky AP `192.168.4.1` (이 PC는 `192.168.4.6`) |
+| 주소 | Pinky AP `192.168.4.1` (이 PC는 `PC_ON_PINKY_AP_IP`) |
 | ROS 도메인 | **0** (기본값). `~/.bashrc`의 `jazzy` 별칭은 56으로 바꾸므로 Pinky 작업 터미널에서는 쓰지 않는다 |
 | 맵 | `/home/pinky/maps/map_rev2.yaml` — EMR `병원` 맵(271×359 px, 0.02 m/px, 원점 −1.801, −6.847)과 일치 |
 | 위치 추정 | AMCL (`base_footprint`), 초기 위치 설정됨 |
@@ -50,7 +50,7 @@ B를 권하는 이유: 로봇을 건드리지 않고, 오늘 확인한 경로(EM
 
 | # | 문제 | 영향 | 해결 방향 |
 |---|---|---|---|
-| 1 | **PC가 Pinky AP에만 붙음** (`wlo1 192.168.4.6`, LAN 주소 192.168.129.135 사라짐) | 다른 PC에서 EMR 웹 접속 불가 | Pinky를 병원 공유기에 붙이기(pinky 초기 설정) 또는 PC에 유선 LAN + 무선(Pinky) 둘 다 |
+| 1 | **PC가 Pinky AP에만 붙음** (`wlo1 PC_ON_PINKY_AP_IP`, LAN 주소 CONTROL_PC_IP 사라짐) | 다른 PC에서 EMR 웹 접속 불가 | Pinky를 병원 공유기에 붙이기(pinky 초기 설정) 또는 PC에 유선 LAN + 무선(Pinky) 둘 다 |
 | 2 | **카메라 노드 없음** | 로봇이 간호사 마커를 못 읽음 → 수령 확인 API(`/robot/deliveries/{id}/receipt`)를 쓸 수 없음 | Pinky 카메라 드라이버 노드 + 마커(DICT_4X4_50) 인식 / 또는 당분간 화면에서 간호사가 수령 버튼 |
 | 3 | 웹서버 `/api/goal`은 결과를 안 줌 | 도착·실패를 위치로 추정(오늘 0.28 m를 "도착"으로 판정) | 실행기는 ROS 액션 결과(SUCCEEDED·ABORTED) 사용 |
 | 4 | **금지 구역 없음** | 비품실(모방학습 중)처럼 못 가는 곳을 막을 수 없음 — 다른 장소로 가는 경로가 지나갈 수도 있음 | 당분간 장소 선택에서 빼기 / Nav2 keepout 필터 마스크(EMR 맵 1번 이름이 `keepout_mask`) |

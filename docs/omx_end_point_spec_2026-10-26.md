@@ -8,12 +8,12 @@ OMX(로봇팔)가 작업을 마치면 EMR에 "끝났다"를 알리는 주소다.
 
 | 항목 | 값 |
 |---|---|
-| 주소 | `GET http://192.168.129.135:8000/api/v1/robot/{request_id}/end-point` |
+| 주소 | `GET http://CONTROL_PC_IP:8000/api/v1/robot/{request_id}/end-point` |
 | 방식 | **GET**, 본문 없음 |
 | 인증 | **없음**(헤더 필요 없음) |
 | 보내는 때 | OMX 작업이 **성공으로 끝났을 때 한 번**. 지금은 성공 신호만 받는다 |
 | 성공 응답 | `200` + JSON |
-| 시험 화면 | `http://192.168.129.135:8000/docs` → robot-access → "OMX 완료 신호" |
+| 시험 화면 | `http://CONTROL_PC_IP:8000/docs` → robot-access → "OMX 완료 신호" |
 
 ## 2. 경로 값 `request_id`
 
@@ -51,7 +51,7 @@ OMX(로봇팔)가 작업을 마치면 EMR에 "끝났다"를 알리는 주소다.
 curl:
 
 ```bash
-curl -i http://192.168.129.135:8000/api/v1/robot/yolo-8b5efa75/end-point
+curl -i http://CONTROL_PC_IP:8000/api/v1/robot/yolo-8b5efa75/end-point
 ```
 
 Python(OMX 쪽, `requests`). 실패하면 1초 간격으로 3번까지 다시 보내는 예다.
@@ -60,7 +60,7 @@ Python(OMX 쪽, `requests`). 실패하면 1초 간격으로 3번까지 다시 �
 import time
 import requests
 
-EMR_API = "http://192.168.129.135:8000/api/v1"
+EMR_API = "http://CONTROL_PC_IP:8000/api/v1"
 
 def notify_emr_end_point(request_id: str) -> bool:
     """OMX 작업이 성공으로 끝났을 때 EMR에 알린다. 받았으면 True."""
@@ -90,7 +90,7 @@ def notify_emr_end_point(request_id: str) -> bool:
 ## 7. 주의
 
 - 인증이 없다. 같은 네트워크의 누구나 부를 수 있다. 지금은 로그만 남기므로 영향은 없지만, 이 신호로 배송 상태를 바꾸게 되면 인증을 넣는다.
-- EMR 주소(`192.168.129.135`)가 바뀌면 알려 준다.
+- EMR 주소(`CONTROL_PC_IP`)가 바뀌면 알려 준다.
 
 ## 8. OMX 명령 형식 — `POST /command` 바뀜 (2026-10-26 합의)
 

@@ -21,7 +21,7 @@ class RobotServerError(Exception):
 
 def fetch_robot_status(robot_server_url: str, timeout_seconds: float) -> dict[str, Any]:
     """로봇 서버의 GET /status.
-    [입력] robot_server_url: 예 "http://192.168.129.107:8080" / timeout_seconds: 연결·읽기 제한
+    [입력] robot_server_url: 예 "http://PINKY2_IP:8080" / timeout_seconds: 연결·읽기 제한
     [출력] dict: 응답 JSON 객체 (받지 못하면 RobotServerError)
     """
     url = robot_server_url.rstrip("/") + "/status"

@@ -39,7 +39,7 @@ python eval_bi_api_yolo_botharm.py --sim --port 8000
 python eval_bi_api_yolo_botharm.py --dry-run --host 0.0.0.0 --port 8000 \
     --joint-offset 14:-150 --open-scale 0.9 --close-extra 150 --slide 150 --obb-rotate
 # 3) 양팔 실제
-python eval_bi_api_yolo_botharm.py --host 0.0.0.0 --port 8000 --emr-api http://10.42.0.1:5173/api/v1 --auto --pinky \
+python eval_bi_api_yolo_botharm.py --host 0.0.0.0 --port 8000 --emr-api http://CONTROL_PC_IP:5173/api/v1 --auto --pinky \
     --joint-offset 14:-150 --open-scale 0.9 --close-extra 150 --slide 150 --obb-rotate
 # 송신
 python api_sender_yolo.py flow --no-callback --pinky --command '{"blue":1,"green":1}'

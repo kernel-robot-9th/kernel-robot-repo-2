@@ -24,13 +24,13 @@ python3 -m venv .venv && .venv/bin/pip install ultralytics opencv-python
 
 ```
 같은 와이파이:  로봇 서버(fastcampus) ──UDP 5000──▶ omen YOLO ──/safety──▶ 로봇 서버
-클라우드:       로봇 서버 ─UDP─▶ 중계(fastcampus) ─SRT─▶ AWS 3.35.89.35 ─SRT─▶ omen YOLO ──/safety──▶ 로봇 서버
+클라우드:       로봇 서버 ─UDP─▶ 중계(fastcampus) ─SRT─▶ AWS AWS_RELAY_IP ─SRT─▶ omen YOLO ──/safety──▶ 로봇 서버
 ```
 
 두 방법 모두 로봇 서버는 `~/kernel-robot-repo-2-il`에서 아래 명령으로 켜요. **마지막 `--stream-host`만 달라요.**
 
 ```bash
-python eval_bi_api_yolo_botharm_v2.py --host 0.0.0.0 --port 8000 --emr-api http://10.42.0.1:5173/api/v1 --auto \
+python eval_bi_api_yolo_botharm_v2.py --host 0.0.0.0 --port 8000 --emr-api http://CONTROL_PC_IP:5173/api/v1 --auto \
   --joint-offset 14:-150 --pinky --open-scale 0.9 --close-extra 150 --slide 150 --obb-rotate \
   --stage-seconds 2.5 --slow-seconds 2.5 --gripper-seconds 0.6 --return-home-time 2.5 --right-no-posture \
   --stream-host <아래 참고> --stream-port 5000
@@ -38,14 +38,14 @@ python eval_bi_api_yolo_botharm_v2.py --host 0.0.0.0 --port 8000 --emr-api http:
 
 ## 1. 같은 와이파이 (team2_5G)
 
-**fastcampus**: `--stream-host 10.42.0.222`로 켜요. omen의 IP이고 기본값이라 생략해도 돼요. 중계 명령은 필요 없어요. 켜져 있으면 꺼 주세요.
+**fastcampus**: `--stream-host TOPVIEW_PC_IP`로 켜요. TOPVIEW_PC_IP는 omen의 IP예요. 환경 변수 `TOPVIEW_HOST`에 넣어 두면 생략해도 돼요(둘 다 없으면 영상을 보내지 않아요). 중계 명령은 필요 없어요. 켜져 있으면 꺼 주세요.
 
 **omen**: `--srt` 없이 실행하면 UDP 5000으로 바로 받아요.
 
 ```bash
 cd ~/main_project/topview
 .venv/bin/python recv_topview_yolo.py --width 1280 --height 720 --imgsz 640 --device 0 \
-  --robot-url http://10.42.0.147:8000
+  --robot-url http://OMX_IP:8000
 ```
 
 ## 2. 클라우드 (AWS 경유)
@@ -58,7 +58,7 @@ cd ~/main_project/topview
 gst-launch-1.0 -e udpsrc port=5000 caps="application/x-rtp,media=video,encoding-name=H264,payload=96,clock-rate=90000" ! \
   rtpjitterbuffer latency=50 ! rtph264depay ! h264parse config-interval=-1 ! \
   video/x-h264,stream-format=byte-stream,alignment=au ! mpegtsmux alignment=7 ! \
-  srtsink uri="srt://3.35.89.35:8890?streamid=publish:topview&latency=200" wait-for-connection=false
+  srtsink uri="srt://AWS_RELAY_IP:8890?streamid=publish:topview&latency=200" wait-for-connection=false
 ```
 
 - `alignment=au`가 없으면 프레임이 조각 단위로 넘어가서 PTS(시간 정보)가 빠지고, AWS(MediaMTX)가 전부 버려요. 로그에 "PTS is missing"이 떠요.
@@ -68,21 +68,21 @@ gst-launch-1.0 -e udpsrc port=5000 caps="application/x-rtp,media=video,encoding-
 
 ```bash
 cd ~/main_project/topview
-.venv/bin/python recv_topview_yolo.py --srt 3.35.89.35 --width 1280 --height 720 --imgsz 640 --device 0 \
-  --robot-url http://10.42.0.147:8000
+.venv/bin/python recv_topview_yolo.py --srt AWS_RELAY_IP --width 1280 --height 720 --imgsz 640 --device 0 \
+  --robot-url http://OMX_IP:8000
 ```
 
 AWS 서버(Ubuntu 24.04, t3.micro, 서울 리전)에는 MediaMTX가 systemd 서비스(`mediamtx`)로 등록돼 있어서 따로 켤 필요 없어요. 보안 그룹은 TCP 22와 UDP 8890을 열어 뒀어요.
 
 ### 진짜 다른 와이파이일 때 (정지 신호도 AWS로)
 
-`10.42.0.147`로 바로 갈 수 없으니까, SSH 터널을 하나씩 열고 `--robot-url http://localhost:8000`으로 바꿔요.
+`OMX_IP`로 바로 갈 수 없으니까, SSH 터널을 하나씩 열고 `--robot-url http://localhost:8000`으로 바꿔요.
 
 ```bash
 # fastcampus (pem은 ~/.ssh/topview-key.pem, 저장소에는 올리지 않음)
-ssh -i ~/.ssh/topview-key.pem -N -R 8000:localhost:8000 ubuntu@3.35.89.35
+ssh -i ~/.ssh/topview-key.pem -N -R 8000:localhost:8000 ubuntu@AWS_RELAY_IP
 # omen
-ssh -i ~/.ssh/topview-key.pem -N -L 8000:localhost:8000 ubuntu@3.35.89.35
+ssh -i ~/.ssh/topview-key.pem -N -L 8000:localhost:8000 ubuntu@AWS_RELAY_IP
 ```
 
 ## omen 코드에서 두 방법이 갈리는 부분
