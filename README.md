@@ -27,7 +27,7 @@ EMR은 **상위 관제**로 무엇을 어디로 보낼지를 정하고, 배차·
 |---|
 | ![안내 로봇 인사 화면](guide_robot/docs/guide_screen.png) |
 | 사람을 만나면 Pinky LCD에 띄우는 인사 |
-| 요구사항 외 추가 과제 |
+| 확장 기능 · 병원 안내 (사람 인식 · 인사 · 길 양보) |
 
 SR 번호별 충족 현황은 [완료 현황 보고서](docs/verification_report_2026-11-16.md)에 있습니다.
 
@@ -52,8 +52,8 @@ flowchart LR
 | **Pinky 주행** (`driving/`) | Pinky 위에서 도는 REST API(`:8080`)와 주행 그래프·지도·도구. FMS가 보낸 구간을 Nav2·벽 따라가기·테이프·카메라 정밀 주차로 달린다 |
 | **OMX 로봇팔** (`omx/`) | 약제실에서 카메라(YOLO)로 거즈를 찾아 두 팔로 집고, Pinky 위에 내려놓는다. EMR이 명령을 보내고 완료 신호를 받는다 |
 | **탑뷰 안전 감시** (`topview/`) | 탑뷰 카메라 영상을 같은 와이파이(UDP)나 AWS(SRT)로 받아 YOLO로 사람을 찾고, 사람이 보이면 로봇팔 서버에 정지 신호(`person_exist`)를 보낸다 |
-| **안내 로봇** (`guide_robot/`, 별도 과제) | Pinky가 처음 가 보는 장소를 돌아다니며 비주얼 SLAM 지도를 만들고, 사람 앞에서 멈춰 인사한다(화면·LED·소리) |
-| **VLA 플래너** (`robot/`, 별도 과제) | 자연어 명령을 LLM(Ollama)이 해석하고 MoveIt 2로 OMX-F가 블록을 옮기는 기술 검증 |
+| **안내 로봇** (`guide_robot/`, 확장 기능) | Pinky가 처음 가 보는 장소를 돌아다니며 비주얼 SLAM 지도를 만들고, 사람 앞에서 멈춰 인사한다(화면·LED·소리) |
+| **VLA 플래너** (`robot/`, 기술 검증) | 자연어 명령을 LLM(Ollama)이 해석하고 MoveIt 2로 OMX-F가 블록을 옮기는 기술 검증 |
 
 ## 아키텍처
 
@@ -153,7 +153,7 @@ kernel-robot-repo-2/
 ├─ driving/                     Pinky 주행 — 로봇 위 REST API(api/)·주행 그래프(graph/)·지도(maps/)·도구(tools/)
 ├─ omx/                         OMX 양팔 로봇팔 — YOLO 거즈 집기 서버·안전 정지·분석
 ├─ topview/                     탑뷰 영상 수신 + YOLO 사람 감지 정지 신호
-├─ guide_robot/                 Pinky 안내원 로봇 — 비주얼 SLAM·사람 인사 (별도 과제)
+├─ guide_robot/                 Pinky 안내원 로봇 — 비주얼 SLAM·사람 인사 (확장 기능)
 ├─ robot/                       ROS 2 colcon 워크스페이스 — VLA 플래너 (외부 패키지는 부록 A로 받음)
 ├─ tools/demo/                  데모 녹화 도구 (소개 영상 만들기)
 ├─ tools/ws_interface_test/     WebSocket·MQTT 인터페이스 시험 도구

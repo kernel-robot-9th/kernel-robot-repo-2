@@ -42,7 +42,7 @@ flowchart TB
     end
   end
 
-  subgraph S["별도 과제 (배송과 연결 없음)"]
+  subgraph S["확장 기능 · 기술 검증 (배송 흐름과 독립)"]
     GUIDE["안내 로봇 (guide_robot/)<br/>RTAB-Map · 사람 인사 · 양보"]
     VLA["VLA 플래너 (robot/)<br/>LLM + MoveIt 블록 pick & place"]
   end
@@ -165,7 +165,7 @@ FMS와 Pinky API는 같은 주행 그래프 `driving/graph/graph.yaml`을 읽습
 | `recv_topview_yolo.py` | OMX가 보내는 탑뷰 영상을 UDP 5000(같은 와이파이) 또는 `--srt`(AWS 중계)로 받아 YOLO로 사람을 찾고, `--robot-url`의 `/safety`로 `person_exist`를 계속 보냄 |
 | `recv_topview.py` | YOLO 없는 단순 영상 뷰어 |
 
-### 4.6 별도 과제
+### 4.6 확장 기능 · 기술 검증
 
 | 모듈 | 내용 | 주요 파일 |
 |---|---|---|

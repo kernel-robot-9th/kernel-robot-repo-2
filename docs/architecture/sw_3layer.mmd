@@ -1,7 +1,7 @@
 flowchart TB
   %% 병원 배송 로봇 SW 3계층 구조 — 최종판 (main 통합본, 2026-11-16)
   %% draw.io: Arrange > Insert > Advanced > Mermaid 에 붙여 넣기 / 또는 mermaid.live 에서 PNG 내보내기
-  %% 색: 초록 = EMR(웹 팀) / 파랑 = 로봇 팀(FMS·주행·OMX·topview) / 회색 = 별도 과제
+  %% 색: 초록 = EMR(웹 팀) / 파랑 = 로봇 팀(FMS·주행·OMX·topview) / 회색 = 확장 기능 · 기술 검증
   %% 10-29판(구현 상태 색 구분)은 docs/history/sw_3layer_2026-10-29.mmd
 
   subgraph P["Presentation Layer — 브라우저 · EMR 웹 React :5173"]
@@ -49,7 +49,7 @@ flowchart TB
     end
   end
 
-  subgraph X["별도 과제"]
+  subgraph X["확장 기능 · 기술 검증"]
     direction LR
     GD["안내 로봇 (guide_robot/)<br/>RTAB-Map · 사람 인사 · 양보"]:::side
     VLA["VLA 플래너 (robot/)<br/>Ollama LLM + MoveIt 2"]:::side
