@@ -16,10 +16,15 @@ EMR은 **상위 관제**로 무엇을 어디로 보낼지를 정하고, 배차·
 |---|---|---|
 | ![배송 목록](emr/docs/emr_screens/01_deliveries.png) | ![지도](emr/docs/emr_screens/03_map_pinky_arena.png) | ![수령 버튼](emr/docs/emr_screens/02_arrived_received_button.png) |
 
-| 주행 그래프 (FMS 경로 계획 · Pinky 주행) | 안내 로봇 화면 |
-|---|---|
-| ![주행 그래프](driving/graph/graph.png) | ![안내 로봇 인사 화면](guide_robot/docs/guide_screen.png) |
-| 병실·약제실·충전 자리와 엣지 종류(주황 = 흰 테이프 차선, 빨강 = 벽 따라가기, 초록 = Nav2) | 사람을 만나면 Pinky LCD에 띄우는 인사 |
+| 주행 그래프 (FMS 경로 계획 · Pinky 주행) |
+|---|
+| ![주행 그래프](driving/graph/graph.png) |
+| 병실·약제실·충전 자리와 엣지 종류(주황 = 흰 테이프 차선, 빨강 = 벽 따라가기, 초록 = Nav2) |
+
+| 안내 로봇 화면 |
+|---|
+| ![안내 로봇 인사 화면](guide_robot/docs/guide_screen.png) |
+| 사람을 만나면 Pinky LCD에 띄우는 인사 |
 
 ## 시스템 구성
 
