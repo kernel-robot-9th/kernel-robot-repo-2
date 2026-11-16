@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FMS 단계별 비교 (3분할)</title>
+<style>
+/* 발표 영상 (11-03): demo_tri.py 가 띄운 시뮬레이터 3개를 세로로 긴 칸 3개로. 각 칸 = ?bare=1&top=1 (위에 단계·경과·완료) */
+html, body { margin: 0; height: 100%; background: #1d1d1b; }
+.grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; height: 100vh; }
+iframe { width: 100%; height: 100%; border: 0; display: block; background: #f6f6f3; }
+</style>
+</head>
+<body>
+<div class="grid" id="grid"></div>
+<script>
+// 칸: [포트, 제목] — demo_tri.py 의 PANELS 와 같아야 함 (11-03 사용자: 번호 없이, 앞 단계에 더해 가는 이름)
+const PANELS = [
+  [8792, 'MAPF Baseline (CBS)'],             // 처음 CBS · 주차·직선 이어 달리기 없음 · 수술실 먼저를 모름 (가까운 로봇·가까운 순서)
+  [8793, '+ Task Allocation · 주행 연결'],    // 오염도 기반 배정(수술실 먼저) + 주차 9곳 + 직선 이어 달리기
+  [8794, '+ MAPF 고도화'],                   // ECBS · 창 재계획 · 협로 추론 · 따로 계산 + 약제실 앞 대기열
+];
+const host = location.hostname || 'localhost';
+document.getElementById('grid').innerHTML = PANELS.map(([port, title]) =>
+  `<iframe src="http://${host}:${port}/?bare=1&top=1&title=${encodeURIComponent(title)}" title="${title}"></iframe>`).join('');
+</script>
+</body>
+</html>

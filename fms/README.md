@@ -138,7 +138,9 @@ python3 fms/run_headless.py --minutes 120 --rate 2 --seed 1     # --robots 2, --
 | `rooms.yaml` | 방 번호(`code`) ↔ 그래프 노드, 오염도, 별칭 |
 | `robots.yaml` | 관제 PC 로봇 번호 ↔ 핑키 이름 |
 | `static/index.html` | 화면 |
-| `run_headless.py` | 화면 없는 시험기 |
+| `run_headless.py` | 화면 없는 시험기 (`--profile`, `--demo`, `--trace`) |
+| `sim_trace.py`, `detect.py`, `compare.py` | 시뮬레이션 기록 · 이상 동작 감지기 · 고정 주문 단계 비교 (11-03) |
+| `demo_quad.py`, `demo_tri.py`, `static/quad.html`, `static/tri.html` | 발표 영상용 단계별 4분할 · 3분할 화면 |
 
 ## 6. 주요 규칙 (2026-10-27)
 
@@ -242,6 +244,27 @@ python3 demo_quad.py            # 서버 4개(8781~8784) → 브라우저로 htt
                                 # → 화면 녹화 시작 → Enter → 같은 주문 9건이 넷에 동시에 (8배속, --speed 로 바꿈)
 ```
 칸 = `fms_core.PROFILES` (`sim_server.py --profile`): ① naive 로봇 1대·묶음 없이 1건씩·수술실 전 POCKET,
-② v2 처음 CBS·주차 없음·직선 이어 달리기 없음(지나는 직선 노드마다 실행 1.5 s·계획 2 s 정지), ③ v3 + 주차 9곳·이어 달리기,
+② v2 처음 CBS·주차 없음·직선 이어 달리기 없음(지나는 직선 노드마다 실행 1.5 s·계획 2 s 정지)·수술실 먼저를 모름(가까운 순서대로, 오염됐으면 세척 후 수술실 — `FMS.dumb`), ③ v3 + 주차 9곳·이어 달리기,
 ④ v4 지금(+ CBS 고도화·약제실 대기열). 주문: 101~107호, 수술실, 108호. 각 칸 = `/?bare=1&n=번호&title=…` (왼쪽 빈자리 = 번호·제목, 가운데 지도, 오른쪽 빈자리 = 경과·완료 수). 기본 화면 `/` = 발표 화면, 예전 개발자 화면 = `/?dev=1`.
-헤드리스로 미리 보기(주문 9건): ① 2081 s(세척실→수술실 ≈ 370~660 s) · ② 547 s · ③ 525 s · ④ 478 s.
+헤드리스로 미리 보기(주문 9건): ① 2081 s(세척실→수술실 ≈ 370~660 s) · ② 643 s · ③ 525 s · ④ 478 s.
+
+3분할 (11-03, ② ③ ④ 만, 세로로 긴 칸 · 칸 위에 단계·경과·완료 — 각 칸 = `/?bare=1&top=1&n=번호&title=…`):
+```bash
+python3 demo_tri.py             # 서버 3개(8792~8794) → 브라우저로 http://localhost:8792/tri.html, F11 → 녹화 → Enter
+```
+
+## 이상 동작 감지기 · v5 (11-03)
+
+시뮬레이션 기록에서 비효율 장면을 규칙으로 찾고 손실 시간을 잰다 (딥러닝 아님).
+
+```bash
+python3 run_headless.py --demo --trace logs/trace_demo.jsonl   # 0.5초마다 로봇 상태 기록 (sim_server.py --trace 도 됨)
+python3 detect.py logs/trace_demo.jsonl --md out.md          # 되돌아감·경로 바꿈·양보 반복·길 막는 대기 + 손실 s
+python3 compare.py                                           # 같은 주문으로 v4 vs v5 (시나리오 12개 + 발표 9건) → logs/fixed/report.md
+```
+
+- 찾은 것: 차례를 기다리는 로봇이 차례가 앞선 로봇을 '길 막음'으로 보고 비키게 해서(차선 15 cm 옮김) 차례를 잃고 되돌아옴.
+- 고침 = 프로필 `v5` (지금 기본, `f.turn_fix`): 정말 길 위에 있을 때만 비킴, 차례 = 기다린 시간 − 도착 예상. `--profile v4` = 예전 동작.
+- 결과 (`compare.py`, 주문 15건 × 12 + 발표 9건): 이상 손실 합 1965 → 1023 s, 되돌아감 19 → 11, 위반·충돌 0.
+  다 끝나는 시각은 거의 같음 (평균 +7 s, 13개 중 7개 빨라짐). 발표 주문 9건은 8:10 → 10:02 로 느려짐.
+- 남은 것: 오른쪽 협로 R90↔GT130D 재계획 반복, 위 복도 양보 반복.

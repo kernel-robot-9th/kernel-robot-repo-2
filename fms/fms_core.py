@@ -109,6 +109,10 @@ PARKING = ['B1_20', 'B2_20', 'B1_78', 'B1_130', 'B1_180', 'B1_195', 'T1_20', 'T2
 # 우측통행이라 약제실로 들어오는 쪽 차선만: 서쪽에서 오면 T1(동쪽 방향)_40, 동쪽에서 오면 T2(서쪽 방향)_130.
 # 반대 차선(T2_40·T1_130)은 약제실에서 나가는 로봇이 지나감 (시뮬레이션: T2_40 에서 나오는 로봇과 마주쳐 교착)
 PHARMACY_QUEUE = ['T1_40', 'T2_130']     # [서쪽에서 올 때, 동쪽에서 올 때]
+# 11-03 감지기(detect.py) 결과: T1_40 은 왼쪽 협로 입구(GT40D) 건너는 길목이라, 거기서 기다리면 협로를 오가는 로봇이 돌아감.
+# 다른 로봇이 갈 길 위(출발 전 로봇의 다음 목적지 경로 포함)면 앞 대기 자리로 안 감.
+# (T1_20 을 대신 쓰면 협로에서 올라온 로봇이 T1_40 을 지나 20 cm 갔다 되돌아와서 손해 — 11-03 시험에서 뺌)
+QUEUE_ALT = ([], [])
 # B2_195 는 수술실 입구(GB180)에 너무 가까워 뺌.
 # CHARGER 는 막다른 곳이라 뺌. 같은 x 의 두 차선 자리(짝)에 약 실은 로봇 둘을 세우면 그 복도 끝을 아무도 못 지나가므로 짝은 하나만
 EAST_LANE = {'B': 'B1', 'T': 'T1'}                           # 우측통행: 동쪽(+x)으로 갈 때 쓰는 차선 (아래쪽 차선)
@@ -400,9 +404,10 @@ class Robot:
 # ----------------------------------------------------------------------------------------------------------
 PROFILES = {
     'naive': '① FMS 없음 — 로봇 1대, 들어온 순서대로 1건씩, 수술실 전 세척실(POCKET)',
-    'v2': '② 처음 CBS — 주차 없음, 직선 이어 달리기 없음',
+    'v2': '② 처음 CBS — 주차 없음, 직선 이어 달리기 없음, 수술실 먼저를 모름 (오염되면 세척 후 수술실)',
     'v3': '③ 주차 9곳 + 직선 이어 달리기',
-    'v4': '④ CBS 고도화 + 약제실 앞 대기열 (지금)',
+    'v4': '④ CBS 고도화 + 약제실 앞 대기열',
+    'v5': '⑤ 감지기로 찾은 비키기·차례 충돌 고침 (11-03, 지금)',
 }
 
 
@@ -419,9 +424,13 @@ def apply_profile(f, name):
         f.parking = []
         f.p.node_stop_s = 1.5
         f.planner.node_stop = 2               # 계획도 그만큼 (1초 칸, 올림)
+    if name == 'v2':                           # 수술실 먼저를 모름: 가까운 순서대로 돌다 오염됐으면 세척 후 수술실
+        f.dumb = True
     if name == 'naive':                        # 묶음 없이 1건씩, 오염돼 있으면 수술실 전에 POCKET
         f.naive = True
         f.p.cap = 1
+    if name != 'v5':                           # 11-03 전: 차례가 앞선 로봇을 '길 막음'으로 비키게 함
+        f.turn_fix = False
 
 
 class FMS:
@@ -452,7 +461,11 @@ class FMS:
         self._plan_job, self._replan_again, self._last_replan = None, None, 0.0
         self.parking = list(PARKING)            # 주차 자리 (빈 목록 = 주차 안 함, 일 마친 자리에 서 있음)
         self.use_queue = True                   # 약제실 앞 대기열
+        self.turn_fix = True                    # 11-03: 차례 기다리는 로봇은 실제로 길 위에 있을 때만 비킴 (차례 앞선 로봇을 비키게 해 차례를 뺏던 버그)
+        self.queue_fair = False                 # 시험 (run_headless --queue): 차례는 처음 기다린 시각으로 (대기 자리로 옮기거나 비켜도 유지)
+        self.queue_path = False                 # 시험 (run_headless --queue): 다른 로봇이 갈 길 위의 약제실 앞 대기 자리로는 안 감
         self.naive = False                      # 비교용: 묶음 1건·수술실 전 POCKET 들르기 (apply_profile 'naive')
+        self.dumb = False                       # 비교용: 수술실 먼저를 모름 (apply_profile 'v2')
         for r in self.robots:                   # 실제 로봇: 시작 노드 = 로봇이 보고한 노드
             if links and r.name in links:
                 self.attach_real(r, links[r.name])
@@ -563,11 +576,12 @@ class FMS:
         self.emit('batch_departed', batch_id=b.bid, robot=b.robot.num, rooms=[room_code(x) for x in b.rooms])
 
     # ---- 단계 만들기 ----
-    def visit_steps(self, start, rooms, c0, pocket=False):
+    def visit_steps(self, start, rooms, c0, pocket=False, dumb=False):
         """병실 방문 단계: 가까운 병실부터. 수술실은 오염도 0 에서만.
         pocket=False (배송, 10-29 사용자: 오염도가 0 이 아니어도 배송을 주되 POCKET 을 들르지 않고 끝낼 수 있어야 함):
         수술실이 있으면 오염도 0 일 때 맨 앞으로만, 아니면 None (이 로봇은 못 함).
-        pocket=True: 예전 방식 — 중간에 POCKET 들렀다가 수술실"""
+        pocket=True: 예전 방식 — 중간에 POCKET 들렀다가 수술실
+        dumb=True (발표 영상 ②, 11-03): 수술실 먼저를 모름 — 수술실도 가까운 순서대로, 그때 오염돼 있으면 바로 앞에 POCKET"""
         def nn(frm, rs):
             out, here, rs = [], frm, list(rs)
             while rs:
@@ -595,6 +609,13 @@ class FMS:
             return L
 
         rooms = list(dict.fromkeys(rooms))      # 같은 병실은 한 번
+        if dumb:
+            out, c = [], c0
+            for r in nn(start, rooms):
+                if r == SURGERY and c > 0:
+                    out.append('POCKET*'); c = 0
+                out.append(r); c += ROOM_CONTAM[r]
+            return steps(out)
         if SURGERY not in rooms:
             return steps(nn(start, rooms))
         rest = [r for r in rooms if r != SURGERY]
@@ -816,14 +837,14 @@ class FMS:
             cap, start = p.cap, PHARMACY
             prefix = [dict(kind='wait_ready'), dict(kind='move', to=PHARMACY), dict(kind='dock'), dict(kind='load')]
             bundle, here = [seed], seed.room
-            first = self.visit_steps(start, [seed.room], r.contam, pocket=self.naive)
+            first = self.visit_steps(start, [seed.room], r.contam, pocket=self.naive, dumb=self.dumb)
             if first is None or not self.feasible(r, prefix + first, include_current=False):
                 continue
             rest = list(others)
             while len(bundle) < cap and rest:
                 rest.sort(key=lambda o: self.g.dist(here, o.room))
                 for o in rest:
-                    trial = self.visit_steps(start, [b.room for b in bundle] + [o.room], r.contam, pocket=self.naive)
+                    trial = self.visit_steps(start, [b.room for b in bundle] + [o.room], r.contam, pocket=self.naive, dumb=self.dumb)
                     if trial is not None and self.feasible(r, prefix + trial, include_current=False):
                         bundle.append(o)
                         rest.remove(o)
@@ -831,7 +852,7 @@ class FMS:
                         break
                 else:
                     break
-            steps = prefix + self.visit_steps(start, [b.room for b in bundle], r.contam, pocket=self.naive)
+            steps = prefix + self.visit_steps(start, [b.room for b in bundle], r.contam, pocket=self.naive, dumb=self.dumb)
             r.loaded_done = False
             rooms = [s['room'] for s in steps if s['kind'] == 'spin']
             b = Batch(r, bundle, rooms, self.t)
@@ -906,16 +927,17 @@ class FMS:
         nodes, _, zones, _ = self.other_holds(r)
 
         def hold(why, blockers):                # 약제실이면 지금 자리 말고 약제실 앞 대기 자리로 가서 기다림
+            if self.queue_fair:
+                r.step.setdefault('wait_t0', self.t)    # 처음 기다린 시각: 대기 자리로 옮기거나 비켜도 step 복사로 이어짐
             if not (to == PHARMACY and self.use_queue and self.go_queue(r)):
                 self.waiting(r, why, blockers)
             return False
         busy = [z for z in dz if z in zones]
         if busy:
             return hold(f'{to} 차례 기다림 ({zones[busy[0]].id})', [zones[busy[0]]])
-        for o in self.robots:                   # 같은 구역을 더 오래 기다린 로봇이 먼저
-            if o is r or not (o.step and o.step['kind'] == 'move' and not o.step.get('started')):
-                continue
-            if self.dest_zones_of(o) & dz and o.wait_s > r.wait_s + 1e-9:
+        for o in self.robots:                   # 같은 구역을 더 오래 기다린 로봇이 먼저 (대기 자리로 가는 중인 로봇 포함)
+            st = None if o is r else self.pending_move(o)
+            if st and self.zones_of_step(st) & dz and self.turn_key(o, st) > self.turn_key(r, r.step) + 1e-9:
                 return hold(f'{to} 차례 기다림 ({o.id} 먼저)', [o])
         for o in self.robots:                   # 그 구역 안쪽 막다른 곳(예: POCKET 뒤 CHARGER)에 있는 로봇이 먼저 나온다
             if o is not r and self.trapped_behind(o.node, dz):
@@ -944,18 +966,59 @@ class FMS:
             self.replan_all(f'{r.id} 출발')
         return r.path is not None
 
+    def pending_move(self, o):
+        """o 가 차례를 기다리는 (아직 출발 안 한) 이동 단계"""
+        if o.step and o.step['kind'] == 'move' and not o.step.get('started'):
+            return o.step
+        # 대기 자리로 가는 중인 로봇은 순서에서 뺌: 가는 길에 막히면 약제실이 비어도 모두 기다림 (11-03 시험: 642초 멈춤)
+        return None
+
+    def zones_of_step(self, st):
+        return self.g.stop_zones(st['to']) | set(st.get('also', ()))
+
+    def waited(self, o, st):
+        """차례 순서: 처음 기다린 시각부터 (queue_fair), 아니면 지금 자리에서 기다린 시간"""
+        return self.t - st['wait_t0'] if self.queue_fair and 'wait_t0' in st else o.wait_s
+
+    def turn_key(self, o, st):
+        """같은 구역 차례: 큰 쪽이 먼저. turn_fix = 기다린 시간 − 거기까지 걸리는 시간 (가까운 로봇이 먼저 들어가 구역이
+        덜 비고, 멀어도 오래 기다리면 결국 먼저 — 11-03 고정 주문 비교에서 '먼저 기다린 순서'만 지키면 약제실이 비어 느려짐)"""
+        k = self.waited(o, st)
+        return k - self.g.time_to(o.node, st['to'], self.p.speed) if self.turn_fix else k
+
+    def routes_of_others(self, r):
+        """다른 로봇이 지금 가는 길 + 출발 전이면 다음 목적지까지 최단 경로 (가로지르는 차선 노드·가까운 노드까지)"""
+        g, out = self.g, set()
+        for o in self.robots:
+            if o is r:
+                continue
+            if o.step and o.step['kind'] == 'move' and o.path and len(o.path) > o.k + 1:
+                p = o.path[o.k:]
+            else:
+                nxt = next((s for s in ([o.step] if o.step else []) + o.queue if s['kind'] == 'move'), None)
+                p = g.path(o.node, nxt['to']) if nxt and nxt['to'] != o.node else None
+            if p:
+                out |= self.route_set(p)
+        return out
+
     def go_queue(self, r):
         """약제실 차례를 기다릴 로봇을 약제실 앞 대기 자리로 보낸다: 서쪽에서 오면 T1_40, 동쪽에서 오면 T2_130
-        (약제실을 지나쳐 가지 않게 온 쪽 자리만). 비어 있고 지금 자리보다 약제실에 가까울 때만. 보냈으면 True"""
+        (약제실을 지나쳐 가지 않게 온 쪽 자리만). 비어 있고 지금 자리보다 약제실에 가까울 때만. 보냈으면 True.
+        queue_path: 다른 로봇이 갈 길 위의 자리는 뺌 (QUEUE_ALT 도 후보)"""
         if r.node in PHARMACY_QUEUE:
             return False
         g = self.g
-        spot = PHARMACY_QUEUE[0] if g.xy(r.node)[0] <= g.xy(PHARMACY)[0] else PHARMACY_QUEUE[1]
+        side = 0 if g.xy(r.node)[0] <= g.xy(PHARMACY)[0] else 1
         taken = {o.node for o in self.robots if o is not r} | \
                 {st['to'] for o in self.robots if o is not r for st in ([o.step] if o.step else []) + o.queue if st['kind'] == 'move'}
         onpath = {n for o in self.robots if o is not r and o.path for n in o.path[o.k:]}   # 지금 지나갈 로봇이 있으면 지나간 뒤에
-        if spot in taken | onpath or g.near[spot] & (taken | onpath) or g.dist(spot, PHARMACY) >= g.dist(r.node, PHARMACY):
+        cands = [PHARMACY_QUEUE[side]] + (QUEUE_ALT[side] if self.queue_path else [])
+        busy = taken | onpath | (self.routes_of_others(r) if self.queue_path else set())
+        cands = [s for s in cands if s != r.node and s not in busy and not g.near[s] & (taken | onpath)
+                 and g.dist(s, PHARMACY) < g.dist(r.node, PHARMACY)]
+        if not cands:
             return False
+        spot = min(cands, key=lambda s: g.dist(r.node, s) + g.dist(s, PHARMACY))
         self.log(f'{r.id}: 약제실 차례 → 앞 대기 자리 {spot} 에서 기다림')
         r.queue.insert(0, dict(r.step, started=False))
         r.step = dict(kind='move', to=spot, queue_spot=True)
@@ -1314,7 +1377,7 @@ class FMS:
                 if spot:
                     self.start_task(o, 'yield', [dict(kind='move', to=spot)], f'{r.id} 에게 비켜 줌 → {spot}')
             elif (o.step and o.step['kind'] == 'move' and not o.step.get('started') and not o.step.get('sidestep')
-                  and o.wait_s > 1.0 and r.wait_s > 1.0):
+                  and o.wait_s > 1.0 and r.wait_s > 1.0 and (not self.turn_fix or self.in_way(r, o))):
                 # 차례를 기다리느라 서 있는 로봇(아직 출발 전)이 길을 막으면 그 로봇도 비킨다.
                 # 10-29: R2 가 약제실 차례를 T2_190 (POCKET 으로 가는 유일한 길)에서 기다리고, 약제실의 R1 은 102호의 R3 를,
                 # R3 는 POCKET 으로 가려고 R2 를 기다림 → 실측 시간(더 느림)에서 영구 교착 (R1 은 CBS 출발 시각 대기라 교착 검사에 안 걸림)
@@ -1330,6 +1393,21 @@ class FMS:
                 self.replan_all(f'{r.id} 예약 막힘')
             elif r.edge_t == 0.0 and r.res_to <= r.k:
                 self.plan(r, penalize=True)
+
+    def route_set(self, p):
+        """경로가 붙잡게 될 노드: 지나는 노드 + 가로지르는 차선 노드 + 엣지 가까이 노드 + 그 가까운 노드"""
+        g, out = self.g, set(p)
+        for i in range(len(p) - 1):
+            out |= set(g.crossed.get((p[i], p[i + 1]), [])) | g.seg_near[(p[i], p[i + 1])]
+        return out | {m for n in out for m in g.near[n]}
+
+    def in_way(self, r, o):
+        """o 가 서 있는 자리가 r 이 갈 길 위인가 (r 이 아직 출발 전이면 최단 경로로 봄)"""
+        if r.path and len(r.path) > r.k + 1:
+            p = r.path[r.k:]
+        else:
+            p = self.g.path(r.node, r.step['to']) or []
+        return o.node in self.route_set(p)
 
     REATTACH = ('unreachable', 'not_localized', 'not_at_node', 'rebooted')
 
