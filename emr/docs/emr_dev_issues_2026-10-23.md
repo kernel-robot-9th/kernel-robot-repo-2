@@ -3,7 +3,7 @@
 - 대상: EMR 웹(`emr/`)을 이어서 개발하거나 로봇 쪽과 연동하는 팀원
 - 점검 범위: 실행 중인 API의 엔드포인트 전체(`/openapi.json`), 화면 라우트 전체(`frontend/src/router.tsx`), 코드의 `[검토 필요]` 태그 전체, `emr/CLAUDE.md` 결정 사항·열린 항목, `backend/REVIEW.md`, `emr/README.md` 운영 배포 체크, 지금 DB·`.env` 상태, 테스트 실행 결과
 - 역할 분담(2026-10-23 결정): EMR은 **배송 미션 — 누가 어떤 Task를 받는지**까지. **주행·경로 계획은 팀원**(Pinky API, OMX API). 우리가 만든 시험용 배송 실행기(`robot/src/fms/delivery_executor`)는 쓰지 않는다.
-- 커밋: 대부분 `340a397`(10-23 09:42). 이 문서·`docs/emr_screens/`·문서 2개는 커밋 전.
+- 커밋: 대부분 `340a397`(10-23 09:42). 이 문서·`emr/docs/emr_screens/`·문서 2개는 커밋 전.
 
 ## 0. 진행도
 
@@ -209,5 +209,5 @@
 
 ## 6. 참고 문서
 
-- API 계약 `docs/api_contract_delivery_2026-10-20.md` · 팀원 연동 안내 `docs/emr_robot_api_for_teammate_2026-10-22.md` · Pinky API 분석 `docs/pinky_fms_api_review_2026-10-22.md`
-- 화면 `docs/emr_screens/` · 규칙·결정 `emr/CLAUDE.md` · 실행·운영 `emr/README.md` · 검토 필요 `emr/backend/REVIEW.md`
+- API 계약 `docs/api_contract_delivery_2026-10-20.md` · 팀원 연동 안내 `emr/docs/emr_robot_api_for_teammate_2026-10-22.md` · Pinky API 분석 `emr/docs/pinky_fms_api_review_2026-10-22.md`
+- 화면 `emr/docs/emr_screens/` · 규칙·결정 `emr/CLAUDE.md` · 실행·운영 `emr/README.md` · 검토 필요 `emr/backend/REVIEW.md`

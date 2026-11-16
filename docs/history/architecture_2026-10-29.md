@@ -129,7 +129,7 @@ flowchart TB
 | 5 | Fleet State Manager가 서버 안 | 로봇 상태의 원본은 FMS(1초마다 `/fms/robot-status`). EMR은 마지막 위치를 **메모리에만** 두고(DB 없음) 화면이 1초마다 `GET /robot-positions`로 묻는다(10-29). 배터리·오염도는 아직 화면에 없음 | 배터리·오염도 표시, SSE로 바꿀지 |
 | 6 | 간호사 명찰 마커로 배송 확인 | "받았습니다" 버튼(`NURSE_RECEIPT_METHOD=button`). 일회용 수령 마커(`DICT_4X4_250` 50–249)는 꺼 둠. 명찰 마커(0–49)는 등록만 | 정함: 버튼(10-30 사용자 결정) |
 | 7 | RealSense RGB-D | **카메라**(10-30 결정 — 깊이가 필요했던 응급 상황 감지를 뺌): Pinky Pi 카메라, OMX USB 카메라 — 팀원 쪽 | 정함 |
-| 8 | 인증 항상 켬 (**10-30 사용자: 인증은 끄고 진행 — 보안은 최우선 아님**) | 시험 중 로그인(`AUTH_DISABLED`)·로봇 키(`ROBOT_KEY_DISABLED`) 꺼 둠. FMS 웹훅·OMX 완료 신호는 인증 없음(10-27 사용자 결정 "인증 없이 진행") | 운영 전에 켜기([EMR 이슈](../emr_dev_issues_2026-10-23.md) 3장) |
+| 8 | 인증 항상 켬 (**10-30 사용자: 인증은 끄고 진행 — 보안은 최우선 아님**) | 시험 중 로그인(`AUTH_DISABLED`)·로봇 키(`ROBOT_KEY_DISABLED`) 꺼 둠. FMS 웹훅·OMX 완료 신호는 인증 없음(10-27 사용자 결정 "인증 없이 진행") | 운영 전에 켜기([EMR 이슈](../../emr/docs/emr_dev_issues_2026-10-23.md) 3장) |
 | 9 | (없음) | 팀원 OMX(vision 47bcb47)는 명령을 **문장**으로만 받는다. EMR은 합의한 **개수** 형식 — 10-27 실물 시험은 임시 스위치 `OMX_COMMAND_FORMAT=sentence`로 하고 끔 | 팀원 OMX가 개수 형식을 받게 바꾸기, 들고 있는 동안 `/command` 거절 |
 
 ## 4. 기능 묶음별 파일·클래스
@@ -171,7 +171,7 @@ flowchart TB
 - `<pages/Supplies.tsx, Supplies>` : 비품 화면
 
 #### 4.15 FMS 연동 `fms` (중간 명칭: Fleet Link) — Task Dispatcher · Fleet State Manager · 구현 (2026-10-27, 10-29 '준비' 단계)
-EMR = 상위 관제. 주문을 보내고 배차는 FMS가 한다. 계약 [`../api_contract_delivery_2026-10-20.md`](../api_contract_delivery_2026-10-20.md) 10장, 정리 [`../emr_fms_omx_integration_2026-10-27.md`](../emr_fms_omx_integration_2026-10-27.md).
+EMR = 상위 관제. 주문을 보내고 배차는 FMS가 한다. 계약 [`../api_contract_delivery_2026-10-20.md`](../api_contract_delivery_2026-10-20.md) 10장, 정리 [`../emr_fms_omx_integration_2026-10-27.md`](../../emr/docs/emr_fms_omx_integration_2026-10-27.md).
 ```
 신청(reserved, 보낼 시간 지남) ─5초마다─▶ POST /orders (물품 1개 = 1건) ─▶ FMS
 FMS ─batch_assigned─▶ 주문에 묶음·로봇만 적음(신청 그대로)
@@ -199,7 +199,7 @@ FMS ─order_delivered(신청의 물품 전부)─▶ 도착(arrived)   FMS ─o
 - `<schemas/delivery.py, RobotDeliveryOut · DeliveryProgressIn · DeliveryReceiptIn · RobotMeOut>` : 로봇용 응답(목적지 `robot_dest`·`receipt_method`, 마커·간호사 정보 없음)·보고 모양
 - `<emr/backend/scripts/simulate_robot.py · confirm_receipt.py>` : 로봇 흉내 도구(실물 없이 시험)
 - 연결 안 된 파일: `<services/quick_dispatch.py, QuickDispatchService>` — 시험용 "상태 바로 바꾸기" 초안(10-22), 라우터에 붙이지 않았다
-- 계약: [`../api_contract_delivery_2026-10-20.md`](../api_contract_delivery_2026-10-20.md) · 팀원용 안내 [`../emr_robot_api_for_teammate_2026-10-22.md`](../emr_robot_api_for_teammate_2026-10-22.md)
+- 계약: [`../api_contract_delivery_2026-10-20.md`](../api_contract_delivery_2026-10-20.md) · 팀원용 안내 [`../emr_robot_api_for_teammate_2026-10-22.md`](../../emr/docs/emr_robot_api_for_teammate_2026-10-22.md)
 
 #### 4.3-2 로봇 상태 확인 `robot_status` — Fleet State Manager · 예전 방식 (2026-10-23 — EMR이 Pinky에 직접 묻는 길이라 10-27부터 쓰지 않음, 상태는 FMS robot-status로)
 - `<clients/robot_server.py, fetch_robot_status · RobotServerError>` : 로봇 서버(팀원 Pinky API) `GET /status`(2초 제한, GET만)
@@ -256,7 +256,7 @@ FMS ─order_delivered(신청의 물품 전부)─▶ 도착(arrived)   FMS ─o
 - `<schemas/map.py, MapCreate · MapOut>` · `<schemas/location.py, LocationCreate · LocationOut>` : 요청·응답 모양
 - `<emr/backend/scripts/import_pinky_dests.py>` : 팀원 Pinky API `/dests`를 읽어 맵 "Pinky 아레나"와 장소로 가져오기(그림 cm → 미터). **10-27부터 쓰지 않음**(Pinky 직접 연결, 다시 돌리면 방 번호가 Pinky 이름으로 돌아감). 나중에 FMS `/rooms`·`/map`으로 바꿀 자리
 - `<pages/MapView.tsx, MapView>` : "병원 지도" 화면. **Pinky 위치를 1초마다 주황 점·방향·이름으로 그림**(끊기면 회색), 로봇이 있는 지도를 먼저 보여 줌(10-29, 4.16)
-- `<emr/backend/scripts/make_arena_floorplan.py>` : 팀원 `driving/tools/layout_diagram.png` 평면도 → 0.0015 m/px PNG·yaml(중앙 H자 통로, `--original`은 원본만). 결과 [`../arena_floorplan/`](../arena_floorplan/). 맵 업로드는 색 있는 평면도의 색을 지킨다(`services/map_files.py`)
+- `<emr/backend/scripts/make_arena_floorplan.py>` : 팀원 `driving/tools/layout_diagram.png` 평면도 → 0.0015 m/px PNG·yaml(중앙 H자 통로, `--original`은 원본만). 결과 [`../arena_floorplan/`](../../emr/docs/arena_floorplan/). 맵 업로드는 색 있는 평면도의 색을 지킨다(`services/map_files.py`)
 - `<features/maps/LocationPicker.tsx · mapGeometry.ts>` : 맵을 눌러 장소 찍기, 미터 ↔ 픽셀 변환
 
 #### 4.8 로봇 관리 `robot` (중간 명칭: Robot Registry) — Fleet State Manager의 바탕
@@ -295,7 +295,7 @@ batch_assigned → POST /command {"command": {"blue": N, "green": N}} → OMX �
 - `<services/omx_signal.py, OmxSignalService>` : OMX 완료 신호 `GET /robot/{request_id}/end-point` 기록(인증 없음, 같은 번호 여러 번도 받음, 로그만)
 - `<schemas/omx.py, OmxCommandIn · OmxCommandOut>` : 요청·응답 모양
 - 없음: OMX 화면(지금은 `/docs`로 부름), OMX 시간 초과, OMX 실패를 배송 실패로 바꾸기(지금은 묶음만 멈춤 — 사람 확인)
-- 명세: [`../omx_end_point_spec_2026-10-26.md`](../omx_end_point_spec_2026-10-26.md)
+- 명세: [`../omx_end_point_spec_2026-10-26.md`](../../emr/docs/omx_end_point_spec_2026-10-26.md)
 
 #### 4.16 지도 위 로봇 위치 `robot_positions` — Fleet State Manager · 구현 (2026-10-29)
 ```
@@ -355,7 +355,7 @@ FMS ─1초마다 POST /fms/robot-status─▶ 메모리(로봇 번호별 마지
 - `<graph/edge_times.yaml>` : 실측 엣지 시간(10-27~29, pinky_6364·ee3a, 방향별 142개) + 회전 식 — `tools/edge_costs.py --write`로 만듦, FMS 경로 계획이 씀
 - `<maps/map_drawn.*>` : 실측 벽으로 그린 지도(AMCL·Nav2용, 10-29 왼쪽 외벽 보정). `<launch/nav2_followpath.launch.py · config/nav2_params_followpath.yaml>` : 플래너 없는 Nav2(map_server·amcl·controller·velocity_smoother)
 - `<api/pinky-bringup.service · pinky-nav2.service · pinky-api.service · pinky-ir.service>` : 부팅 때 bringup → Nav2 → API(+ IR)
-- 설명: [`../../driving/README.md`](../../driving/README.md). 이전 분석 [`../pinky_fms_api_review_2026-10-22.md`](../pinky_fms_api_review_2026-10-22.md)
+- 설명: [`../../driving/README.md`](../../driving/README.md). 이전 분석 [`../pinky_fms_api_review_2026-10-22.md`](../../emr/docs/pinky_fms_api_review_2026-10-22.md)
 - 시뮬용 Pinky upstream(`robot/src/pinky_pro`)은 따로 받는다(커밋하지 않음 — 루트 README 부록 A)
 
 #### 4.12 팀원 OMX API — Manipulation · 비품 식별/포즈 · 팀원 담당 (저장소 밖)
@@ -382,11 +382,11 @@ FMS ─1초마다 POST /fms/robot-status─▶ 메모리(로봇 번호별 마지
 
 - [`../../fms/README.md`](../../fms/README.md) · [`../../fms/API.md`](../../fms/API.md) — 팀원 FMS 실행·규칙·경로 계획, API v1 원본
 - [`../../driving/README.md`](../../driving/README.md) · [`../../driving/api/API.md`](../../driving/api/API.md) — Pinky 주행 코드, Pinky REST API
-- [`../emr_fms_omx_integration_2026-10-27.md`](../emr_fms_omx_integration_2026-10-27.md) — **10-27 FMS·OMX 연동 작업 정리**(결정·API·시험·남은 일)
+- [`../emr_fms_omx_integration_2026-10-27.md`](../../emr/docs/emr_fms_omx_integration_2026-10-27.md) — **10-27 FMS·OMX 연동 작업 정리**(결정·API·시험·남은 일)
 - [`../api_contract_delivery_2026-10-20.md`](../api_contract_delivery_2026-10-20.md) — EMR ↔ 로봇 쪽 API 계약(상태·엔드포인트·오류 코드), 병상 단말(8장), **FMS API v1 연동(10장)**
-- [`../fms_emr_interface_2026-10-27.md`](../fms_emr_interface_2026-10-27.md) · [`../robot_access_amr_omx_2026-10-27.md`](../robot_access_amr_omx_2026-10-27.md) · [`../emr_unused_apis_fms_v1_2026-10-27.md`](../emr_unused_apis_fms_v1_2026-10-27.md) — FMS v1 분석, AMR/OMX 인터페이스, 필요 없어지는 API
-- [`../emr_robot_api_for_teammate_2026-10-22.md`](../emr_robot_api_for_teammate_2026-10-22.md) — 팀원 FMS가 EMR을 부르는 순서·예시
-- [`../omx_end_point_spec_2026-10-26.md`](../omx_end_point_spec_2026-10-26.md) — OMX 완료 신호 명세
-- [`../emr_dev_issues_2026-10-23.md`](../emr_dev_issues_2026-10-23.md) — EMR 진행도·해결한 문제·남은 문제
-- [`../emr_robot_data_format/README.md`](../emr_robot_data_format/README.md) — 로봇 API 요청·응답 실측 형식, 화면
+- [`../fms_emr_interface_2026-10-27.md`](../../emr/docs/fms_emr_interface_2026-10-27.md) · [`../robot_access_amr_omx_2026-10-27.md`](../../emr/docs/robot_access_amr_omx_2026-10-27.md) · [`../emr_unused_apis_fms_v1_2026-10-27.md`](../../emr/docs/emr_unused_apis_fms_v1_2026-10-27.md) — FMS v1 분석, AMR/OMX 인터페이스, 필요 없어지는 API
+- [`../emr_robot_api_for_teammate_2026-10-22.md`](../../emr/docs/emr_robot_api_for_teammate_2026-10-22.md) — 팀원 FMS가 EMR을 부르는 순서·예시
+- [`../omx_end_point_spec_2026-10-26.md`](../../emr/docs/omx_end_point_spec_2026-10-26.md) — OMX 완료 신호 명세
+- [`../emr_dev_issues_2026-10-23.md`](../../emr/docs/emr_dev_issues_2026-10-23.md) — EMR 진행도·해결한 문제·남은 문제
+- [`../emr_robot_data_format/README.md`](../../emr/docs/emr_robot_data_format/README.md) — 로봇 API 요청·응답 실측 형식, 화면
 - [`../omx_skill_interface_2026-10-21.md`](../omx_skill_interface_2026-10-21.md) — OMX 스킬 인터페이스 설계 초안(구현 전)

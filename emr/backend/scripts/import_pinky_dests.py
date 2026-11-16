@@ -9,7 +9,7 @@
 # 좌표: Pinky 그림 cm(아레나 왼쪽 아래 원점, heading deg) → EMR 미터·라디안 그대로 환산(x/100, y/100, deg→rad). ROS map 프레임이 아니다
 # 표준 라이브러리만 — 호스트에서 바로 돌린다:
 #   EMR_PASSWORD=... python3 backend/scripts/import_pinky_dests.py --pinky http://PINKY3_IP:8080
-# 계약: docs/api_contract_delivery_2026-10-20.md 4장 · 분석: docs/pinky_fms_api_review_2026-10-22.md
+# 계약: docs/api_contract_delivery_2026-10-20.md 4장 · 분석: emr/docs/pinky_fms_api_review_2026-10-22.md
 # =============================================================================
 from __future__ import annotations
 

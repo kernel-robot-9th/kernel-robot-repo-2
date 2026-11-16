@@ -1,5 +1,7 @@
 # EMR 비품·배송 — 통합 폴더
 
+개발 기록·연동 분석·화면 자료는 [docs/](docs/README.md)에 있습니다.
+
 ```
 emr/
 ├─ docker-compose.yml          db + api + web 한 번에

@@ -71,7 +71,7 @@ Gazebo · MoveIt · Ollama가 함께 돌아 메모리(15GB)를 많이 쓴다. �
 할 일은 **웹(EMR) · 로봇(Pinky AMR·관제) · OMX(로봇팔)** 세 갈래로 나눠 진행한다. 목록은 [docs/server_report_2026-10-19.md](server_report_2026-10-19.md) 6장.
 
 - **웹(EMR)**: 맵 업로드·장소 찍기(1단계)까지 완료. 다음은 배송 배정·진행(2단계) — 로봇 쪽과 API 계약(필드·주기·오류 코드)부터 맞춘다. 그 전에 운영 준비(DB 포트 제한, 프론트 운영 이미지 `/api` 프록시, https).
-- **로봇(Pinky · 관제)**: 팀원 FMS API v1이 배차·주행한다. 2026-10-27부터 EMR이 주문을 보내고 FMS가 이벤트·로봇 상태를 EMR로 보낸다(EMR = 상위 관제, Pinky에 직접 붙지 않음). 정리 [emr_fms_omx_integration_2026-10-27.md](emr_fms_omx_integration_2026-10-27.md).
+- **로봇(Pinky · 관제)**: 팀원 FMS API v1이 배차·주행한다. 2026-10-27부터 EMR이 주문을 보내고 FMS가 이벤트·로봇 상태를 EMR로 보낸다(EMR = 상위 관제, Pinky에 직접 붙지 않음). 정리 [emr_fms_omx_integration_2026-10-27.md](../emr/docs/emr_fms_omx_integration_2026-10-27.md).
 - **OMX(로봇팔)**: 팀원 OMX API(YOLO 집기 + 양팔 탑재)와 EMR 적재 연동 완료(10-27, 시뮬레이터 Pinky + 실물 OMX로 신청 → 도착). 우리 VLA 플래너(시뮬 1팔·2팔 검증)는 별도 기술 검증 과제. `ollama_ws`의 Ollama 호환 서버가 생기면 플래너 LLM을 교체한다.
 
 ## 문제가 생기면

@@ -14,7 +14,7 @@ EMR은 **상위 관제**로 무엇을 어디로 보낼지를 정하고, 배차·
 
 | 배송 목록 | 병원 지도 위 로봇 위치 | 도착 후 수령 |
 |---|---|---|
-| ![배송 목록](docs/emr_screens/01_deliveries.png) | ![지도](docs/emr_screens/03_map_pinky_arena.png) | ![수령 버튼](docs/emr_screens/02_arrived_received_button.png) |
+| ![배송 목록](emr/docs/emr_screens/01_deliveries.png) | ![지도](emr/docs/emr_screens/03_map_pinky_arena.png) | ![수령 버튼](emr/docs/emr_screens/02_arrived_received_button.png) |
 
 ## 시스템 구성
 
@@ -156,7 +156,7 @@ FMS_ARGS="--no-auto-omx" CONTROL_URL=http://<EMR 주소>:8000 docker compose up 
 | EMR 실행·계정·다른 PC 접속 | [emr/README.md](emr/README.md) |
 | 로봇 워크스페이스 빌드 | [robot/README.md](robot/README.md) |
 | 서버 한 대 전체 구성(포트·실행 순서·문제 해결) | [docs/server_guide.md](docs/server_guide.md) |
-| EMR ⇄ FMS·OMX 연동 | [연동 작업 정리](docs/emr_fms_omx_integration_2026-10-27.md) · [API 계약 10장](docs/api_contract_delivery_2026-10-20.md) |
+| EMR ⇄ FMS·OMX 연동 | [연동 작업 정리](emr/docs/emr_fms_omx_integration_2026-10-27.md) · [API 계약 10장](docs/api_contract_delivery_2026-10-20.md) |
 | FMS 실행·규칙·API v1 | [fms/README.md](fms/README.md) · [fms/API.md](fms/API.md) |
 | Pinky 주행·로봇 API | [driving/README.md](driving/README.md) · [driving/api/API.md](driving/api/API.md) |
 | OMX 로봇팔 서버 실행 | [omx/README.md](omx/README.md) |
@@ -170,9 +170,9 @@ FMS_ARGS="--no-auto-omx" CONTROL_URL=http://<EMR 주소>:8000 docker compose up 
 | 묶음 | 문서 |
 |---|---|
 | 설계 | [SW 아키텍처](docs/architecture/README.md) · [기술 스택 그림](docs/tech_stack/tech_stack_2026-11-02.png) |
-| API | [배송 API 계약](docs/api_contract_delivery_2026-10-20.md) · [FMS API v1](fms/API.md) · [Pinky REST API](driving/api/API.md) · [OMX 완료 신호](docs/omx_end_point_spec_2026-10-26.md) |
-| 시험 결과 | [실물 3대 동시 배송](docs/scenarios/logs/2026-11-02_real/demo3_163314/summary.md) · [부하 시험](docs/scenarios/scenario_02_load_5per_min_2026-10-30.md) · [EMR 화면·영상](docs/emr_screens/README.md) |
-| 개발 기록 | [개발 경과](docs/history/README.md) · [EMR 개발 이슈](docs/emr_dev_issues_2026-10-23.md) · [트러블 이슈 정리](docs/emr_issues_receipt_and_schedule_2026-11-03.md) |
+| API | [배송 API 계약](docs/api_contract_delivery_2026-10-20.md) · [FMS API v1](fms/API.md) · [Pinky REST API](driving/api/API.md) · [OMX 완료 신호](emr/docs/omx_end_point_spec_2026-10-26.md) |
+| 시험 결과 | [실물 3대 동시 배송](docs/scenarios/logs/2026-11-02_real/demo3_163314/summary.md) · [부하 시험](docs/scenarios/scenario_02_load_5per_min_2026-10-30.md) · [EMR 화면·영상](emr/docs/emr_screens/README.md) |
+| 개발 기록 | [개발 경과](docs/history/README.md) · [EMR 개발 이슈](emr/docs/emr_dev_issues_2026-10-23.md) · [트러블 이슈 정리](emr/docs/emr_issues_receipt_and_schedule_2026-11-03.md) |
 
 ## 팀
 

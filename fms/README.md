@@ -135,6 +135,7 @@ python3 fms/run_headless.py --minutes 120 --rate 2 --seed 1     # --robots 2, --
 | `fms_core.py` | Graph(차선·zone·가까운 노드), Robot(가상 핑키), Batch(묶음), FMS(배차·경로·예약·교착 풀기·이벤트) |
 | `planner.py` | 시공간 A* + CBS (못 풀면 우선순위 계획) |
 | `API.md`, `openapi_v1.py` | 관제 PC ↔ FMS API v1 문서와 OpenAPI 명세 (`/docs`) |
+| `docs/pinky_fms_design_2026-10-26.md` | FMS 설계 문서(역할 분담, 배차·적재·예약 규칙) |
 | `rooms.yaml` | 방 번호(`code`) ↔ 그래프 노드, 오염도, 별칭 |
 | `robots.yaml` | 관제 PC 로봇 번호 ↔ 핑키 이름 |
 | `static/index.html` | 화면 |

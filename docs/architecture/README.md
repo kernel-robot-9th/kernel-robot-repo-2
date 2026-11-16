@@ -10,8 +10,8 @@
 |---|---|---|
 | **EMR = 상위 관제** | EMR은 "무엇을 어디로"(신청, 주문)와 결과 표시만 맡습니다. 바깥 연결은 FMS와 OMX 둘뿐이고, Pinky에는 직접 붙지 않습니다 | 팀 역할 분담: 웹은 신청과 표시, 로봇 팀원이 배차·주행과 적재를 맡음 |
 | **배차·경로는 FMS** | 주문 묶기, 로봇 고르기, 다중 로봇 경로 계획(시공간 A* + CBS/ECBS), 충전, 오염 처리 | 여러 대를 한곳에서 같이 봐야 서로 비키고 교착을 풀 수 있음 |
-| **모든 연결은 HTTP** | 와이파이 너머로 ROS/DDS를 쓰지 않습니다. ROS 2는 로봇 안에서만 씁니다 | 같은 LAN에서도 ROS 2 DDS가 보이지 않았고, HTTP는 바로 됐음([Pinky API 분석](../pinky_fms_api_review_2026-10-22.md)) |
-| **수령은 버튼** | 도착하면 간호사(병상 요청이면 환자) 화면에 "받았습니다" 버튼이 뜹니다 | 처음 설계한 일회용 ArUco 마커 수령은 로봇에 마커를 읽는 카메라 노드가 없었고, 수령이 로봇에 묶였음([이슈 정리](../emr_issues_receipt_and_schedule_2026-11-03.md)) |
+| **모든 연결은 HTTP** | 와이파이 너머로 ROS/DDS를 쓰지 않습니다. ROS 2는 로봇 안에서만 씁니다 | 같은 LAN에서도 ROS 2 DDS가 보이지 않았고, HTTP는 바로 됐음([Pinky API 분석](../../emr/docs/pinky_fms_api_review_2026-10-22.md)) |
+| **수령은 버튼** | 도착하면 간호사(병상 요청이면 환자) 화면에 "받았습니다" 버튼이 뜹니다 | 처음 설계한 일회용 ArUco 마커 수령은 로봇에 마커를 읽는 카메라 노드가 없었고, 수령이 로봇에 묶였음([이슈 정리](../../emr/docs/emr_issues_receipt_and_schedule_2026-11-03.md)) |
 | **사람이 가까우면 로봇팔 정지** | 탑뷰 카메라가 사람을 감지하면 OMX가 그 자리에서 멈춥니다. 신호가 1초 끊겨도 멈춥니다 | 페일 세이프: 감시가 죽으면 멈춘 쪽으로 |
 
 ## 1. 전체 구성도
@@ -195,7 +195,7 @@ FMS와 Pinky API는 같은 주행 그래프 `driving/graph/graph.yaml`을 읽습
 
 ## 7. 관련 문서
 
-- [배송 API 계약](../api_contract_delivery_2026-10-20.md) · [FMS API v1](../../fms/API.md) · [Pinky REST API](../../driving/api/API.md) · [OMX 완료 신호](../omx_end_point_spec_2026-10-26.md)
+- [배송 API 계약](../api_contract_delivery_2026-10-20.md) · [FMS API v1](../../fms/API.md) · [Pinky REST API](../../driving/api/API.md) · [OMX 완료 신호](../../emr/docs/omx_end_point_spec_2026-10-26.md)
 - 모듈 README: [emr](../../emr/README.md) · [fms](../../fms/README.md) · [driving](../../driving/README.md) · [omx](../../omx/README.md) · [topview](../../topview/README.md) · [guide_robot](../../guide_robot/README.md) · [robot](../../robot/README.md)
 - 그림 원본(draw.io용 Mermaid): [sw_3layer.mmd](sw_3layer.mmd)
 - 전체 문서 목차: [docs/README.md](../README.md) · 개발 경과: [history](../history/README.md)

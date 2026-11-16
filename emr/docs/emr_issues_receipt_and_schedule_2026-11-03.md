@@ -87,7 +87,7 @@ EMR 해결 이슈 25건 중 두 건을 문제 정의 → 원인 → 해결 → �
 ---
 
 ## 근거
-- `docs/emr_dev_issues_2026-10-23.md` 2장 4·8번
+- `emr/docs/emr_dev_issues_2026-10-23.md` 2장 4·8번
 - 커밋 `af16120`(10-22 "받았습니다" 버튼), `a154892`(10-30 '즉시')
 - `docs/scenarios/logs/2026-11-02_real/demo3_163314/summary.md`, `docs/scenarios/logs/2026-11-02_real/manual_114231/`
 - 노션 [프로젝트 수행 트러블 이슈 정리](https://app.notion.com/p/40d73bf51040816ba9f9e353e1756510)

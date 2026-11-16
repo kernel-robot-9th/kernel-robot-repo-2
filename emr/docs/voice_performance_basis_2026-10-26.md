@@ -3,7 +3,7 @@
 - 대상: 음성 기능을 이어서 작업할 팀원·Claude. EMR 음성 기능(**`/api/v2/voice`** — 말로 예약 `/voice/parse`·`/voice/parse-text`, 안내 음성 `POST /voice/speak`, 브라우저 안내 음성. 10-26 측정 뒤 v1에서 v2로 옮김, 고도화는 v2에서)의 **속도·품질을 무엇과 어떻게 비교할지** 근거를 모은 문서다.
 - 계기: `/voice/speak`에서 새 문장의 첫 소리가 나오기까지 **5.7~7.9초** 걸린다. 사용자가 "API라서 전송·출력 속도가 있지 — 수치화하고 무엇과 비교할지" 물었다.
 - 이 문서는 조사와 오늘 실측만 담았다. 후보 설치·비교 측정은 하지 않았다(3장이 다음 작업 계획).
-- 기능 설명은 [`architecture/README.md`](architecture/README.md) 4.14, 결정 사항은 `emr/CLAUDE.md` "음성 배송 예약".
+- 기능 설명은 [`architecture/README.md`](../../docs/architecture/README.md) 4.14, 결정 사항은 `emr/CLAUDE.md` "음성 배송 예약".
 
 ## 1. 오늘 실측 (이 서버, 2026-10-26, 각 2회)
 

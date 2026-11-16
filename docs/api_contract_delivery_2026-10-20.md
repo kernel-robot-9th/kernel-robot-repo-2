@@ -1,9 +1,9 @@
 # 배송 배정·진행 API 계약 — EMR ↔ 관제 PC 배송 실행기 (2026-10-20)
 
-- **역할 분담 (2026-10-23, 사용자 결정)**: 우리(EMR)는 배송을 **시퀀스·미션**으로 만들어 **누가 어떤 Task를 받는지**까지만 정한다. **주행·경로 계획은 팀원**(Pinky API `/goto`·`/plan`, OMX API)이 한다. **우리가 만든 시험용 배송 실행기 `robot/src/fms/delivery_executor`는 쓰지 않는다**(띄우지도, 고치지도 않음 — 코드만 남김). 4장(실행기 동작)은 참고용으로만 남긴다. 팀원 쪽 연동 안내: `docs/emr_robot_api_for_teammate_2026-10-22.md`.
+- **역할 분담 (2026-10-23, 사용자 결정)**: 우리(EMR)는 배송을 **시퀀스·미션**으로 만들어 **누가 어떤 Task를 받는지**까지만 정한다. **주행·경로 계획은 팀원**(Pinky API `/goto`·`/plan`, OMX API)이 한다. **우리가 만든 시험용 배송 실행기 `robot/src/fms/delivery_executor`는 쓰지 않는다**(띄우지도, 고치지도 않음 — 코드만 남김). 4장(실행기 동작)은 참고용으로만 남긴다. 팀원 쪽 연동 안내: `emr/docs/emr_robot_api_for_teammate_2026-10-22.md`.
 - 환자(병상 단말) 배송 추가(2026-10-22): 8장.
 - **로봇 상태(배터리·오염도)로 claim 검사 (2026-10-23, 사용자 결정)**: claim할 때마다 **EMR이 로봇 서버(팀원 Pinky API)의 `GET /status`를 물어** 기준 밖이면 새 배송을 주지 않는다(3.2·3.6). 오염도는 로봇이 재는 0~100. 같은 날 잠깐 있던 로봇 보고 방식(`POST /robot/status`)은 "팀원도 서버가 있으니 로봇에 정확한 정보를 요청해야"로 없앴다.
-- **2026-10-22 변경 (사용자 결정)**: ① 수령 마커는 **일단 끔** — 간호사 배송도 화면의 **"받았습니다" 버튼**으로 수령(EMR 설정 `NURSE_RECEIPT_METHOD=button`, 기본). 마커 코드는 남아 있어 `marker`로 되살린다(2·3.4·5장). ② 실행기 주행은 **팀원 Pinky API(로봇 `:8080`)**, **인증 없이** 진행 — 운영 전에 인증을 넣는다(4장, 분석 `docs/pinky_fms_api_review_2026-10-22.md`).
+- **2026-10-22 변경 (사용자 결정)**: ① 수령 마커는 **일단 끔** — 간호사 배송도 화면의 **"받았습니다" 버튼**으로 수령(EMR 설정 `NURSE_RECEIPT_METHOD=button`, 기본). 마커 코드는 남아 있어 `marker`로 되살린다(2·3.4·5장). ② 실행기 주행은 **팀원 Pinky API(로봇 `:8080`)**, **인증 없이** 진행 — 운영 전에 인증을 넣는다(4장, 분석 `emr/docs/pinky_fms_api_review_2026-10-22.md`).
 - 구현(2026-10-20): EMR 마이그레이션 0008·`app/services/dispatch.py`·`delivery_notifier.py`·배송 화면, 관제 PC `robot/src/fms/delivery_executor`. 실제 EMR + 가짜 Nav2(도메인 77)로 확인, **실물 Pinky 종단 시험은 비품실 모방학습이 끝난 뒤**.
 - 범위: EMR 로드맵 2단계(배송 배정·진행) + 간호사 알림(5단계 일부). 양쪽(`emr/`, `robot/src/fms/delivery_executor`)이 이 문서를 기준으로 구현한다. 바꿀 때는 이 문서부터 고친다.
 - 사용자 결정(2026-10-20): 로봇 쪽이 EMR을 조회(claim) · 예약 시각이 지난 것부터 한 건씩 · 적재 없이 출발 · 수령은 **알림에 뜨는 일회용 마커를 로봇이 읽어서만** · 실패하면 재고 자동 복구 · 도착 후 5분 미수령이면 실패 + 복귀.
@@ -195,7 +195,7 @@ Pinky API는 **인증이 없다** — 지금은 그대로 진행(사용자 결�
 - 출발 뒤 간호사 취소(로봇 되돌리기) — 지금은 불가, 5분 미수령으로 끝남.
 - 관리자 강제 실패(실행기가 죽어 `arrived`로 남은 배송) — 지금은 실행기 재시작으로 이어서 처리.
 - 카메라 마커 노드(Pinky 카메라 드라이버 + `DICT_4X4_250` 검출 → `receipt_marker` 발행) — 로봇 쪽 별도 과제. 마커는 2026-10-22부터 꺼 둠 — 되살릴 때 Pinky API에 마커 경로를 둘지(ROS가 LAN 너머로 안 보임) 정한다.
-- Pinky API 인증(지금 없음)·EMR 장소 ↔ Pinky 목적지 대응(`stops` 표는 임시)·좌표 변환 — `docs/pinky_fms_api_review_2026-10-22.md` 9장. 팀원 API는 2026-10-22에 `/stops` → `/dests`, `{"stop"}` → `{"dest"}`로 이름을 바꿨다(반영함).
+- Pinky API 인증(지금 없음)·EMR 장소 ↔ Pinky 목적지 대응(`stops` 표는 임시)·좌표 변환 — `emr/docs/pinky_fms_api_review_2026-10-22.md` 9장. 팀원 API는 2026-10-22에 `/stops` → `/dests`, `{"stop"}` → `{"dest"}`로 이름을 바꿨다(반영함).
 - 로봇 상태 보고(3단계)·배터리·끊김 알림.
 
 ## 8. 환자(병상 단말) 배송 (2026-10-22)
@@ -247,7 +247,7 @@ Pinky API는 **인증이 없다** — 지금은 그대로 진행(사용자 결�
 - `GET {EMR}/api/v1/robot/{request_id}/end-point` — `request_id`는 OMX `/command`·`/pinky`에 넣은 값 그대로(영문·숫자·`._-`, 1~64자, 아니면 422).
 - 응답 200 `{"request_id": "yolo-8b5efa75", "received": true, "received_at": "2026-10-26T06:29:16Z"}`, 헤더 `Cache-Control: no-store`. 같은 id를 여러 번 보내도 매번 200.
 - EMR은 서버 로그(`omx_end_point`: request_id·보낸 주소·시각)에만 남긴다. DB·배송 상태·화면은 바꾸지 않는다 — 적재 흐름(FMS `/loaded` 등)과는 FMS 연동 때 잇는다.
-- 팀원 공유용 명세: `docs/omx_end_point_spec_2026-10-26.md`.
+- 팀원 공유용 명세: `emr/docs/omx_end_point_spec_2026-10-26.md`.
 - **OMX `POST /command` 형식 바뀜(10-26 합의)**: `{"command": {"blue": 개수, "green": 개수}, "request_id": "..."}` — 문장 대신 색깔별 개수. 같은 `request_id`로 위 완료 신호를 부른다. 0개 색 표기·최대 개수·EMR 비품 ↔ blue/green 대응은 미정(명세 8장).
 - **EMR → OMX 명령(2026-10-26)**: 관리자 API `POST {EMR}/api/v1/omx/command {command: 문장}`이 OMX `POST /command`를 **예전 형식**(`{"command": "pick and place green gauze", "request_id": "emr-..."}`)으로 부른다. `request_id`는 EMR이 만들고(`emr-` + 시각 + 16진 6자리), OMX는 끝나면 그 값으로 위 완료 신호를 부른다. `GET {EMR}/api/v1/omx/status`는 OMX `/status` 그대로. 새 형식(색깔별 개수)은 OMX가 바뀐 뒤 맞춘다.
 
@@ -259,7 +259,7 @@ Pinky API는 **인증이 없다** — 지금은 그대로 진행(사용자 결�
 | 2단계 | 실제 OMX로 적재·탑재 + FMS `ready`·`loaded`(10.4) | **구현·실물 시험함**(10-27, 시뮬레이터 Pinky + 실물 OMX, 임시 문장 형식) — NO 59·60 신청 → 도착. 합의한 개수 형식은 팀원 OMX 변경 뒤 |
 
 
-팀원 FMS API v1(`kernel-robot-repo-2/fms/API.md`, OpenAPI `fms/openapi_v1.py`)에 붙는다. 분석은 `docs/fms_emr_interface_2026-10-27.md`. EMR이 주문을 보내고 FMS가 이벤트를 EMR로 보낸다(3장 claim의 반대 방향).
+팀원 FMS API v1(`kernel-robot-repo-2/fms/API.md`, OpenAPI `fms/openapi_v1.py`)에 붙는다. 분석은 `emr/docs/fms_emr_interface_2026-10-27.md`. EMR이 주문을 보내고 FMS가 이벤트를 EMR로 보낸다(3장 claim의 반대 방향).
 **1단계 범위(사용자 결정)**: 주문 보내기 + 이벤트 받아 배송 단계 바꾸기. `ready`·`loaded`(OMX 연동)는 2단계 — 그 전에는 FMS(시뮬레이터)의 가상 OMX가 보낸다.
 
 ### 10.1 EMR → FMS `POST {FMS_BASE_URL}/api/v1/orders`
@@ -299,7 +299,7 @@ FMS는 `--control-url http://<EMR>:8000`으로 띄운다.
 사용자 결정(10-27): "OMX만 실제로 변경하고 2개 약품해서 진행" — FMS는 시뮬레이터 그대로, OMX만 실물. 양팔 **탑재(/pinky)까지 실제**, `/pinky` = **Pinky 정밀 주차가 끝난 뒤 내려놓기**.
 같은 날 명령 형식을 **`{"command": {"blue": N, "green": N}, "request_id"}`로 정함 — FMS 묶음 하나에 한 번**(잠깐 쓴 '물품마다 문장 한 번씩' 안은 버림).
 ⚠️ 10-27 실제 OMX(팀원 `vision` `47bcb47`)는 아직 **문장만 받는다**(`command`가 문자열).
-**임시 방편(10-27 사용자: "이전 버전 API, 수량 무시하고 거즈 문장으로" — 시험 뒤 "합의한 내용으로 변경"으로 **끔**)**: 설정 `OMX_COMMAND_FORMAT=sentence`면 개수 대신 문장 하나 `"pick and place blue gauze"`를 보낸다 — 파란 거즈가 하나라도 있으면 blue, 아니면 green, **수량은 무시**(OMX가 한 개만 집음). FMS 묶음과 관리자 API 둘 다. 관리자 API는 이 스위치가 켜졌을 때만 문장 본문 `{"command": "pick and place blue gauze"}`도 받는다(기본 `counts`면 400 `omx_sentence_disabled`). 10-27 실물 시험(NO 59·60)은 이 스위치로 했다 — `docs/emr_fms_omx_integration_2026-10-27.md` 3장.
+**임시 방편(10-27 사용자: "이전 버전 API, 수량 무시하고 거즈 문장으로" — 시험 뒤 "합의한 내용으로 변경"으로 **끔**)**: 설정 `OMX_COMMAND_FORMAT=sentence`면 개수 대신 문장 하나 `"pick and place blue gauze"`를 보낸다 — 파란 거즈가 하나라도 있으면 blue, 아니면 green, **수량은 무시**(OMX가 한 개만 집음). FMS 묶음과 관리자 API 둘 다. 관리자 API는 이 스위치가 켜졌을 때만 문장 본문 `{"command": "pick and place blue gauze"}`도 받는다(기본 `counts`면 400 `omx_sentence_disabled`). 10-27 실물 시험(NO 59·60)은 이 스위치로 했다 — `emr/docs/emr_fms_omx_integration_2026-10-27.md` 3장.
 
 **EMR이 부르는 OMX API** (`http://OMX_IP:8000`, 인증 없음)
 

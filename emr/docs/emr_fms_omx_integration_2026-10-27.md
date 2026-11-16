@@ -2,7 +2,7 @@
 
 - 대상: EMR·FMS·OMX 팀원, 이어서 작업할 Claude.
 - 오늘 무엇을 정했고, 무엇을 만들었고, 무엇을 시험했고, 무엇이 남았는지를 한 장으로 정리한다.
-- 기준 문서: API 계약은 [`api_contract_delivery_2026-10-20.md`](api_contract_delivery_2026-10-20.md) **10장**, 분석은 [`fms_emr_interface_2026-10-27.md`](fms_emr_interface_2026-10-27.md).
+- 기준 문서: API 계약은 [`api_contract_delivery_2026-10-20.md`](../../docs/api_contract_delivery_2026-10-20.md) **10장**, 분석은 [`fms_emr_interface_2026-10-27.md`](fms_emr_interface_2026-10-27.md).
 
 ## 1. 오늘 정한 것 (사용자 결정)
 

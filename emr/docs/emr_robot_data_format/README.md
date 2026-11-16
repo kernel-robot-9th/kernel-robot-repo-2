@@ -8,7 +8,7 @@
 
 - 응답 예시는 2026-10-23 실제 EMR(`CONTROL_PC_IP:8000`)에서 받은 값이다. 시험 배송 #40(정상)·#41(주행 실패)·#42(화면 촬영용)·#43(로봇 서버 묻기 확인 후 취소)를 로봇 대신 curl로 진행했다. 실제 로봇은 움직이지 않았다.
 - 화면 캡처는 같은 날 찍었다(`http://CONTROL_PC_IP:5173`, 로그인을 꺼 둔 시험 상태라 상단 사용자가 관리자 N001이다). 병상 화면(80번)만 같은 날 오전 캡처를 다시 썼다.
-- 바뀌면 이 문서와 계약 `docs/api_contract_delivery_2026-10-20.md`를 함께 고친다. 짧은 안내는 `docs/emr_robot_api_for_teammate_2026-10-22.md`.
+- 바뀌면 이 문서와 계약 `docs/api_contract_delivery_2026-10-20.md`를 함께 고친다. 짧은 안내는 `emr/docs/emr_robot_api_for_teammate_2026-10-22.md`.
 
 ## 0. 공통 규칙
 

@@ -102,6 +102,6 @@ v1 연동 문서가 생기면 아래 문서는 머리에 "예전 방식(claim)"�
 
 | 문서 | 내용 |
 |---|---|
-| `docs/fms_emr_api_2026-10-27.md` (+ 공유 페이지 https://claude.ai/artifact/TH6bZL1EVRRimPxnGxGrns) | 10-27 오전 claim 방식 정리 |
-| `docs/emr_robot_api_for_teammate_2026-10-22.md` | 10-22 팀원 FMS 안내(claim) |
-| `docs/emr_robot_data_format/README.md` | 10-23 로봇 API 6개 형식 |
+| `emr/docs/fms_emr_api_2026-10-27.md` (+ 공유 페이지 https://claude.ai/artifact/TH6bZL1EVRRimPxnGxGrns) | 10-27 오전 claim 방식 정리 |
+| `emr/docs/emr_robot_api_for_teammate_2026-10-22.md` | 10-22 팀원 FMS 안내(claim) |
+| `emr/docs/emr_robot_data_format/README.md` | 10-23 로봇 API 6개 형식 |
