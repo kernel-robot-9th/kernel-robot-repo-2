@@ -176,14 +176,14 @@ FMS와 Pinky API는 같은 주행 그래프 `driving/graph/graph.yaml`을 읽습
 
 | 계획 | 최종 | 이유 |
 |---|---|---|
-| GUI ↔ 서버 REST + WebSocket | REST + SSE(서버 → 브라우저 알림만) | 브라우저로 밀어 줄 것이 알림뿐이라 한 방향 SSE로 충분했음. PostgreSQL LISTEN/NOTIFY와 바로 이어짐 |
+| GUI ↔ 서버 REST + WebSocket | REST + SSE(서버 → 브라우저 알림만) | 양방향 통신이 필요 없었음: 서버가 프론트엔드로 알림을 전달하기만 하면 됨. SSE는 일반 HTTP 요청이라 기존 REST와 같은 인증·권한(JWT, 역할별로 거르기)을 그대로 씀. WebSocket은 이벤트 기반이라 연결 뒤 권한 확인을 위한 별도 API가 필요했음. 서버 쪽은 PostgreSQL LISTEN/NOTIFY와 바로 이어짐 |
 | 서버 ↔ 로봇 rosbridge / MQTT | HTTP 양방향 | LAN에서 ROS 2 DDS가 보이지 않았음. 팀원 Pinky API·OMX API가 이미 HTTP였음 |
 | Robot Task Manager가 로봇 위 | 관제 PC FMS(여러 대) + 로봇 위 Pinky API(한 대)로 나눔 | 다중 로봇 경로 계획은 모든 로봇을 한곳에서 봐야 함 |
 | Task Dispatcher(EMR)가 로봇 배정 | EMR은 주문만, 배차는 FMS | 배차와 경로를 같이 풀어야 함(EMR = 상위 관제) |
 | 간호사 명찰 마커로 수령 확인 | "받았습니다" 버튼 | 로봇에 마커 카메라 노드가 없었고, 간호사가 물건을 받아도 EMR에서 끝낼 길이 없었음 |
 | RealSense RGB-D | 일반 카메라(Pinky Pi 카메라, OMX USB 카메라, 탑뷰) | 깊이가 필요했던 응급 상황 감지를 범위에서 뺌 |
 | 로봇팔 모방학습 정책 | YOLO + 클릭 픽 자세 | 거즈가 적고 흩어진 상황에서 성공한 시연이 없었고, 정책에 성공 판정이 없었음([데이터셋 점검](../il_dataset_review/README.md)) |
-| Safety Monitor (초기에 범위에서 뺌) | 탑뷰 사람 감지 → OMX 정지 | 로봇팔이 움직이는 약제실에 사람이 다가오는 경우를 막으려고 다시 넣음 |
+| Safety Monitor (초기에 범위에서 뺌) | 탑뷰 사람 감지 → OMX 정지 | **약제실 HRI**(사람-로봇 상호작용)를 염두에 둠: 약사·간호사가 로봇팔과 같은 공간에서 일하므로, 사람이 다가오면 팔이 그 자리에서 멈추고 사람이 떠나면 이어 가도록 다시 넣음 |
 
 ## 6. 알려진 한계
 
