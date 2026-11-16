@@ -105,6 +105,23 @@ kernel-robot-repo-2/
 
 ## 시작하기
 
+### 모듈별 실행 요약
+
+| 모듈 | 어디서 · 준비물 | 실행 | 자세히 |
+|---|---|---|---|
+| EMR 웹 | 서버 PC · Docker | `cd emr && docker compose up -d --build` → http://localhost:5173 | [emr/README.md](emr/README.md) |
+| FMS | 관제 PC · Docker | `cd fms && CONTROL_URL=http://<EMR 주소>:8000 docker compose up -d --build` → http://localhost:8770 | [fms/README.md](fms/README.md) |
+| Pinky 주행 | Pinky 3대 · ROS 2 Jazzy | `driving/`을 로봇의 `~/pinky_map_rev3/`로 복사 → `api/install_service.sh` (부팅 때 자동 실행, `:8080`) | [driving/README.md](driving/README.md) |
+| OMX 로봇팔 | 약제실 PC · OMX-F 2대, conda 환경 + LeRobot, `pip install fastapi uvicorn httpx ultralytics` | `cd omx && python eval_bi_api_yolo_botharm_v2.py --host 0.0.0.0 --port 8000 --emr-api http://<EMR 주소>:5173/api/v1 --stream-host <탑뷰 PC 주소> --auto --pinky …` (`:8000`). 탑뷰 PC로 영상을 보내야 안전 신호가 와서 팔이 움직입니다 | [omx/README.md](omx/README.md) |
+| 탑뷰 감시 | GPU 노트북 · GStreamer, `pip install ultralytics opencv-python` | `cd topview && python recv_topview_yolo.py --device 0 --robot-url http://<OMX 주소>:8000` (AWS 경유는 `--srt <중계 주소>`) | [topview/README.md](topview/README.md) |
+| 안내 로봇 | Pinky 1대 · ROS 2 Jazzy, RTAB-Map, `onnxruntime` | `guide_robot/`을 Pinky로 복사 → bringup·카메라·RTAB-Map 실행 → `python3 robot/guide_mode.py` | [guide_robot/README.md](guide_robot/README.md) |
+| VLA 플래너 | PC · ROS 2 Jazzy, MoveIt 2, Gazebo, Ollama | 아래 2) 빌드 후 실행 | [robot/README.md](robot/README.md) |
+
+**배송 시스템을 켜는 순서**: EMR → Pinky(전원, 위치 맞추기) → FMS → OMX → 탑뷰.
+OMX는 첫 `person_exist: false` 신호를 받을 때까지 멈춘 상태로 시작하므로, 탑뷰를 켜야 팔이 움직입니다.
+
+### EMR · 로봇 워크스페이스 · FMS
+
 준비물은 Ubuntu 24.04, Docker, ROS 2 Jazzy입니다.
 
 ```bash
