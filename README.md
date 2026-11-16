@@ -3,7 +3,18 @@
 
 병동 간호사가 웹에서 물품을 신청하면, 약제실에서 로봇팔(ROBOTIS OMX-F)이 비품을 싣고 자율주행 로봇(Pinky Pro)이 병실까지 가져다주며, 간호사 확인을 받아 수령을 끝내는 시스템입니다.
 EMR은 **상위 관제**로 무엇을 어디로 보낼지를 정하고, 배차·주행은 팀원 FMS가, 싣기는 팀원 OMX가 맡습니다. EMR은 이 둘하고만 연결합니다(Pinky에 직접 붙지 않음).
-2026-10-29에 팀원 FMS(`fms/`)와 Pinky 주행 코드(`driving/`)를 이 저장소에 합쳤습니다. OMX 로봇팔 코드만 아직 밖에 있습니다.
+팀원마다 브랜치에서 따로 만들던 모듈(FMS, Pinky 주행, OMX 로봇팔, 탑뷰 안전 감시, 안내 로봇)을 2026-11-16에 **모두 이 저장소 main으로 합쳤습니다.** 브랜치별 커밋 이력(작성자·날짜)도 그대로 남아 있습니다.
+
+## 핵심 성과
+
+- **실물 Pinky 3대 동시 배송: 5회, 신청 30건 중 29건 수령** (2026-11-02, 품목 40개 중 39개). 신청부터 도착까지 평균 378초이고, 실패 1건은 로봇이 충전기 선에 걸린 것입니다. 이 시험에서 OMX 적재는 FMS 가상 OMX로 대신했습니다. → [시험 로그](docs/scenarios/logs/2026-11-02_real/demo3_163314/summary.md)
+- **다중 로봇 경로 계획**: 시공간 A* + CBS/ECBS로 세 대가 협로와 약제실 앞에서 서로 비키며 주행합니다. 실측 엣지 시간을 쓰고, 이상 동작 감지기가 있습니다(`fms/`).
+- **OMX 양팔 집기**: 탑 카메라 YOLO로 거즈를 찾아 양팔로 집고 Pinky 위에 싣습니다(`omx/`).
+- **웹 한 곳에서 끝나는 흐름**: 간호사 신청 → 배차 → 적재 → 배송 → "받았습니다" 수령까지 실시간으로 표시합니다(`emr/`).
+
+| 배송 목록 | 병원 지도 위 로봇 위치 | 도착 후 수령 |
+|---|---|---|
+| ![배송 목록](docs/emr_screens/01_deliveries.png) | ![지도](docs/emr_screens/03_map_pinky_arena.png) | ![수령 버튼](docs/emr_screens/02_arrived_received_button.png) |
 
 ## 시스템 구성
 
@@ -15,15 +26,21 @@ flowchart LR
   A <-->|"주문 · ready · loaded<br/>⇄ 이벤트 · 로봇 상태"| X["팀원 FMS<br/>API v1 · fms/"]
   X <-->|"구간 주행 /drive · /action<br/>⇄ /status"| K["Pinky API<br/>로봇 위 · driving/"]
   K --> P["Nav2 · 라이다 · 카메라<br/>Pinky Pro AMR"]
-  A <-->|"집기 · 내려놓기 명령<br/>⇄ 완료 신호·상태"| O["팀원 OMX<br/>로봇팔 (저장소 밖)"]
+  A <-->|"집기 · 내려놓기 명령<br/>⇄ 완료 신호·상태"| O["팀원 OMX<br/>양팔 로봇팔 · omx/"]
+  T["탑뷰 카메라 + YOLO<br/>topview/"] -->|"사람 감지 시 정지<br/>/safety person_exist"| O
+  G["안내 로봇<br/>Pinky · guide_robot/"]
 ```
+
+별도 과제로 만든 **안내 로봇**(`guide_robot/`)은 배송 흐름과 연결되지 않고 혼자 동작합니다. 낯선 장소를 돌아다니며 RTAB-Map으로 지도를 만들고, 사람이 나타나면 멈춰서 한국어로 인사합니다.
 
 | 구성 | 하는 일 |
 |---|---|
 | **EMR 웹** (`emr/`) | 간호사 로그인, 물품(재고) 관리, 물품 신청·배송 단계 표시, 병원 지도와 장소·로봇 위치, 로봇 등록, 병상 단말(환자 요청), 실시간 알림, 음성 신청. FMS에 주문을 보내고 OMX에 싣기를 시킨다 |
 | **팀원 FMS** (`fms/`) | 주문을 묶어 어느 로봇이 갈지 정하고(배차) 로봇 전부의 경로를 같이 계획해(A* + CBS) Pinky를 주행·충전·오염 처리한다. 관제 PC에서 도커로 돈다. EMR과 **양방향**으로 주고받는다(아래) |
 | **Pinky 주행** (`driving/`) | Pinky 위에서 도는 REST API(`:8080`)와 주행 그래프·지도·도구. FMS가 보낸 구간을 Nav2·벽 따라가기·테이프·카메라 정밀 주차로 달린다 |
-| **팀원 OMX 로봇팔** (이 저장소 밖) | 약제실에서 카메라(YOLO)로 거즈를 찾아 집고, 양팔로 Pinky 위에 내려놓는다. EMR이 명령을 보내고 완료 신호를 받는다 |
+| **팀원 OMX 로봇팔** (`omx/`) | 약제실에서 카메라(YOLO)로 거즈를 찾아 집고, 양팔로 Pinky 위에 내려놓는다. EMR이 명령을 보내고 완료 신호를 받는다. 메인 서버는 `eval_bi_api_yolo_botharm_v2.py` |
+| **탑뷰 안전 감시** (`topview/`) | 탑뷰 카메라 영상을 같은 와이파이(UDP)나 AWS(SRT)로 받아 YOLO로 사람을 찾고, 사람이 보이면 로봇팔 서버에 정지 신호(`person_exist`)를 보낸다 |
+| **안내 로봇** (`guide_robot/`) | 배송과 별도 과제. Pinky가 처음 가 보는 장소를 돌아다니며 비주얼 SLAM 지도를 만들고, 사람 앞에서 멈춰 인사한다(화면·LED·음성) |
 
 ## 계층 구조
 
@@ -86,9 +103,14 @@ kernel-robot-repo-2/
 │  └─ frontend/                 React · TypeScript
 ├─ fms/                         팀원 FMS — API v1 서버·배차·경로 계획·화면·도커 (10-29 병합)
 ├─ driving/                     팀원 Pinky 주행 — 로봇 위 REST API(api/)·주행 그래프(graph/)·지도(maps/)·도구(tools/)
+├─ omx/                         팀원 OMX 양팔 로봇팔 — YOLO 거즈 집기 서버·분석·마스킹 (vision 브랜치, 11-16 병합)
+├─ topview/                     탑뷰 영상 수신 + YOLO 사람 감지 정지 신호 (gstream 브랜치, 11-16 병합)
+├─ guide_robot/                 Pinky 안내원 로봇 — 비주얼 SLAM·사람 인사 (guide_robot 브랜치, 11-16 병합)
 ├─ robot/                       ROS 2 colcon 워크스페이스 (외부 패키지는 부록 A로 받음)
+├─ tools/demo/                  데모 녹화 도구 (소개 영상 만들기)
 ├─ tools/ws_interface_test/     WebSocket·MQTT 인터페이스 시험 도구
-└─ docs/                        설계·분석·계약 문서
+├─ ollama_ws/                   로컬 LLM(Ollama) 설치·확인 스크립트
+└─ docs/                        설계·분석·계약 문서, 시험 로그(docs/scenarios/logs)
 ```
 
 ## 시작하기
@@ -130,6 +152,9 @@ FMS_ARGS="--no-auto-omx" CONTROL_URL=http://<EMR 주소>:8000 docker compose up 
 | EMR ⇄ FMS·OMX 연동 (10-27) | [연동 작업 정리](docs/emr_fms_omx_integration_2026-10-27.md) · [API 계약 10장](docs/api_contract_delivery_2026-10-20.md) |
 | FMS 실행·규칙·API v1 | [fms/README.md](fms/README.md) · [fms/API.md](fms/API.md) |
 | Pinky 주행·로봇 API | [driving/README.md](driving/README.md) · [driving/api/API.md](driving/api/API.md) |
+| OMX 로봇팔 서버 실행 | [omx/README.md](omx/README.md) |
+| 탑뷰 사람 감지 수신기 | [topview/README.md](topview/README.md) |
+| 안내 로봇 | [guide_robot/README.md](guide_robot/README.md) |
 
 ## 현재 상태 (2026-10-29)
 
