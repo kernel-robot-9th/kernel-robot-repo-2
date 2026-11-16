@@ -1,7 +1,7 @@
 # 실물 시험 로그 — 장면 A 1차, OMX 집기 실패 (151346)
 
 - 일시: 2026-10-30 15:13:57 ~ 15:24:08 (KST)
-- 환경: **실물** — 실제 Pinky 3대(FMS 도커 `--real-table --no-auto-omx`) + 실제 OMX(10.42.0.147, `FMS_OMX_ENABLED=1`), EMR 간호사 N003. 1차: OMX blue:3 집기 실패(파란 거즈 1개뿐)
+- 환경: **실물** — 실제 Pinky 3대(FMS 도커 `--real-table --no-auto-omx`) + 실제 OMX(OMX_IP, `FMS_OMX_ENABLED=1`), EMR 간호사 N003. 1차: OMX blue:3 집기 실패(파란 거즈 1개뿐)
 - 결과: NO 132 신청, NO 133 신청, NO 134 신청
 - EMR api 경고·오류: 3줄 (`emr_api.log`)
 

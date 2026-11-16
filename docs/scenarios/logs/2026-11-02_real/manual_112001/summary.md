@@ -1,7 +1,7 @@
 # 실물 시험 로그 — manual_112001 (11-02 사용자 직접 신청)
 
 - 일시: 2026-11-02 11:20:20 ~ 11:41:50 (KST)
-- 환경: 실물 Pinky 2대(1번 pinky_6364·3번 pinky_62f4, FMS --real-table --robots 2, 2번 pinky_ee3a 문제로 뺌) + 실물 OMX(10.42.0.147, fixed = blue 1·green 1), EMR 간호사 N001이 화면에서 직접 신청(기록만, 조작 없음)
+- 환경: 실물 Pinky 2대(1번 pinky_6364·3번 pinky_62f4, FMS --real-table --robots 2, 2번 pinky_ee3a 문제로 뺌) + 실물 OMX(OMX_IP, fixed = blue 1·green 1), EMR 간호사 N001이 화면에서 직접 신청(기록만, 조작 없음)
 - 결과: NO 354 수령, NO 355 수령, NO 356 수령, NO 357 수령, NO 358 수령
 - EMR api 경고·오류: 10줄 (`emr_api.log`)
 

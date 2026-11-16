@@ -1,7 +1,7 @@
 # 실물 시험 로그 — 장면 A 2차 (155208)
 
 - 일시: 2026-10-30 15:52:18 ~ 16:03:05 (KST)
-- 환경: **실물** — 실제 Pinky 3대(FMS 도커 `--real-table --no-auto-omx`) + 실제 OMX(10.42.0.147, `FMS_OMX_ENABLED=1`), EMR 간호사 N003
+- 환경: **실물** — 실제 Pinky 3대(FMS 도커 `--real-table --no-auto-omx`) + 실제 OMX(OMX_IP, `FMS_OMX_ENABLED=1`), EMR 간호사 N003
 - 결과: NO 135 수령, NO 136 수령, NO 137 수령
 - EMR api 경고·오류: 0줄 (`emr_api.log`)
 
