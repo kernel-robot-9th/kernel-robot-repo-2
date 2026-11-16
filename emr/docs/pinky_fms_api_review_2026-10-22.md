@@ -111,7 +111,7 @@ robots:
 좋은 점:
 - 협로·정밀 주차를 팀원 코드 그대로 쓴다.
 - LAN에서 HTTP만 되면 되므로 ROS 도메인·DDS 문제가 없다.
-- 여러 대는 로봇마다 주소만 다르면 된다 — `docs/pinky_multi_robot_2026-10-20.md`의 "로봇마다 ROS 도메인" 안보다 단순하다.
+- 여러 대는 로봇마다 주소만 다르면 된다 — `docs/history/pinky_multi_robot_2026-10-20.md`의 "로봇마다 ROS 도메인" 안보다 단순하다.
 
 나중 단계에 쓸 수 있는 것:
 - EMR 로드맵 3단계(로봇 위치·상태): `robot_monitor`가 ROS 대신 `GET /status`를 읽게 하면 된다. 맵 위 표시는 1번 변환식이 있어야 한다.
@@ -158,7 +158,7 @@ EMR 맵 `map_rev2`(5.42 × 7.18 m)와 팀원 아레나(약 2.1 × 1.9 m 그림)�
 - `docs/api_contract_delivery_2026-10-20.md` 4장(실행기 동작), 7장(열린 질문)
 - `robot/src/fms/delivery_executor`: `PinkyApiNavigator`, 설정 `pinky_api`·`stops`·`home_stop`, 테스트
 - `robot/README.md` 8-1-2, `robot/CLAUDE.md`, 루트 `CLAUDE.md` 포트 표(로봇 `:8080` 설명 갱신)
-- `docs/pinky_multi_robot_2026-10-20.md` — 로봇마다 주소 방식으로 갱신할지
+- `docs/history/pinky_multi_robot_2026-10-20.md` — 로봇마다 주소 방식으로 갱신할지
 
 ## 11. 실물 주행 1회 — START_A → PHARMACY (2026-10-22 19:30, 사용자 요청)
 

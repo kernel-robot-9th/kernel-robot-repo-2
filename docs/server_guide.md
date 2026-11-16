@@ -23,7 +23,7 @@ OMX-F 로봇팔이 자연어 명령으로 물건을 집어 옮긴다(시뮬레�
 | `emr/` | 간호사용 비품·배송 웹. 로그인, 비품 재고, 배송 예약, 맵·장소·로봇 관리, 재고 부족 실시간 알림, 간호사 ArUco 마커 인쇄, 로봇 API 키·수령 확인 | [emr/README.md](../emr/README.md) · [emr/CLAUDE.md](../emr/CLAUDE.md) |
 | `robot/` | ROS 2 워크스페이스. OMX-F 자연어 pick & place(`src/vla_planner_robot`), Pinky Pro AMR(`src/pinky_pro`, 시뮬용), ROBOTIS upstream. 관제·주행 코드는 2026-10-23 삭제(팀원 FMS 담당) | [robot/README.md](../robot/README.md) · [robot/CLAUDE.md](../robot/CLAUDE.md) |
 | `ollama_ws/` | 예정. Ollama에 없는 다른 모델을 Ollama 호환 인터페이스로 제공할 작업 폴더 (아직 비어 있음) | — |
-| `docs/` | 서버 전체 현황 보고서 | [docs/server_report_2026-10-19.md](server_report_2026-10-19.md) |
+| `docs/` | 서버 전체 현황 보고서 | [docs/history/server_report_2026-10-19.md](history/server_report_2026-10-19.md) |
 
 ## 사전 준비 (이 PC에는 이미 설치되어 있음)
 
@@ -68,7 +68,7 @@ Gazebo · MoveIt · Ollama가 함께 돌아 메모리(15GB)를 많이 쓴다. �
 
 ## 지금 상태와 다음 (2026-10-19)
 
-할 일은 **웹(EMR) · 로봇(Pinky AMR·관제) · OMX(로봇팔)** 세 갈래로 나눠 진행한다. 목록은 [docs/server_report_2026-10-19.md](server_report_2026-10-19.md) 6장.
+할 일은 **웹(EMR) · 로봇(Pinky AMR·관제) · OMX(로봇팔)** 세 갈래로 나눠 진행한다. 목록은 [docs/history/server_report_2026-10-19.md](history/server_report_2026-10-19.md) 6장.
 
 - **웹(EMR)**: 맵 업로드·장소 찍기(1단계)까지 완료. 다음은 배송 배정·진행(2단계) — 로봇 쪽과 API 계약(필드·주기·오류 코드)부터 맞춘다. 그 전에 운영 준비(DB 포트 제한, 프론트 운영 이미지 `/api` 프록시, https).
 - **로봇(Pinky · 관제)**: 팀원 FMS API v1이 배차·주행한다. 2026-10-27부터 EMR이 주문을 보내고 FMS가 이벤트·로봇 상태를 EMR로 보낸다(EMR = 상위 관제, Pinky에 직접 붙지 않음). 정리 [emr_fms_omx_integration_2026-10-27.md](../emr/docs/emr_fms_omx_integration_2026-10-27.md).

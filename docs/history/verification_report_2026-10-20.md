@@ -60,7 +60,7 @@
 | `JWT_SECRET` | `.env.example`의 자리표시자만 있음 |
 | 개발용 비밀번호 `nurse1234` | 9개 파일(시드·문서). **개발용**이다. 운영 전에 바꾼다(`emr/README.md` 운영 배포 전 체크) |
 | 사설 IP `192.168.x` | 5개 파일(문서·설정). 내부망 주소라 그대로 둔다 |
-| 개인 경로 `/home/fastcamp1` | 1개 파일(`docs/server_report_2026-10-19.md`). 서버 현황 기록이라 그대로 둔다 |
+| 개인 경로 `/home/fastcamp1` | 1개 파일(`docs/history/server_report_2026-10-19.md`). 서버 현황 기록이라 그대로 둔다 |
 
 ### 3.2 라이선스
 

@@ -7,7 +7,7 @@
 | 날짜 | 일 | 자료 |
 |---|---|---|
 | 10-08 | 저장소 시작 | |
-| 10-20 | 첫 업로드: EMR 웹, 관제 PC 배송 실행기, OMX-F VLA, 로컬 LLM 준비. 배송 API 계약 초안 | [API 계약](../api_contract_delivery_2026-10-20.md) · [올리기 전 검증](../verification_report_2026-10-20.md) |
+| 10-20 | 첫 업로드: EMR 웹, 관제 PC 배송 실행기, OMX-F VLA, 로컬 LLM 준비. 배송 API 계약 초안 | [API 계약](../api_contract_delivery_2026-10-20.md) · [올리기 전 검증](verification_report_2026-10-20.md) |
 | 10-21 | SW 아키텍처 초안(Lv.1 블록도 기준). 모방학습(IL) 데이터셋 점검 | [10-21판 PDF](architecture_2026-10-21.pdf) · [IL 점검](il_dataset_review/README.md) |
 | 10-22 | "받았습니다" 버튼 수령, 병상 단말 환자 요청 | [이슈 정리](../../emr/docs/emr_issues_receipt_and_schedule_2026-11-03.md) |
 | 10-23 | 관제 PC 배송 실행기 삭제, 팀원 Pinky API를 직접 쓰는 쪽으로 | [EMR 개발 이슈](../../emr/docs/emr_dev_issues_2026-10-23.md) |
@@ -28,6 +28,10 @@
 | [architecture_2026-10-21.pdf](architecture_2026-10-21.pdf) | 10-21 초안(관제 PC 배송 실행기 기준) |
 | [omx_skill_interface_2026-10-21.md](omx_skill_interface_2026-10-21.md) | OMX 스킬 인터페이스 설계 초안(LLM 플래너 + IK + 모방학습, 구현 전) |
 | [il_dataset_review/](il_dataset_review/README.md) | 모방학습 데이터셋 점검(10-21). OMX를 IL 대신 YOLO + 클릭 픽으로 바꾼 근거 |
+| [pinky_multi_robot_2026-10-20.md](pinky_multi_robot_2026-10-20.md) | Pinky 여러 대 운영 구조 제안(구현 전). 지금은 FMS(`fms/`)로 구현됨 |
+| [server_report_2026-10-19.md](server_report_2026-10-19.md) | 10-19 서버 현황 보고서(첫 업로드 전 상태) |
+| [verification_report_2026-10-20.md](verification_report_2026-10-20.md) | 10-20 첫 업로드 전 검증 보고서 |
+| [notion/](notion/api_contract_delivery_2026-10-20.notion.md) | 배송 API 계약의 노션용 사본(10-22 기준, FMS API v1 장 없음). 최신 계약은 [../api_contract_delivery_2026-10-20.md](../api_contract_delivery_2026-10-20.md) |
 
 ## README에서 옮긴 상태표 (2026-10-29 기준)
 
