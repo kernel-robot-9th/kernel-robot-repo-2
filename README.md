@@ -74,7 +74,7 @@ flowchart LR
 2. 보낼 시간이 되면 EMR이 물품 1개당 주문 1건으로 FMS에 보냅니다. FMS가 묶어서 로봇을 배차하면 EMR이 OMX에 집기를 시킵니다.
 3. OMX가 다 들면 EMR이 FMS에 `ready` → FMS가 Pinky를 약제실로 부르면 화면에 **준비** → Pinky가 약제실에 정밀 주차하면 **출발** → EMR이 OMX에 내려놓기(`/pinky`) → 다 실으면 FMS에 `loaded` → Pinky가 병실로 갑니다.
 4. 도착하면 신청한 간호사(병상 요청이면 환자) 화면에 **"받았습니다" 버튼**이 뜹니다. 누르면 수령이 끝납니다.
-5. FMS가 실패를 알리면 재고가 되돌아갑니다.
+5. 실패하면 재고가 되돌아가고 간호사와 관리자에게 알립니다(FMS `order_failed` 이벤트. 계약과 EMR 처리는 있지만 FMS는 아직 이 이벤트를 보내지 않습니다).
 
 ```mermaid
 sequenceDiagram
@@ -87,35 +87,39 @@ sequenceDiagram
 
   N->>E: 물품 신청 (병실 · 비품 · 보낼 시간)
   Note over E: 재고 차감 · 단계 "신청"
-  E->>F: POST /orders (물품 1개 = 주문 1건)
+  E->>F: POST /orders (보낼 시간이 되면, 물품 1개 = 주문 1건)
   F-->>E: 이벤트 batch_assigned (묶음 · 로봇)
+  Note over E: OMX 루프(1초)가 팔이 비면 다음 단계로
   E->>O: POST /command {blue: N, green: N}
-  Note over O: YOLO로 거즈를 찾아 두 팔로 집고 들고 대기
+  Note over O: YOLO로 거즈를 찾아 집고, 두 팔로 들고 대기
   E->>O: GET /status (집기 끝났는지)
   E->>F: POST /batches/{id}/ready
-  F->>P: POST /drive (약제실까지)
   F-->>E: 이벤트 robot_called
   Note over E: 단계 "준비"
-  F->>P: GET /status (0.3초마다)
+  F->>P: POST /drive (약제실까지, 구간마다) + 정밀 주차
+  F->>P: GET /status (실제 로봇, 0.3초마다)
   F-->>E: 이벤트 robot_at_pharmacy (정밀 주차 끝)
   Note over E: 단계 "출발"
+  E-->>N: 출발 알림
   E->>O: POST /pinky (Pinky 위에 내려놓기)
-  O-->>E: GET /robot/{id}/end-point (완료 신호)
+  E->>O: GET /status (pinky = completed 이면 다 실음)
+  O--)E: GET /robot/{id}/end-point (완료 신호, 기록만 함)
+  E->>F: GET /batches/{id} (at_pharmacy 인지 확인)
   E->>F: POST /batches/{id}/loaded
-  F->>P: POST /drive (병실까지)
-  F-->>E: 이벤트 order_delivered
-  Note over E: 단계 "도착"
+  F->>P: POST /drive (병실까지, 구간마다)
+  F-->>E: 이벤트 order_delivered (물품마다)
+  Note over E: 신청의 물품이 모두 오면 단계 "도착"
   E-->>N: 도착 알림 + "받았습니다" 버튼
   N->>E: 받았습니다
   Note over E: 단계 "받음"
 
-  opt 실패
+  opt 실패 (계약에만 있음, FMS는 아직 보내지 않음)
     F-->>E: 이벤트 order_failed
-    Note over E: 재고 복구 · 관리자에게도 알림
+    Note over E: 재고 복구 · 간호사와 관리자에게 알림
   end
 ```
 
-단계마다 신청한 간호사에게 실시간 알림이 가고, 실패는 관리자에게도 갑니다. 자세한 규칙은 [API 계약 문서](docs/api_contract_delivery_2026-10-20.md)에 있습니다.
+출발·도착·실패 때 신청한 간호사에게 실시간 알림이 가고, 실패는 관리자에게도 갑니다("준비"는 알림 없음). 자세한 규칙은 [API 계약 문서](docs/api_contract_delivery_2026-10-20.md)에 있습니다.
 
 ## 기술 스택
 
