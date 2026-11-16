@@ -76,6 +76,45 @@ flowchart LR
 4. 도착하면 신청한 간호사(병상 요청이면 환자) 화면에 **"받았습니다" 버튼**이 뜹니다. 누르면 수령이 끝납니다.
 5. FMS가 실패를 알리면 재고가 되돌아갑니다.
 
+```mermaid
+sequenceDiagram
+  autonumber
+  actor N as 간호사 (웹)
+  participant E as EMR
+  participant F as FMS
+  participant O as OMX 로봇팔
+  participant P as Pinky
+
+  N->>E: 물품 신청 (병실 · 비품 · 보낼 시간)
+  Note over E: 재고 차감 · 단계 "신청"
+  E->>F: POST /orders (물품 1개 = 주문 1건)
+  F-->>E: 이벤트 batch_assigned (묶음 · 로봇)
+  E->>O: POST /command {blue: N, green: N}
+  Note over O: YOLO로 거즈를 찾아 두 팔로 집고 들고 대기
+  E->>O: GET /status (집기 끝났는지)
+  E->>F: POST /batches/{id}/ready
+  F->>P: POST /drive (약제실까지)
+  F-->>E: 이벤트 robot_called
+  Note over E: 단계 "준비"
+  F->>P: GET /status (0.3초마다)
+  F-->>E: 이벤트 robot_at_pharmacy (정밀 주차 끝)
+  Note over E: 단계 "출발"
+  E->>O: POST /pinky (Pinky 위에 내려놓기)
+  O-->>E: GET /robot/{id}/end-point (완료 신호)
+  E->>F: POST /batches/{id}/loaded
+  F->>P: POST /drive (병실까지)
+  F-->>E: 이벤트 order_delivered
+  Note over E: 단계 "도착"
+  E-->>N: 도착 알림 + "받았습니다" 버튼
+  N->>E: 받았습니다
+  Note over E: 단계 "받음"
+
+  opt 실패
+    F-->>E: 이벤트 order_failed
+    Note over E: 재고 복구 · 관리자에게도 알림
+  end
+```
+
 단계마다 신청한 간호사에게 실시간 알림이 가고, 실패는 관리자에게도 갑니다. 자세한 규칙은 [API 계약 문서](docs/api_contract_delivery_2026-10-20.md)에 있습니다.
 
 ## 기술 스택
