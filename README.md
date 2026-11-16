@@ -15,16 +15,21 @@ EMR은 **상위 관제**로 무엇을 어디로 보낼지를 정하고, 배차·
 | 배송 목록 | 병원 지도 위 로봇 위치 | 도착 후 수령 |
 |---|---|---|
 | ![배송 목록](emr/docs/emr_screens/01_deliveries.png) | ![지도](emr/docs/emr_screens/03_map_pinky_arena.png) | ![수령 버튼](emr/docs/emr_screens/02_arrived_received_button.png) |
+| SR-02 물품 신청 · SR-04 배송 진행 | SR-09 로봇 위치 · 지도 | SR-06 수령 확인 · SR-07 알림 |
 
 | 주행 그래프 (FMS 경로 계획 · Pinky 주행) |
 |---|
 | ![주행 그래프](driving/graph/graph.png) |
 | 병실·약제실·충전 자리와 엣지 종류(주황 = 흰 테이프 차선, 빨강 = 벽 따라가기, 초록 = Nav2) |
+| SR-04 배송 주행 · SR-09 지도 |
 
 | 안내 로봇 화면 |
 |---|
 | ![안내 로봇 인사 화면](guide_robot/docs/guide_screen.png) |
 | 사람을 만나면 Pinky LCD에 띄우는 인사 |
+| 요구사항 외 추가 과제 |
+
+SR 번호별 충족 현황은 [완료 현황 보고서](docs/verification_report_2026-11-16.md)에 있습니다.
 
 ## 시스템 구성
 
