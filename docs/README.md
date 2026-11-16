@@ -10,7 +10,7 @@
 | [SW 아키텍처 (최종판)](architecture/README.md) | 전체 구성도, 계층, 모듈 사이 인터페이스, 모듈별 파일, 설계 결정, 한계 |
 | [기술 스택 그림](tech_stack/tech_stack_2026-11-02.png) | 모듈별 사용 기술 한 장 |
 | [Pinky 여러 대 운영 구조](pinky_multi_robot_2026-10-20.md) | 다중 로봇 운영 제안(초기) |
-| [OMX 스킬 인터페이스](omx_skill_interface_2026-10-21.md) | LLM 플래너 + IK + 모방학습 설계 초안(구현 전) |
+| [OMX 스킬 인터페이스](history/omx_skill_interface_2026-10-21.md) | LLM 플래너 + IK + 모방학습 설계 초안(구현 전) |
 
 ## 모듈 사이 계약
 
@@ -27,7 +27,7 @@
 | [실물 Pinky 3대 동시 배송 (11-02)](scenarios/logs/2026-11-02_real/demo3_163314/summary.md) | 5회, 30건 중 29건 수령 |
 | [시나리오 ① 여러 병동 묶음](scenarios/scenario_01_multiward_batch_2026-10-30.md) · [시나리오 ② 1분 5건 부하](scenarios/scenario_02_load_5per_min_2026-10-30.md) | 10-30 시뮬레이션·실물 시험 |
 | [시험 로그 폴더](scenarios/logs/) | 10-30 시뮬·실물, 11-02 실물 원본 기록 |
-| [모방학습 데이터셋 점검](il_dataset_review/README.md) | OMX를 IL 대신 YOLO + 클릭 픽으로 바꾼 근거 |
+| [모방학습 데이터셋 점검](history/il_dataset_review/README.md) | OMX를 IL 대신 YOLO + 클릭 픽으로 바꾼 근거 |
 | [올리기 전 검증 보고서](verification_report_2026-10-20.md) | 첫 업로드 점검 |
 
 ## 운영

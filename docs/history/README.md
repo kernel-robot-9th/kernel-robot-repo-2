@@ -8,7 +8,7 @@
 |---|---|---|
 | 10-08 | 저장소 시작 | |
 | 10-20 | 첫 업로드: EMR 웹, 관제 PC 배송 실행기, OMX-F VLA, 로컬 LLM 준비. 배송 API 계약 초안 | [API 계약](../api_contract_delivery_2026-10-20.md) · [올리기 전 검증](../verification_report_2026-10-20.md) |
-| 10-21 | SW 아키텍처 초안(Lv.1 블록도 기준). 모방학습(IL) 데이터셋 점검 | [10-21판 PDF](architecture_2026-10-21.pdf) · [IL 점검](../il_dataset_review/README.md) |
+| 10-21 | SW 아키텍처 초안(Lv.1 블록도 기준). 모방학습(IL) 데이터셋 점검 | [10-21판 PDF](architecture_2026-10-21.pdf) · [IL 점검](il_dataset_review/README.md) |
 | 10-22 | "받았습니다" 버튼 수령, 병상 단말 환자 요청 | [이슈 정리](../../emr/docs/emr_issues_receipt_and_schedule_2026-11-03.md) |
 | 10-23 | 관제 PC 배송 실행기 삭제, 팀원 Pinky API를 직접 쓰는 쪽으로 | [EMR 개발 이슈](../../emr/docs/emr_dev_issues_2026-10-23.md) |
 | 10-26 | OMX를 YOLO + 클릭 픽으로 바꿈(IL 대신). EMR 음성 신청 | [음성 정리](../../emr/docs/voice_emr_2026-10-26.md) · [OMX 완료 신호](../../emr/docs/omx_end_point_spec_2026-10-26.md) |
@@ -26,6 +26,8 @@
 | [architecture_2026-10-29.md](architecture_2026-10-29.md) | 10-29 아키텍처 문서 원본. 10-21·10-26·10-27판에서 바뀐 것, 블록별 구현 상태 집계, 예전 방식(로봇이 배송을 가져가는 claim, EMR이 Pinky 상태를 직접 묻기) 설명이 들어 있음 |
 | [sw_3layer_2026-10-29.png](sw_3layer_2026-10-29.png) · [.mmd](sw_3layer_2026-10-29.mmd) | 10-29 3계층 그림(구현 / 일부 / 없음 / 팀원 담당 색 구분) |
 | [architecture_2026-10-21.pdf](architecture_2026-10-21.pdf) | 10-21 초안(관제 PC 배송 실행기 기준) |
+| [omx_skill_interface_2026-10-21.md](omx_skill_interface_2026-10-21.md) | OMX 스킬 인터페이스 설계 초안(LLM 플래너 + IK + 모방학습, 구현 전) |
+| [il_dataset_review/](il_dataset_review/README.md) | 모방학습 데이터셋 점검(10-21). OMX를 IL 대신 YOLO + 클릭 픽으로 바꾼 근거 |
 
 ## README에서 옮긴 상태표 (2026-10-29 기준)
 

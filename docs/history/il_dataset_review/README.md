@@ -146,10 +146,10 @@
 
 ```bash
 P=~/anaconda3/envs/main_project/bin/python; D=~/.cache/huggingface/lerobot/jaewoo112/bi_gauze_one_exposure_masked
-$P -I docs/il_dataset_review/tools/still_ends.py $D           # 시작·끝 정지 시간, 시작 자세 퍼짐
-$P -I docs/il_dataset_review/tools/idle_eps.py $D             # 정지·거의 안 움직인 에피소드 목록
-$P -I docs/il_dataset_review/tools/ep_sheet.py $D top /tmp/sheet 0,200,400,480        # 시작|끝 표 (마스크 영역 자르기)
-$P -I docs/il_dataset_review/tools/ep_strip.py $D top /tmp/sheet 49,54 strip.jpg      # 에피소드별 시간순 7장
+$P -I docs/history/il_dataset_review/tools/still_ends.py $D           # 시작·끝 정지 시간, 시작 자세 퍼짐
+$P -I docs/history/il_dataset_review/tools/idle_eps.py $D             # 정지·거의 안 움직인 에피소드 목록
+$P -I docs/history/il_dataset_review/tools/ep_sheet.py $D top /tmp/sheet 0,200,400,480        # 시작|끝 표 (마스크 영역 자르기)
+$P -I docs/history/il_dataset_review/tools/ep_strip.py $D top /tmp/sheet 49,54 strip.jpg      # 에피소드별 시간순 7장
 ```
 
 기준값: 관절이 처음(또는 마지막) 값에서 2 넘게 벗어나면 "움직임"으로 본다. 전체 움직임 범위가 5 미만이면 "거의 안 움직임"으로 본다. 단위는 LeRobot −100..100이다.

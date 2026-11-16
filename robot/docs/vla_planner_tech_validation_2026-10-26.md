@@ -123,4 +123,4 @@ ros2 run vla_planner cli                                            # 한국어 
 
 - `robot/README.md` 9장(실물), `robot/docs/report_technical.md`(기술 보고서), `robot/docs/calibration/README.md`
 - `robot/docs/real_tests/`(10-19 · 10-20 · 10-22 실물 시험 기록)
-- 참고(별도 과제): `docs/omx_skill_interface_2026-10-21.md`(고전 IK와 모방학습 정책을 같은 규격으로 — 설계 초안), `docs/il_dataset_review/`(팀원 모방학습 데이터 점검)
+- 참고(별도 과제): `docs/history/omx_skill_interface_2026-10-21.md`(고전 IK와 모방학습 정책을 같은 규격으로 — 설계 초안), `docs/history/il_dataset_review/`(팀원 모방학습 데이터 점검)

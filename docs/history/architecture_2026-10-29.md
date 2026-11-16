@@ -362,7 +362,7 @@ FMS ─1초마다 POST /fms/robot-status─▶ 메모리(로봇 번호별 마지
 - 지금 서버: `vision` 브랜치 `eval_bi_api_yolo.py`(47bcb47) — 위 카메라 **YOLO**로 `blue_gauze`·`green_gauze`를 찾아 click pick(왼팔), `--pinky`면 이어서 양팔로 들고 대기 → `/pinky`로 Pinky 위에 내려놓기, `--emr-api`면 EMR 완료 신호. 예전 모방학습 정책 자리를 대신함
 - 명령은 아직 **문장만**(`"pick and place blue gauze"`, 한 번에 거즈 하나). EMR이 합의한 `{"blue": N, "green": N}`를 받으려면 팀원 쪽 변경이 필요하다
 - 10-27 실물 확인: 오른팔 `/dev/omx_follower`가 빠지면 `grab_failed`, 연결 뒤 집기 → 들기 → 내려놓기 → 시작 자세까지 성공
-- 데이터셋 점검: [`../il_dataset_review/README.md`](../il_dataset_review/README.md)
+- 데이터셋 점검: [`../il_dataset_review/README.md`](il_dataset_review/README.md)
 
 #### 4.13 없는 블록·다른 팀원 진행 블록
 - **Nurse Tracking, 사람 검출 + 트래커**: 다른 팀원이 진행 중(10-30). 이 저장소에는 코드 없음. 우리 `pinky_marker`(명찰 마커 따라가기)는 10-23 삭제(git `340a397`)
@@ -389,4 +389,4 @@ FMS ─1초마다 POST /fms/robot-status─▶ 메모리(로봇 번호별 마지
 - [`../omx_end_point_spec_2026-10-26.md`](../../emr/docs/omx_end_point_spec_2026-10-26.md) — OMX 완료 신호 명세
 - [`../emr_dev_issues_2026-10-23.md`](../../emr/docs/emr_dev_issues_2026-10-23.md) — EMR 진행도·해결한 문제·남은 문제
 - [`../emr_robot_data_format/README.md`](../../emr/docs/emr_robot_data_format/README.md) — 로봇 API 요청·응답 실측 형식, 화면
-- [`../omx_skill_interface_2026-10-21.md`](../omx_skill_interface_2026-10-21.md) — OMX 스킬 인터페이스 설계 초안(구현 전)
+- [`../omx_skill_interface_2026-10-21.md`](omx_skill_interface_2026-10-21.md) — OMX 스킬 인터페이스 설계 초안(구현 전)
